@@ -1375,6 +1375,7 @@ function renderDeviceDetail(){
         <div><span>Arıza</span>${d.issueDescription || '—'}</div>
         <div><span>Kabul Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
       </div>
+      <button class="ghost" style="margin-top:10px;" onclick="sendTrackingLinkWhatsApp('${d.id}')">WhatsApp ile Takip Linki Gönder</button>
     </div>
 
     <div class="card">
@@ -2062,7 +2063,9 @@ async function addDealer(){
   dealers.unshift(dealer);
   ['dl-name','dl-phone','dl-username','dl-password'].forEach(id=>document.getElementById(id).value='');
   toast('Bayi eklendi');
+  pendingDealerCredentials = { dealerId: dealer.id, username, password };
   renderDealers();
+  openDealer(dealer.id);
 }
 
 async function addDealerTx(id){
@@ -2111,6 +2114,46 @@ function renderDealers(){
 
 let dealerSearchMode = 'imei';
 let currentDealerId = null;
+let pendingDealerCredentials = null; // az önce oluşturulan/sıfırlanan bayi şifresi (WhatsApp ile göndermek için, hash'ten geri alınamaz)
+const DEALER_PORTAL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/bayi-portali.html';
+const TRACK_PORTAL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/takip-portali.html';
+
+function sendDealerCredentialsWhatsApp(){
+  const dl = dealers.find(x=>x.id===currentDealerId);
+  if(!dl || !pendingDealerCredentials || pendingDealerCredentials.dealerId !== dl.id) return;
+  const lines = [
+    `Teknonand — Bayi Portalı Giriş Bilgileriniz`,
+    `Sayın ${dl.name},`,
+    `Bayi portalımıza aşağıdaki bilgilerle giriş yapabilirsiniz:`,
+    ``,
+    `Portal Adresi: ${DEALER_PORTAL_URL}`,
+    `Kullanıcı Adı: ${pendingDealerCredentials.username}`,
+    `Şifre: ${pendingDealerCredentials.password}`,
+    ``,
+    `İyi çalışmalar dileriz.`
+  ];
+  const text = encodeURIComponent(lines.join('\n'));
+  const number = dl.phone ? toWhatsAppNumber(dl.phone) : '';
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
+function sendTrackingLinkWhatsApp(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  const lines = [
+    `Teknonand — Cihaz Takip Bilgileriniz`,
+    `Sayın ${d.customer.fullName},`,
+    `Cihazınız (${d.model}) kaydımıza alınmıştır.`,
+    ``,
+    `Takip Kodu: ${d.trackingCode}`,
+    `Takip Adresi: ${TRACK_PORTAL_URL}`,
+    ``,
+    `Bu adresten cihazınızın tamir sürecini anlık olarak takip edebilirsiniz.`
+  ];
+  const text = encodeURIComponent(lines.join('\n'));
+  const number = d.customer.phone ? toWhatsAppNumber(d.customer.phone) : '';
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
 
 function openDealer(id){
   currentDealerId = id;
@@ -2238,6 +2281,11 @@ function renderDealerDetail(){
       <div class="detail-meta" style="margin-bottom:10px;">
         <div><span>Kullanıcı Adı</span>${dl.username || '—'}</div>
       </div>
+      ${pendingDealerCredentials && pendingDealerCredentials.dealerId === dl.id ? `
+      <div class="approve-box" style="margin-bottom:10px;">
+        Şifre bu ekranda görünür şekilde kalıyor (sayfadan çıkınca kaybolur) — giriş bilgilerini bayiye WhatsApp ile göndermek için:
+        <div style="margin-top:8px;"><button class="primary" onclick="sendDealerCredentialsWhatsApp()">Giriş Bilgilerini WhatsApp ile Gönder</button></div>
+      </div>` : ''}
       <div style="display:flex; gap:8px;">
         <button class="ghost" onclick="resetDealerPassword('${dl.id}')">Şifre Değiştir</button>
         <button class="ghost" onclick="sendDealerBalanceWhatsApp('${dl.id}')">WhatsApp ile Bakiye Bildir</button>
@@ -2289,6 +2337,8 @@ async function resetDealerPassword(id){
   if(!newPass) return;
   await apiFetch(`/dealers/${id}`, { method: 'PATCH', body: JSON.stringify({ password: newPass }) });
   toast('Şifre güncellendi');
+  pendingDealerCredentials = { dealerId: id, username: dl.username, password: newPass };
+  renderDealerDetail();
 }
 
 function sendDealerBalanceWhatsApp(id){
