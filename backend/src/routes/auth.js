@@ -36,7 +36,7 @@ router.post('/dealer-login', async (req, res, next) => {
     if (!dealer || !(await verifyPassword(password, dealer.passwordHash))) {
       return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
     }
-    const token = signToken({ id: dealer.id, type: 'dealer' });
+    const token = signToken({ id: dealer.id, type: 'dealer' }, '30d');
     res.json({ token, user: { id: dealer.id, name: dealer.name, balance: dealer.balance } });
   } catch (e) {
     next(e);

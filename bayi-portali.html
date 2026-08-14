@@ -108,6 +108,10 @@
       <p class="subtitle">Cihazlarınızı ve hesabınızı takip edin</p>
       <div class="field"><label>Kullanıcı Adı</label><input id="login-username" placeholder="bayi.adi"></div>
       <div class="field"><label>Şifre</label><input id="login-password" type="password" placeholder="••••••••"></div>
+      <div class="field" style="display:flex; align-items:center; gap:7px;">
+        <input type="checkbox" id="login-remember" checked style="width:auto;">
+        <label style="margin:0; font-weight:500; color:var(--ink); font-size:13px;" for="login-remember">Beni hatırla</label>
+      </div>
       <button class="primary" style="width:100%;" onclick="doLogin()">Giriş Yap</button>
       <div class="login-error" id="loginError">Kullanıcı adı veya şifre hatalı.</div>
     </div>
@@ -199,7 +203,8 @@ async function doLogin(){
     if(!res.ok){ errorEl.style.display = 'block'; return; }
     const data = await res.json();
     authToken = data.token;
-    localStorage.setItem('teknonand_dealer_token', authToken);
+    const remember = document.getElementById('login-remember').checked;
+    (remember ? localStorage : sessionStorage).setItem('teknonand_dealer_token', authToken);
     errorEl.style.display = 'none';
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
@@ -216,12 +221,13 @@ function doLogout(){
   authToken = null;
   currentDealer = null;
   localStorage.removeItem('teknonand_dealer_token');
+  sessionStorage.removeItem('teknonand_dealer_token');
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'block';
 }
 
 async function tryResumeSession(){
-  const saved = localStorage.getItem('teknonand_dealer_token');
+  const saved = localStorage.getItem('teknonand_dealer_token') || sessionStorage.getItem('teknonand_dealer_token');
   if(!saved) return;
   authToken = saved;
   try{

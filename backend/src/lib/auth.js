@@ -15,8 +15,8 @@ function verifyPassword(plain, hash) {
 }
 
 // type: 'employee' | 'dealer'
-function signToken({ id, type, permission }) {
-  return jwt.sign({ sub: id, type, permission }, JWT_SECRET, { expiresIn: '12h' });
+function signToken({ id, type, permission }, expiresIn = '12h') {
+  return jwt.sign({ sub: id, type, permission }, JWT_SECRET, { expiresIn });
 }
 
 function verifyToken(token) {
