@@ -1552,7 +1552,7 @@ function renderDeviceDetail(){
         <div class="pay-row"><span class="pay-method">${p.method}</span><span>₺${(parseFloat(p.amount)||0).toFixed(2)} · ${new Date(p.paidAt).toLocaleString('tr-TR')} <button class="ghost" style="padding:3px 8px; margin-left:6px;" onclick="removePayment('${p.id}')">Sil</button></span></div>`).join('')) : `<p class="empty">Henüz tahsilat girilmedi</p>`}
       <div class="pay-add">
         <div class="field"><label>Yöntem</label>
-          <select id="pay-method"><option>Nakit</option><option>Banka Hesabı</option><option>Kredi Kartı</option><option>Sanal POS</option></select>
+          <select id="pay-method"><option>Nakit</option><option>Banka Hesabı</option><option>Kredi Kartı</option><option>Sanal POS</option><option>Cari Hesap</option></select>
         </div>
         <div class="field"><label>Tutar (₺)</label><input id="pay-amount" type="number" placeholder="500"></div>
         <div class="field"><label>Tarih / Saat</label><input id="pay-datetime" type="datetime-local"></div>
