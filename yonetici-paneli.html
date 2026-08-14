@@ -301,6 +301,7 @@
       <button data-view="dealers">Bayiler</button>
       <button data-view="label-design" class="admin-only">Etiket Tasarımı</button>
       <button data-view="doc-design" class="admin-only">Belge Tasarımı</button>
+      <button data-view="whatsapp-templates" class="admin-only">WhatsApp Şablonları</button>
       <button data-view="cashbox" class="admin-only">Kasa</button>
       <button data-view="profit" class="admin-only">Kâr / Zarar</button>
     </nav>
@@ -589,6 +590,19 @@
       </div>
     </div>
 
+    <!-- WHATSAPP TEMPLATES -->
+    <div class="view" id="view-whatsapp-templates">
+      <h1>WhatsApp Şablonları</h1>
+      <p class="subtitle">Cihaz durumu değiştiğinde müşterilere ve bayilere gönderilen hazır mesajları buradan düzenleyin. Süslü parantez içindeki alanlar ({...}) gönderim sırasında otomatik doldurulur.</p>
+
+      <div id="whatsappTemplateCards"></div>
+
+      <div class="card" style="display:flex; gap:8px;">
+        <button class="primary" onclick="saveWhatsappTemplates()">Şablonları Kaydet</button>
+        <button class="ghost" onclick="resetWhatsappTemplates()">Tümünü Varsayılana Sıfırla</button>
+      </div>
+    </div>
+
     <!-- STOCK -->
     <div class="view" id="view-stock">
       <h1>Stok</h1>
@@ -846,6 +860,7 @@ async function loadAll(){
   await loadExchangeRate();
   await loadLabelDesign();
   await loadCompanyDesign();
+  await loadWhatsappTemplates();
   renderAll();
   setDefaultReceivedTime();
   setDefaultApptTime();
@@ -1439,6 +1454,7 @@ function renderDeviceDetail(){
         ${(d.diagnosisImages && d.diagnosisImages.length) ? `<div class="img-gallery">${d.diagnosisImages.map(src=>`<img src="${src}" onclick="window.open('${src}','_blank')">`).join('')}</div>` : ''}
         <button class="ghost" style="margin-top:10px;" onclick="sendDiagnosisApprovalWhatsApp('${d.id}')">WhatsApp ile Onay İste</button>
       ` : `<p class="empty">Durum "Arıza Tespiti Bitti" olarak güncellendiğinde arıza tespiti ve tahmini fiyat burada görünür.</p>`}
+      ${d.status === 'AWAITING_PARTS' ? `<button class="ghost" style="margin-top:10px;" onclick="sendAwaitingPartsWhatsApp('${d.id}')">WhatsApp ile "Parça Bekleniyor" Bildir</button>` : ''}
     </div>
 
     <div class="card">
@@ -1689,6 +1705,139 @@ function printDeliveryForm(id){
   document.body.classList.remove('printing-form');
 }
 
+const WHATSAPP_TEMPLATES_DEFAULT = {
+  received: {
+    label: 'Cihaz Alındı',
+    placeholders: ['musteri_adi','cihaz_modeli','takip_kodu','takip_linki'],
+    text: `Teknonand — Cihaz Takip Bilgileriniz
+Sayın {musteri_adi},
+Cihazınız ({cihaz_modeli}) kaydımıza alınmıştır.
+
+Takip Kodu: {takip_kodu}
+Takip Adresi: {takip_linki}
+
+Bu adresten cihazınızın tamir sürecini anlık olarak takip edebilirsiniz.`
+  },
+  diagnosisDone: {
+    label: 'Arıza Tespiti / Onay İsteği',
+    placeholders: ['takip_kodu','musteri_adi','cihaz_modeli','ariza_tespiti','tahmini_fiyat'],
+    text: `Teknonand — Arıza Tespiti ve Fiyat Onayı
+Kayıt No: {takip_kodu}
+Sayın {musteri_adi},
+Cihazınız ({cihaz_modeli}) için yapılan inceleme sonucunda tespit edilen arıza:
+{ariza_tespiti}
+
+Tahmini onarım bedeli: ₺{tahmini_fiyat}
+
+Bu fiyat ve işlemi onaylıyorsanız lütfen bu mesaja "ONAYLIYORUM" yazarak dönüş yapabilir misiniz? Onayınızı aldıktan sonra cihazınızın onarımına başlayacağız.`
+  },
+  awaitingParts: {
+    label: 'Parça Bekleniyor',
+    placeholders: ['takip_kodu','musteri_adi','cihaz_modeli'],
+    text: `Teknonand — Parça Bekleniyor
+Kayıt No: {takip_kodu}
+Sayın {musteri_adi},
+Cihazınız ({cihaz_modeli}) için gerekli parça tedarik sürecindedir. Parça temin edilir edilmez onarıma devam edilecek ve sizi bilgilendireceğiz.
+
+Anlayışınız için teşekkür ederiz.`
+  },
+  ready: {
+    label: 'Net Fiyat / Teslime Hazır',
+    placeholders: ['takip_kodu','musteri_adi','cihaz_modeli','islem_listesi','toplam_tutar'],
+    text: `Teknonand — Net Fiyat Bilgisi
+Kayıt No: {takip_kodu}
+Sayın {musteri_adi},
+Cihazınız ({cihaz_modeli}) için yapılan işlemler ve net tutar aşağıdadır:
+
+{islem_listesi}
+
+Net Tutar: ₺{toplam_tutar}
+
+Cihazınız test aşamasını tamamladığında teslimat için sizinle iletişime geçeceğiz.`
+  },
+  delivered: {
+    label: 'Teslim Edildi',
+    placeholders: ['takip_kodu','musteri_adi','cihaz_modeli','teslim_tarihi','teslim_sekli','islem_listesi','toplam_tutar','odenen_tutar','kalan_tutar'],
+    text: `Teknonand — Cihaz Teslim Formu
+Kayıt No: {takip_kodu}
+Müşteri: {musteri_adi}
+Cihaz: {cihaz_modeli}
+Teslim Tarihi: {teslim_tarihi}
+Teslim Şekli: {teslim_sekli}
+
+Yapılan İşlemler:
+{islem_listesi}
+
+Toplam: ₺{toplam_tutar}
+Ödenen: ₺{odenen_tutar}
+Kalan: ₺{kalan_tutar}
+
+Bizi tercih ettiğiniz için teşekkür ederiz!`
+  },
+  dealerBalance: {
+    label: 'Bayi Bakiye Bildirimi',
+    placeholders: ['bayi_adi','bakiye','hareket_listesi'],
+    text: `Teknonand — Bayi Hesap Bildirimi
+Sayın {bayi_adi},
+
+Güncel Veresiye Bakiyeniz: ₺{bakiye}
+
+Son Hareketler:
+{hareket_listesi}
+
+Bilgilerinize sunarız.`
+  }
+};
+let whatsappTemplates = JSON.parse(JSON.stringify(WHATSAPP_TEMPLATES_DEFAULT));
+
+function fillTemplate(text, vars){
+  return text.replace(/\{(\w+)\}/g, (m, key) => (key in vars) ? vars[key] : m);
+}
+
+async function loadWhatsappTemplates(){
+  if(currentUserPermission !== 'ADMIN') return;
+  try{
+    const saved = await apiFetch('/settings/whatsappTemplates');
+    if(saved){
+      Object.keys(WHATSAPP_TEMPLATES_DEFAULT).forEach(key=>{
+        if(saved[key] && typeof saved[key].text === 'string') whatsappTemplates[key].text = saved[key].text;
+      });
+    }
+  }catch(e){ /* kayıtlı şablon yok, varsayılan kullanılır */ }
+}
+
+function populateWhatsappTemplateCards(){
+  const box = document.getElementById('whatsappTemplateCards');
+  if(!box) return;
+  box.innerHTML = Object.keys(WHATSAPP_TEMPLATES_DEFAULT).map(key=>{
+    const tpl = whatsappTemplates[key];
+    return `
+    <div class="card">
+      <h3>${tpl.label}</h3>
+      <textarea id="wt-${key}" rows="7" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; border:1.5px solid var(--line); border-radius:8px; padding:10px; background:var(--paper); color:var(--ink);">${tpl.text}</textarea>
+      <div class="login-hint" style="margin-top:8px;">Kullanılabilir alanlar: ${WHATSAPP_TEMPLATES_DEFAULT[key].placeholders.map(p=>`{${p}}`).join(', ')}</div>
+    </div>`;
+  }).join('');
+}
+
+async function saveWhatsappTemplates(){
+  const updated = {};
+  Object.keys(WHATSAPP_TEMPLATES_DEFAULT).forEach(key=>{
+    const el = document.getElementById('wt-'+key);
+    const text = el ? el.value : whatsappTemplates[key].text;
+    whatsappTemplates[key].text = text;
+    updated[key] = { text };
+  });
+  await apiFetch('/settings/whatsappTemplates', { method: 'PUT', body: JSON.stringify(updated) });
+  toast('Şablonlar kaydedildi');
+}
+
+function resetWhatsappTemplates(){
+  whatsappTemplates = JSON.parse(JSON.stringify(WHATSAPP_TEMPLATES_DEFAULT));
+  populateWhatsappTemplateCards();
+  toast('Şablonlar varsayılana sıfırlandı (kaydetmeyi unutmayın)');
+}
+
 function toWhatsAppNumber(phone){
   let n = normPhone(phone);
   if(n.startsWith('0')) n = '90' + n.slice(1);
@@ -1706,25 +1855,19 @@ function sendDeliveryFormWhatsApp(id){
   const remaining = total - paid;
   const deliveredEntry = (d.statusHistory||[]).find(h=>h.status==='DELIVERED');
   const deliveredAt = deliveredEntry ? new Date(deliveredEntry.changedAt).toLocaleString('tr-TR') : '—';
+  const islemListesi = parts.length ? parts.map(p=>`- ${p.name}: ₺${lineGross(p).toFixed(2)} (Garanti: ${WARRANTY_LABELS[p.warrantyMonths]})`).join('\n') : '- Kayıtlı işlem yok';
 
-  const lines = [
-    `Teknonand — Cihaz Teslim Formu`,
-    `Kayıt No: ${d.trackingCode}`,
-    `Müşteri: ${d.customer.fullName}`,
-    `Cihaz: ${d.model}`,
-    `Teslim Tarihi: ${deliveredAt}`,
-    `Teslim Şekli: ${d.deliveryMethod || 'Elden Teslim'}`,
-    ``,
-    `Yapılan İşlemler:`,
-    ...(parts.length ? parts.map(p=>`- ${p.name}: ₺${lineGross(p).toFixed(2)} (Garanti: ${WARRANTY_LABELS[p.warrantyMonths]})`) : ['- Kayıtlı işlem yok']),
-    ``,
-    `Toplam: ₺${total.toFixed(2)}`,
-    `Ödenen: ₺${paid.toFixed(2)}`,
-    `Kalan: ₺${remaining.toFixed(2)}`,
-    ``,
-    `Bizi tercih ettiğiniz için teşekkür ederiz!`
-  ];
-  const text = encodeURIComponent(lines.join('\n'));
+  const text = encodeURIComponent(fillTemplate(whatsappTemplates.delivered.text, {
+    takip_kodu: d.trackingCode,
+    musteri_adi: d.customer.fullName,
+    cihaz_modeli: d.model,
+    teslim_tarihi: deliveredAt,
+    teslim_sekli: d.deliveryMethod || 'Elden Teslim',
+    islem_listesi: islemListesi,
+    toplam_tutar: total.toFixed(2),
+    odenen_tutar: paid.toFixed(2),
+    kalan_tutar: remaining.toFixed(2)
+  }));
   const number = toWhatsAppNumber(d.customer.phone);
   window.open(`https://wa.me/${number}?text=${text}`, '_blank');
 }
@@ -1732,18 +1875,25 @@ function sendDeliveryFormWhatsApp(id){
 function sendDiagnosisApprovalWhatsApp(id){
   const d = devices.find(x=>x.id===id);
   if(!d) return;
-  const lines = [
-    `Teknonand — Arıza Tespiti ve Fiyat Onayı`,
-    `Kayıt No: ${d.trackingCode}`,
-    `Sayın ${d.customer.fullName},`,
-    `Cihazınız (${d.model}) için yapılan inceleme sonucunda tespit edilen arıza:`,
-    d.diagnosisText || '—',
-    ``,
-    `Tahmini onarım bedeli: ₺${d.estimatedPrice||0}`,
-    ``,
-    `Bu fiyat ve işlemi onaylıyorsanız lütfen bu mesaja "ONAYLIYORUM" yazarak dönüş yapabilir misiniz? Onayınızı aldıktan sonra cihazınızın onarımına başlayacağız.`
-  ];
-  const text = encodeURIComponent(lines.join('\n'));
+  const text = encodeURIComponent(fillTemplate(whatsappTemplates.diagnosisDone.text, {
+    takip_kodu: d.trackingCode,
+    musteri_adi: d.customer.fullName,
+    cihaz_modeli: d.model,
+    ariza_tespiti: d.diagnosisText || '—',
+    tahmini_fiyat: d.estimatedPrice || 0
+  }));
+  const number = toWhatsAppNumber(d.customer.phone);
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
+function sendAwaitingPartsWhatsApp(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  const text = encodeURIComponent(fillTemplate(whatsappTemplates.awaitingParts.text, {
+    takip_kodu: d.trackingCode,
+    musteri_adi: d.customer.fullName,
+    cihaz_modeli: d.model
+  }));
   const number = toWhatsAppNumber(d.customer.phone);
   window.open(`https://wa.me/${number}?text=${text}`, '_blank');
 }
@@ -1753,19 +1903,14 @@ function sendNetPriceWhatsApp(id){
   if(!d) return;
   const parts = d.parts || [];
   const total = parts.reduce((s,p)=>s+lineGross(p),0);
-  const lines = [
-    `Teknonand — Net Fiyat Bilgisi`,
-    `Kayıt No: ${d.trackingCode}`,
-    `Sayın ${d.customer.fullName},`,
-    `Cihazınız (${d.model}) için yapılan işlemler ve net tutar aşağıdadır:`,
-    ``,
-    ...(parts.length ? parts.map(p=>`- ${p.name}: ₺${lineGross(p).toFixed(2)}`) : ['- Kayıtlı işlem yok']),
-    ``,
-    `Net Tutar: ₺${total.toFixed(2)}`,
-    ``,
-    `Cihazınız test aşamasını tamamladığında teslimat için sizinle iletişime geçeceğiz.`
-  ];
-  const text = encodeURIComponent(lines.join('\n'));
+  const islemListesi = parts.length ? parts.map(p=>`- ${p.name}: ₺${lineGross(p).toFixed(2)}`).join('\n') : '- Kayıtlı işlem yok';
+  const text = encodeURIComponent(fillTemplate(whatsappTemplates.ready.text, {
+    takip_kodu: d.trackingCode,
+    musteri_adi: d.customer.fullName,
+    cihaz_modeli: d.model,
+    islem_listesi: islemListesi,
+    toplam_tutar: total.toFixed(2)
+  }));
   const number = toWhatsAppNumber(d.customer.phone);
   window.open(`https://wa.me/${number}?text=${text}`, '_blank');
 }
@@ -2140,17 +2285,12 @@ function sendDealerCredentialsWhatsApp(){
 function sendTrackingLinkWhatsApp(id){
   const d = devices.find(x=>x.id===id);
   if(!d) return;
-  const lines = [
-    `Teknonand — Cihaz Takip Bilgileriniz`,
-    `Sayın ${d.customer.fullName},`,
-    `Cihazınız (${d.model}) kaydımıza alınmıştır.`,
-    ``,
-    `Takip Kodu: ${d.trackingCode}`,
-    `Takip Adresi: ${TRACK_PORTAL_URL}`,
-    ``,
-    `Bu adresten cihazınızın tamir sürecini anlık olarak takip edebilirsiniz.`
-  ];
-  const text = encodeURIComponent(lines.join('\n'));
+  const text = encodeURIComponent(fillTemplate(whatsappTemplates.received.text, {
+    musteri_adi: d.customer.fullName,
+    cihaz_modeli: d.model,
+    takip_kodu: d.trackingCode,
+    takip_linki: TRACK_PORTAL_URL
+  }));
   const number = d.customer.phone ? toWhatsAppNumber(d.customer.phone) : '';
   window.open(`https://wa.me/${number}?text=${text}`, '_blank');
 }
@@ -2344,20 +2484,14 @@ async function resetDealerPassword(id){
 function sendDealerBalanceWhatsApp(id){
   const dl = dealers.find(x=>x.id===id);
   if(!dl) return;
-  const txs = (dl.transactions||[]).slice().reverse().slice(0,10);
-  const lines = [
-    `Teknonand — Bayi Hesap Bildirimi`,
-    `Sayın ${dl.name},`,
-    ``,
-    `Güncel Veresiye Bakiyeniz: ₺${(parseFloat(dl.balance)||0).toFixed(2)}`,
-    ``,
-    `Son Hareketler:`,
-    ...(txs.length ? txs.map(t=>`- ${t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat'}: ₺${(parseFloat(t.amount)||0).toFixed(2)} (${new Date(t.createdAt).toLocaleDateString('tr-TR')})`) : ['- Hareket yok']),
-    ``,
-    `Bilgilerinize sunarız.`
-  ];
-  const text = encodeURIComponent(lines.join('\n'));
-  const number = toWhatsAppNumber(dl.phone);
+  const txs = (dl.transactions||[]).slice(0,10); // zaten en yeniden en eskiye sıralı gelir
+  const hareketListesi = txs.length ? txs.map(t=>`- ${t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat'}: ₺${(parseFloat(t.amount)||0).toFixed(2)} (${new Date(t.createdAt).toLocaleDateString('tr-TR')})`).join('\n') : '- Hareket yok';
+  const text = encodeURIComponent(fillTemplate(whatsappTemplates.dealerBalance.text, {
+    bayi_adi: dl.name,
+    bakiye: (parseFloat(dl.balance)||0).toFixed(2),
+    hareket_listesi: hareketListesi
+  }));
+  const number = dl.phone ? toWhatsAppNumber(dl.phone) : '';
   window.open(`https://wa.me/${number}?text=${text}`, '_blank');
 }
 
@@ -2942,7 +3076,7 @@ function pill(status){
 }
 
 function switchView(name){
-  if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit' || name==='label-design' || name==='doc-design' || name==='employees')){
+  if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit' || name==='label-design' || name==='doc-design' || name==='employees' || name==='whatsapp-templates')){
     toast('Bu sayfayı görüntüleme yetkiniz yok');
     return;
   }
@@ -2954,6 +3088,7 @@ function switchView(name){
   if(name==='devices') renderDeviceTable();
   if(name==='label-design') populateLabelDesignForm();
   if(name==='doc-design') populateDocDesignForm();
+  if(name==='whatsapp-templates') populateWhatsappTemplateCards();
 }
 document.querySelectorAll('nav button').forEach(b=>{
   b.addEventListener('click', ()=>switchView(b.dataset.view));
