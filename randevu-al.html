@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teknonand — Randevu Al</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F5F1; --ink:#17181C; --ink-soft:#5A5C66;
+    --accent:#2F5EFF; --amber:#E8A33D; --green:#2E9E6D; --red:#C1442A;
+    --line:#DEDCD4; --card:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif;
+    min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding:48px 20px;
+  }
+  .wrap{max-width:480px; width:100%;}
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:32px;}
+  .brand-sub{color:var(--ink-soft); font-size:12px;}
+
+  h1{font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:700; letter-spacing:-0.03em; margin:0 0 8px;}
+  .lead{color:var(--ink-soft); font-size:14.5px; margin:0 0 26px; line-height:1.5;}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px; margin-bottom:16px;}
+  label{font-size:11.5px; color:var(--ink-soft); font-weight:600; display:block; margin-bottom:5px;}
+  input, select, textarea{
+    width:100%; font-family:'Inter',sans-serif; font-size:14px;
+    border:1.5px solid var(--line); border-radius:10px; padding:12px 13px;
+    background:var(--paper); color:var(--ink); outline:none; transition:border-color .15s;
+  }
+  input:focus, select:focus, textarea:focus{border-color:var(--accent);}
+  .field{margin-bottom:14px;}
+  button{
+    width:100%; font-family:'Inter',sans-serif; font-weight:600; font-size:14.5px;
+    background:var(--ink); color:var(--paper); border:none; border-radius:10px;
+    padding:14px; cursor:pointer; transition:opacity .15s;
+  }
+  button:hover{opacity:.88;}
+  .error{display:none; color:var(--red); font-size:13px; margin-top:10px;}
+
+  .note{font-size:12px; color:var(--ink-soft); margin-top:14px; line-height:1.5; text-align:center;}
+
+  .form-view{display:block;}
+  .success-view{display:none; text-align:center;}
+  .success-view.show{display:block;}
+  .form-view.hide{display:none;}
+  .success-icon{
+    width:56px; height:56px; border-radius:50%; background:#E4F3EC; color:var(--green);
+    display:flex; align-items:center; justify-content:center; margin:0 auto 18px;
+  }
+  .success-icon svg{width:26px; height:26px; stroke:var(--green);}
+  .success-view h2{font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700; margin:0 0 8px;}
+  .success-view p{color:var(--ink-soft); font-size:14px; line-height:1.5; margin:0 0 4px;}
+  .success-summary{
+    background:var(--paper); border:1px solid var(--line); border-radius:12px;
+    padding:16px; margin:18px 0; text-align:left; font-size:13px;
+  }
+  .success-summary div{margin-bottom:6px;}
+  .success-summary div:last-child{margin-bottom:0;}
+  .success-summary span{color:var(--ink-soft); display:block; font-size:11px;}
+  .again-btn{background:none; border:1.5px solid var(--line); color:var(--ink-soft); margin-top:6px;}
+  .again-btn:hover{border-color:var(--accent); color:var(--accent); opacity:1;}
+
+  footer{margin-top:20px; font-size:11.5px; color:#A6A69C; text-align:center;}
+
+  @media (max-width:480px){
+    body{padding:32px 16px;}
+    input, select, textarea{font-size:16px;} /* prevents iOS Safari auto-zoom on focus */
+    h1{font-size:23px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <img src="logo.png" alt="Teknonand" style="height:42px; width:auto;">
+    <div class="brand-sub">iPhone & iPad Teknik Servis</div>
+  </div>
+
+  <div id="formView" class="form-view">
+    <h1>Randevu Alın</h1>
+    <p class="lead">Cihazınız için servis randevusu oluşturun, ekibimiz sizi onaylamak üzere arayacak veya WhatsApp'tan dönüş yapacaktır.</p>
+
+    <div class="card">
+      <div class="field"><label>Ad Soyad</label><input id="r-name" placeholder="Ahmet Yılmaz"></div>
+      <div class="field"><label>Telefon</label><input id="r-phone" placeholder="05xx xxx xx xx"></div>
+      <div class="field"><label>Cihaz Modeli</label><input id="r-model" placeholder="örn. iPhone 14 Pro"></div>
+      <div class="field"><label>Randevu İçin Tercih Ettiğiniz Tarih ve Saat</label><input id="r-datetime" type="datetime-local"></div>
+      <div class="field"><label>Hizmet / Arıza (opsiyonel)</label>
+        <textarea id="r-service" rows="2" placeholder="örn. Ekran kırık, batarya değişimi"></textarea>
+      </div>
+      <button onclick="submitAppointment()">Randevu Talebi Gönder</button>
+      <div class="error" id="errorMsg">Ad soyad, telefon ve tarih/saat alanları zorunludur.</div>
+    </div>
+    <p class="note">Randevunuz kaydedildikten sonra ekibimiz size ulaşarak teyit edecektir. Bu bir kesin rezervasyon değil, ön talep niteliğindedir.</p>
+  </div>
+
+  <div id="successView" class="success-view">
+    <div class="success-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h2>Randevu Talebiniz Alındı</h2>
+    <p>Ekibimiz en kısa sürede sizinle iletişime geçip randevunuzu teyit edecek.</p>
+    <div class="success-summary" id="successSummary"></div>
+    <button class="again-btn" onclick="resetForm()">Yeni Randevu Oluştur</button>
+  </div>
+
+  <footer>Teknonand — iPhone & iPad Teknik Servis</footer>
+</div>
+
+<script>
+function toLocalInputValue(date){
+  const off = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - off*60000);
+  return local.toISOString().slice(0,16);
+}
+
+function setMinDatetime(){
+  const input = document.getElementById('r-datetime');
+  const now = new Date();
+  input.min = toLocalInputValue(now);
+  if(!input.value) input.value = toLocalInputValue(new Date(now.getTime() + 60*60000));
+}
+setMinDatetime();
+
+async function getList(key){
+  try{
+    const r = await window.storage.get(key, true);
+    return r ? JSON.parse(r.value) : [];
+  }catch(e){ return []; }
+}
+async function saveList(key, list){
+  try{ await window.storage.set(key, JSON.stringify(list), true); }catch(e){}
+}
+
+async function submitAppointment(){
+  const name = document.getElementById('r-name').value.trim();
+  const phone = document.getElementById('r-phone').value.trim();
+  const model = document.getElementById('r-model').value.trim();
+  const whenRaw = document.getElementById('r-datetime').value;
+  const serviceText = document.getElementById('r-service').value.trim();
+  const errorEl = document.getElementById('errorMsg');
+
+  if(!name || !phone || !whenRaw){
+    errorEl.style.display = 'block';
+    return;
+  }
+  errorEl.style.display = 'none';
+
+  const when = new Date(whenRaw);
+  const whenStr = when.toLocaleString('tr-TR', {dateStyle:'long', timeStyle:'short'});
+  const service = [model, serviceText].filter(Boolean).join(' — ');
+
+  const customerMsg = `Sayın ${name}, ${whenStr} tarihinde Teknonand'da randevu talebiniz alındı.${service ? ' Not: '+service+'.' : ''} Ekibimiz sizi teyit için arayacak.`;
+  const shopMsg = `Web sitesinden yeni randevu talebi: ${name} (${phone}) — ${whenStr}.${service ? ' Not: '+service : ''}`;
+
+  const appointments = await getList('appointments');
+  const appt = {
+    id: 'a_' + Date.now(),
+    customerName: name, phone, datetime: when.toISOString(), service,
+    source: 'website',
+    created_at: new Date().toISOString(),
+    notifications: [
+      {to:'Müşteri', text: customerMsg},
+      {to:'İşletme (Siz)', text: shopMsg}
+    ]
+  };
+  appointments.push(appt);
+  await saveList('appointments', appointments);
+
+  document.getElementById('successSummary').innerHTML = `
+    <div><span>Ad Soyad</span>${name}</div>
+    <div><span>Telefon</span>${phone}</div>
+    <div><span>Tarih / Saat</span>${whenStr}</div>
+    ${service ? `<div><span>Not</span>${service}</div>` : ''}
+  `;
+
+  document.getElementById('formView').classList.add('hide');
+  document.getElementById('successView').classList.add('show');
+}
+
+function resetForm(){
+  ['r-name','r-phone','r-model','r-service'].forEach(id=>document.getElementById(id).value='');
+  setMinDatetime();
+  document.getElementById('formView').classList.remove('hide');
+  document.getElementById('successView').classList.remove('show');
+}
+</script>
+</body>
+</html>

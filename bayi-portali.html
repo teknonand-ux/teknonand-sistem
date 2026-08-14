@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teknonand — Bayi Portalı</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#17181C">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Teknonand">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F5F1; --ink:#17181C; --ink-soft:#5A5C66;
+    --accent:#2F5EFF; --amber:#E8A33D; --green:#2E9E6D; --red:#C1442A;
+    --line:#DEDCD4; --card:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif;}
+  .wrap{max-width:640px; margin:0 auto; padding:28px 18px 60px;}
+  h1{font-family:'Space Grotesk',sans-serif; font-size:22px; font-weight:700; letter-spacing:-0.02em; margin:0 0 4px;}
+  .subtitle{color:var(--ink-soft); font-size:13px; margin:0 0 20px;}
+  .brand{display:flex; align-items:center; gap:9px; margin-bottom:22px;}
+  .brand-mark{width:30px; height:30px; border-radius:8px; background:var(--ink); display:flex; align-items:center; justify-content:center;}
+  .brand-mark svg{width:15px; height:15px; stroke:var(--paper);}
+  .brand-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:14px;}
+  .card h3{font-family:'Space Grotesk',sans-serif; font-size:14.5px; margin:0 0 12px;}
+  label{font-size:11.5px; color:var(--ink-soft); font-weight:600; display:block; margin-bottom:4px;}
+  input,select,textarea{
+    width:100%; font-family:'Inter',sans-serif; font-size:13.5px; border:1.5px solid var(--line);
+    border-radius:8px; padding:9px 11px; background:var(--paper); color:var(--ink); outline:none;
+  }
+  input:focus,select:focus{border-color:var(--accent);}
+  .field{margin-bottom:12px;}
+  button.primary{
+    background:var(--ink); color:var(--paper); border:none; border-radius:9px; padding:11px 18px;
+    font-weight:600; font-size:13.5px; cursor:pointer;
+  }
+  button.primary:hover{opacity:.88;}
+  button.ghost{background:none; border:1px solid var(--line); border-radius:8px; padding:8px 13px; font-size:12.5px; cursor:pointer; color:var(--ink-soft);}
+  button.ghost:hover{border-color:var(--accent); color:var(--accent);}
+  button.ghost.active{background:var(--ink); color:var(--paper); border-color:var(--ink);}
+
+  #app{display:none;}
+  .login-card{max-width:340px; margin:60px auto 0;}
+  .login-error{color:var(--red); font-size:12.5px; margin-top:8px; display:none;}
+  .user-row{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;}
+  .user-row .u-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;}
+  .user-row button{background:none; border:1px solid var(--line); color:var(--ink-soft); border-radius:8px; padding:7px 12px; font-size:12px; cursor:pointer;}
+
+  .stat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px;}
+  .stat{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px;}
+  .stat .num{font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700;}
+  .stat .lbl{font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
+
+  .search-row{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+  .date-row{display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:end; margin-bottom:14px;}
+  .date-row .field{margin-bottom:0;}
+
+  .device-item{border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; cursor:pointer;}
+  .device-item:hover{border-color:var(--accent);}
+  .device-top{display:flex; justify-content:space-between; align-items:flex-start;}
+  .device-model{font-weight:600; font-size:14px;}
+  .device-code{font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
+  .pill{font-size:11px; font-weight:600; padding:4px 10px; border-radius:20px; white-space:nowrap;}
+  .device-detail{margin-top:12px; padding-top:12px; border-top:1px solid var(--line); font-size:12.5px; display:none;}
+  .device-detail.open{display:block;}
+  .device-detail .d-line{margin-bottom:6px;}
+  .device-detail .d-line span{color:var(--ink-soft); display:block; font-size:11px;}
+  .approve-box{background:#FBF0DD; border:1px solid #EFD8A6; border-radius:9px; padding:12px; margin-top:10px;}
+  .approve-box textarea{width:100%; font-family:'Inter',sans-serif; font-size:12.5px; border:1.5px solid var(--line); border-radius:8px; padding:8px 10px; margin-top:8px; background:var(--card); color:var(--ink); resize:vertical;}
+  .empty{color:var(--ink-soft); font-size:13px; padding:16px 0; text-align:center;}
+
+  .tx-line{display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #EEEDE7; font-size:12.5px;}
+  .tx-line:last-child{border-bottom:none;}
+
+  @media (max-width:480px){
+    html{-webkit-text-size-adjust:100%;}
+    .wrap{padding:20px 14px 50px;}
+    input, select, textarea{font-size:16px;} /* prevents iOS Safari auto-zoom on focus */
+    .date-row{grid-template-columns:1fr 1fr; }
+    .date-row button{grid-column:1/-1; width:100%;}
+    .stat-grid{gap:8px;}
+    .stat .num{font-size:17px;}
+    .search-row{gap:6px;}
+    .search-row button{flex:1; text-align:center;}
+    .user-row{flex-wrap:wrap; gap:8px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <img src="logo.png" alt="Teknonand" style="height:44px; width:auto;">
+    <div class="brand-name" style="margin-left:2px;">Bayi Portalı</div>
+  </div>
+
+  <div id="loginScreen">
+    <div class="card login-card">
+      <h1>Bayi Girişi</h1>
+      <p class="subtitle">Cihazlarınızı ve hesabınızı takip edin</p>
+      <div class="field"><label>Kullanıcı Adı</label><input id="login-username" placeholder="bayi.adi"></div>
+      <div class="field"><label>Şifre</label><input id="login-password" type="password" placeholder="••••••••"></div>
+      <button class="primary" style="width:100%;" onclick="doLogin()">Giriş Yap</button>
+      <div class="login-error" id="loginError">Kullanıcı adı veya şifre hatalı.</div>
+    </div>
+  </div>
+
+  <div id="app">
+    <div class="user-row">
+      <div>
+        <div class="u-name" id="dealerNameLabel"></div>
+        <div class="subtitle" style="margin:0;">Bayi Hesabınız</div>
+      </div>
+      <button onclick="doLogout()">Çıkış Yap</button>
+    </div>
+
+    <div class="stat-grid" id="statGrid"></div>
+
+    <div class="card">
+      <h3>Hesap / Bakiye</h3>
+      <div id="balanceBox"></div>
+    </div>
+
+    <div class="card">
+      <h3>Cihazlarım</h3>
+      <div class="search-row">
+        <button class="ghost search-mode-btn active" data-mode="imei" onclick="setSearchMode('imei')">IMEI / Seri No ile Bul</button>
+        <button class="ghost search-mode-btn" data-mode="model" onclick="setSearchMode('model')">Cihaz Modeli ile Bul</button>
+      </div>
+      <div class="field"><input id="device-search" placeholder="Aramak için yazmaya başlayın..." oninput="renderDevices()"></div>
+      <div class="date-row">
+        <div class="field"><label>Başlangıç Tarihi</label><input id="date-from" type="date" onchange="renderDevices()"></div>
+        <div class="field"><label>Bitiş Tarihi</label><input id="date-to" type="date" onchange="renderDevices()"></div>
+        <button class="ghost" onclick="clearDateFilter()">Temizle</button>
+      </div>
+      <div id="deviceList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STATUS_LABELS = {
+  diagnosing:'İnceleniyor', diagnosis_done:'Arıza Tespiti Bitti', approved:'Fiyat Onaylandı - Onarılıyor',
+  testing:'Test Ediliyor', delivered:'Teslim Edildi'
+};
+const STATUS_COLORS = {
+  diagnosing:['#2F5EFF','#E9EEFF'], diagnosis_done:['#E8A33D','#FBF0DD'], approved:['#2F5EFF','#E9EEFF'],
+  testing:['#2F5EFF','#E9EEFF'], delivered:['#2E9E6D','#E4F3EC']
+};
+
+let dealers = [];
+let devices = [];
+let currentDealer = null;
+let searchMode = 'imei';
+let openDeviceId = null;
+
+async function getList(key){
+  try{
+    const r = await window.storage.get(key, true);
+    return r ? JSON.parse(r.value) : [];
+  }catch(e){ return []; }
+}
+async function saveList(key, list){
+  try{ await window.storage.set(key, JSON.stringify(list), true); }catch(e){}
+}
+
+async function loadAll(){
+  dealers = await getList('dealers');
+  devices = await getList('devices');
+}
+
+function pill(status){
+  const [c,bg] = STATUS_COLORS[status] || ['#5A5C66','#EEEDE7'];
+  return `<span class="pill" style="color:${c}; background:${bg};">${STATUS_LABELS[status]||status}</span>`;
+}
+
+async function doLogin(){
+  await loadAll();
+  const username = document.getElementById('login-username').value.trim().toLowerCase();
+  const password = document.getElementById('login-password').value;
+  const dl = dealers.find(d => (d.username||'').toLowerCase() === username && d.password === password);
+  const errorEl = document.getElementById('loginError');
+  if(!dl){ errorEl.style.display = 'block'; return; }
+  currentDealer = dl;
+  errorEl.style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('dealerNameLabel').textContent = dl.name;
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  renderAll();
+}
+
+function doLogout(){
+  currentDealer = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'block';
+}
+
+function setSearchMode(mode){
+  searchMode = mode;
+  document.querySelectorAll('.search-mode-btn').forEach(b=>b.classList.toggle('active', b.dataset.mode===mode));
+  renderDevices();
+}
+
+function clearDateFilter(){
+  document.getElementById('date-from').value = '';
+  document.getElementById('date-to').value = '';
+  renderDevices();
+}
+
+function myDevices(){
+  return devices.filter(d => d.dealerId === currentDealer.id);
+}
+
+function renderAll(){
+  const mine = myDevices();
+  const activeCount = mine.filter(d=>d.status!=='delivered').length;
+
+  document.getElementById('statGrid').innerHTML = `
+    <div class="stat"><div class="num" style="color:${currentDealer.balance>0?'var(--red)':'var(--green)'}">₺${currentDealer.balance.toFixed(0)}</div><div class="lbl">Veresiye Bakiyesi</div></div>
+    <div class="stat"><div class="num">${mine.length}</div><div class="lbl">Toplam Cihaz</div></div>
+    <div class="stat"><div class="num">${activeCount}</div><div class="lbl">Aktif Serviste</div></div>
+  `;
+
+  const txs = (currentDealer.transactions||[]).slice().reverse();
+  document.getElementById('balanceBox').innerHTML = txs.length ? txs.map(t=>`
+    <div class="tx-line">
+      <span>${t.type==='veresiye'?'Veresiye Satış':'Tahsilat'}</span>
+      <span>₺${t.amount.toFixed(2)} · ${new Date(t.at).toLocaleDateString('tr-TR')}</span>
+    </div>`).join('') : `<p class="empty">Henüz hesap hareketi yok</p>`;
+
+  renderDevices();
+}
+
+function renderDevices(){
+  const query = document.getElementById('device-search').value.trim().toLowerCase();
+  const fromRaw = document.getElementById('date-from').value;
+  const toRaw = document.getElementById('date-to').value;
+
+  let list = myDevices();
+  if(query){
+    list = list.filter(d=>{
+      if(searchMode==='imei') return (d.imei||'').toLowerCase().includes(query);
+      if(searchMode==='model') return (d.model||'').toLowerCase().includes(query);
+      return true;
+    });
+  }
+  if(fromRaw){
+    const from = new Date(fromRaw);
+    list = list.filter(d => new Date(d.created_at) >= from);
+  }
+  if(toRaw){
+    const to = new Date(toRaw); to.setHours(23,59,59,999);
+    list = list.filter(d => new Date(d.created_at) <= to);
+  }
+  list = list.slice().sort((a,b)=> new Date(b.created_at) - new Date(a.created_at));
+
+  const box = document.getElementById('deviceList');
+  if(!list.length){
+    box.innerHTML = `<p class="empty">${query||fromRaw||toRaw ? 'Eşleşen cihaz bulunamadı' : 'Henüz cihazınız yok'}</p>`;
+    return;
+  }
+
+  box.innerHTML = list.map(d=>{
+    const parts = d.parts || [];
+    const total = parts.reduce((s,p)=>{
+      const price = parseFloat(p.price)||0;
+      return s + (p.vat==='haric' ? price*1.2 : price);
+    }, 0);
+    const isOpen = openDeviceId === d.id;
+    const needsApproval = d.status === 'diagnosis_done' && !d.dealerApproved;
+    return `
+    <div class="device-item" onclick="toggleDevice('${d.id}')">
+      <div class="device-top">
+        <div>
+          <div class="device-model">${d.model}</div>
+          <div class="device-code">${d.code}</div>
+        </div>
+        ${pill(d.status)}
+      </div>
+      <div class="device-detail ${isOpen?'open':''}">
+        <div class="d-line"><span>Arıza</span>${d.issue || '—'}</div>
+        <div class="d-line"><span>Kayıt Tarihi</span>${new Date(d.created_at).toLocaleString('tr-TR')}</div>
+        ${total>0 ? `<div class="d-line"><span>Tutar</span>₺${total.toFixed(2)}</div>` : ''}
+        ${d.diagnosisText ? `<div class="d-line"><span>Arıza Tespiti</span>${d.diagnosisText}</div>` : ''}
+        ${d.estimatedPrice ? `<div class="d-line"><span>Tahmini Fiyat</span>₺${d.estimatedPrice}</div>` : ''}
+        ${needsApproval ? `
+          <div class="approve-box" onclick="event.stopPropagation()">
+            Bu cihaz için tespit edilen arıza ve tahmini fiyatı onaylıyor musunuz?
+            <textarea id="approveNote-${d.id}" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)"></textarea>
+            <div style="margin-top:8px;"><button class="primary" onclick="approveDevice('${d.id}')">Onaylıyorum</button></div>
+          </div>` : ''}
+        ${d.dealerApproved ? `<div class="d-line" style="color:var(--green); font-weight:600;">✓ Fiyat onaylandı</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleDevice(id){
+  openDeviceId = openDeviceId === id ? null : id;
+  renderDevices();
+}
+
+async function approveDevice(id){
+  devices = await getList('devices');
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  const noteEl = document.getElementById('approveNote-'+id);
+  const note = noteEl ? noteEl.value.trim() : '';
+  d.dealerApproved = true;
+  d.status = 'approved';
+  if(!d.history) d.history = [];
+  d.history.push({status:'approved', note: note ? `Bayi tarafından onaylandı — Not: ${note}` : 'Bayi tarafından onaylandı', at:new Date().toISOString()});
+  await saveList('devices', devices);
+  renderDevices();
+}
+
+loadAll();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,382 @@
+// Teknonand Yönetim Sistemi — Veritabanı Şeması
+// sistem-plani.md ile prototip HTML ekranlarının (bayi-portali, randevu-al,
+// takip-portali, yonetici-paneli) ihtiyaçları birleştirilerek oluşturulmuştur.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Kimlik doğrulama
+// ---------------------------------------------------------------------------
+
+enum EmployeePermission {
+  ADMIN // Yönetici — tüm sayfalar (Kasa, Kâr/Zarar, Etiket/Belge Tasarımı dahil)
+  RESTRICTED // Kısıtlı — admin-only sayfalar gizli
+}
+
+model Employee {
+  id           String             @id @default(uuid())
+  name         String
+  role         String // serbest metin: Teknisyen / Kasiyer / Yönetici vb.
+  username     String             @unique
+  passwordHash String
+  permission   EmployeePermission @default(RESTRICTED)
+  phone        String?
+  email        String?
+  active       Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+
+  assignedDevices Device[]             @relation("AssignedEmployee")
+  statusChanges   DeviceStatusHistory[]
+  repairs         Repair[]
+
+  @@map("employees")
+}
+
+model Dealer {
+  id           String   @id @default(uuid())
+  name         String
+  phone        String?
+  username     String   @unique
+  passwordHash String
+  balance      Decimal  @default(0) @db.Decimal(12, 2) // pozitif = bayi borçlu (veresiye)
+  createdAt    DateTime @default(now())
+
+  devices      Device[]
+  transactions DealerTransaction[]
+
+  @@map("dealers")
+}
+
+enum DealerTxType {
+  VERESIYE_SATIS
+  TAHSILAT
+}
+
+model DealerTransaction {
+  id          String       @id @default(uuid())
+  dealerId    String
+  dealer      Dealer       @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  type        DealerTxType
+  amount      Decimal      @db.Decimal(12, 2)
+  description String?
+  createdAt   DateTime     @default(now())
+
+  @@map("dealer_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// Müşteri / Cihaz
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id          String   @id @default(uuid())
+  fullName    String
+  phone       String
+  backupPhone String?
+  email       String?
+  createdAt   DateTime @default(now())
+
+  devices Device[]
+
+  @@index([phone])
+  @@map("customers")
+}
+
+enum DeviceStatus {
+  RECEIVED // alındı
+  DIAGNOSING // inceleniyor
+  DIAGNOSIS_DONE // arıza tespiti bitti — müşteri/bayi onayı bekleniyor
+  AWAITING_PARTS // parça bekliyor
+  APPROVED // fiyat onaylandı — onarılıyor
+  IN_REPAIR // tamir ediliyor
+  TESTING // test ediliyor
+  READY // teslime hazır
+  DELIVERED // teslim edildi
+  RETURNED // iade edildi
+  CANCELLED // iptal
+}
+
+model Device {
+  id               String   @id @default(uuid())
+  customerId       String
+  customer         Customer @relation(fields: [customerId], references: [id])
+  dealerId         String?
+  dealer           Dealer?  @relation(fields: [dealerId], references: [id])
+  assignedEmployeeId String?
+  assignedEmployee Employee? @relation("AssignedEmployee", fields: [assignedEmployeeId], references: [id])
+
+  trackingCode String @unique // örn. TKN-2026-0342
+  brand        String @default("Apple")
+  model        String
+  imeiSerial   String?
+  devicePassword String? // cihaz ekran kilidi / şifresi
+  backupPhone    String? // bu kayıt için ek iletişim telefonu
+  deviceOff      Boolean @default(false) // cihaz kapalı / IMEI okunamadı
+
+  issueDescription String
+  status           DeviceStatus @default(RECEIVED)
+
+  diagnosisText   String?
+  estimatedPrice  Decimal? @db.Decimal(12, 2)
+  customerApproved Boolean @default(false)
+  dealerApproved   Boolean @default(false)
+  approvalNote     String?
+  approvedAt       DateTime?
+  deliveryMethod   String?
+
+  receivedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  statusHistory DeviceStatusHistory[]
+  parts         DevicePart[]
+  payments      Payment[]
+  stockMovements StockMovement[]
+  repair        Repair?
+  images        DeviceImage[]
+  whatsappMessages WhatsappMessage[]
+
+  @@index([status])
+  @@index([customerId])
+  @@index([dealerId])
+  @@map("devices")
+}
+
+model DeviceStatusHistory {
+  id             String       @id @default(uuid())
+  deviceId       String
+  device         Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  status         DeviceStatus
+  note           String?
+  changedByEmployeeId String?
+  changedByEmployee   Employee? @relation(fields: [changedByEmployeeId], references: [id])
+  changedAt      DateTime     @default(now())
+
+  @@map("device_status_history")
+}
+
+// ---------------------------------------------------------------------------
+// Tamir / Parça / Ödeme
+// ---------------------------------------------------------------------------
+
+model Repair {
+  id            String    @id @default(uuid())
+  deviceId      String    @unique
+  device        Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  technicianId  String?
+  technician    Employee? @relation(fields: [technicianId], references: [id])
+  laborCost     Decimal   @default(0) @db.Decimal(12, 2)
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  @@map("repairs")
+}
+
+enum VatMode {
+  DAHIL // fiyata KDV dahil
+  HARIC // fiyata %20 KDV eklenir
+}
+
+model DevicePart {
+  id          String   @id @default(uuid())
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  stockItemId String?
+  stockItem   StockItem? @relation(fields: [stockItemId], references: [id])
+  name        String
+  price       Decimal  @db.Decimal(12, 2)
+  vatMode     VatMode  @default(DAHIL)
+  warranty    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@map("device_parts")
+}
+
+enum PaymentMethod {
+  NAKIT
+  KART
+  HAVALE
+}
+
+enum PaymentType {
+  KAPORA
+  ARA_ODEME
+  FINAL
+}
+
+model Payment {
+  id       String        @id @default(uuid())
+  deviceId String
+  device   Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  amount   Decimal       @db.Decimal(12, 2)
+  method   PaymentMethod
+  type     PaymentType
+  paidAt   DateTime      @default(now())
+  createdAt DateTime     @default(now())
+
+  @@map("payments")
+}
+
+model DeviceImage {
+  id        String   @id @default(uuid())
+  deviceId  String
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  url       String // nesne depolama (ör. Cloudflare R2) üzerindeki URL
+  createdAt DateTime @default(now())
+
+  @@map("device_images")
+}
+
+// ---------------------------------------------------------------------------
+// Stok / Toptancı
+// ---------------------------------------------------------------------------
+
+model StockItem {
+  id           String   @id @default(uuid())
+  name         String
+  sku          String?
+  category     String?
+  quantity     Int      @default(0)
+  minThreshold Int      @default(0)
+  unitCostTry  Decimal  @db.Decimal(12, 2)
+  unitCostUsd  Decimal? @db.Decimal(12, 2)
+  supplierId   String?
+  supplier     Supplier? @relation(fields: [supplierId], references: [id])
+  createdAt    DateTime @default(now())
+
+  movements  StockMovement[]
+  usedInParts DevicePart[]
+
+  @@map("stock_items")
+}
+
+enum StockMoveReason {
+  KULLANIM
+  ALIM
+  IADE
+}
+
+model StockMovement {
+  id             String          @id @default(uuid())
+  stockItemId    String
+  stockItem      StockItem       @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+  deviceId       String?
+  device         Device?         @relation(fields: [deviceId], references: [id])
+  quantityChange Int // pozitif = giriş, negatif = çıkış
+  reason         StockMoveReason
+  createdAt      DateTime        @default(now())
+
+  @@map("stock_movements")
+}
+
+model Supplier {
+  id             String   @id @default(uuid())
+  name           String
+  phone          String?
+  contactPerson  String?
+  currentBalance Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt      DateTime @default(now())
+
+  transactions SupplierTransaction[]
+  stockItems   StockItem[]
+  expenses     Expense[]
+
+  @@map("suppliers")
+}
+
+enum SupplierTxType {
+  ALIM
+  ODEME
+}
+
+model SupplierTransaction {
+  id          String         @id @default(uuid())
+  supplierId  String
+  supplier    Supplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  type        SupplierTxType
+  amount      Decimal        @db.Decimal(12, 2)
+  description String?
+  createdAt   DateTime       @default(now())
+
+  @@map("supplier_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// Kasa
+// ---------------------------------------------------------------------------
+
+model Expense {
+  id          String   @id @default(uuid())
+  category    String // Toptancı Ödemesi / Kira / Fatura / Personel Maaşı / Diğer
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  amount      Decimal  @db.Decimal(12, 2)
+  method      String // Nakit / Banka Hesabı / Kredi Kartı / Sanal POS
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@map("expenses")
+}
+
+// ---------------------------------------------------------------------------
+// Randevu
+// ---------------------------------------------------------------------------
+
+enum AppointmentSource {
+  WEBSITE
+  PANEL
+}
+
+model Appointment {
+  id           String            @id @default(uuid())
+  customerName String
+  phone        String
+  datetime     DateTime
+  service      String?
+  source       AppointmentSource @default(PANEL)
+  createdAt    DateTime          @default(now())
+
+  @@map("appointments")
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp
+// ---------------------------------------------------------------------------
+
+enum WhatsappStatus {
+  GONDERILDI
+  OKUNDU
+  BASARISIZ
+}
+
+model WhatsappMessage {
+  id           String         @id @default(uuid())
+  deviceId     String?
+  device       Device?        @relation(fields: [deviceId], references: [id])
+  customerId   String?
+  templateType String // "cihaz_alindi" / "parca_bekleniyor" / "teslime_hazir" vb.
+  content      String
+  status       WhatsappStatus @default(GONDERILDI)
+  sentAt       DateTime       @default(now())
+
+  @@map("whatsapp_messages")
+}
+
+// ---------------------------------------------------------------------------
+// Ayarlar (döviz kuru, etiket tasarımı, firma bilgileri) — key/value
+// ---------------------------------------------------------------------------
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}

@@ -1,0 +1,2877 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teknonand — Yönetici Paneli</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F5F1; --ink:#17181C; --ink-soft:#5A5C66;
+    --accent:#2F5EFF; --amber:#E8A33D; --green:#2E9E6D; --red:#C1442A;
+    --line:#DEDCD4; --card:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif;}
+  .app{display:flex; min-height:100vh;}
+
+  /* Sidebar */
+  .sidebar{width:210px; background:var(--ink); color:var(--paper); flex-shrink:0; padding:22px 14px; display:flex; flex-direction:column;}
+  .brand{display:flex; align-items:center; gap:9px; padding:0 8px 24px; border-bottom:1px solid #333;}
+  .brand-mark{width:28px;height:28px;border-radius:7px;background:var(--paper); display:flex;align-items:center;justify-content:center;}
+  .brand-mark svg{width:14px;height:14px;stroke:var(--ink);}
+  .brand-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px;}
+  nav{margin-top:18px; display:flex; flex-direction:column; gap:2px;}
+  nav button{
+    text-align:left; background:none; border:none; color:#AEB0BC; font-family:'Inter',sans-serif;
+    font-size:13.5px; font-weight:500; padding:10px 12px; border-radius:8px; cursor:pointer;
+    display:flex; align-items:center; gap:9px;
+  }
+  nav button:hover{background:#26272E; color:var(--paper);}
+  nav button.active{background:var(--accent); color:white;}
+  nav button svg{width:15px;height:15px; flex-shrink:0;}
+  .shared-note{margin-top:auto; font-size:10.5px; color:#7D7F8B; padding:10px 8px; line-height:1.5;}
+
+  /* Main */
+  main{flex:1; padding:32px 36px; max-width:920px;}
+  h1{font-family:'Space Grotesk',sans-serif; font-size:24px; font-weight:700; letter-spacing:-0.02em; margin:0 0 4px;}
+  .subtitle{color:var(--ink-soft); font-size:13.5px; margin:0 0 26px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .stat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:26px;}
+  .stat{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px;}
+  .stat .num{font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:700;}
+  .stat .lbl{font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px;}
+  .card h3{font-family:'Space Grotesk',sans-serif; font-size:15px; margin:0 0 14px;}
+
+  .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .form-grid.full{grid-template-columns:1fr;}
+  label{font-size:11.5px; color:var(--ink-soft); font-weight:600; display:block; margin-bottom:4px;}
+  input,select,textarea{
+    width:100%; font-family:'Inter',sans-serif; font-size:13.5px; border:1.5px solid var(--line);
+    border-radius:8px; padding:9px 11px; background:var(--paper); color:var(--ink); outline:none;
+  }
+  input:focus,select:focus,textarea:focus{border-color:var(--accent);}
+  .field{margin-bottom:12px;}
+  button.primary{
+    background:var(--ink); color:var(--paper); border:none; border-radius:9px; padding:11px 18px;
+    font-weight:600; font-size:13.5px; cursor:pointer; margin-top:6px;
+  }
+  button.primary:hover{opacity:.88;}
+  button.ghost{background:none; border:1px solid var(--line); border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer; color:var(--ink-soft);}
+  button.ghost:hover{border-color:var(--accent); color:var(--accent);}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{text-align:left; font-size:11px; color:var(--ink-soft); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--line);}
+  td{padding:10px; border-bottom:1px solid #EEEDE7; vertical-align:middle;}
+  .code{font-family:'JetBrains Mono',monospace; font-weight:600; font-size:12px;}
+  .pill{font-size:11px; font-weight:600; padding:4px 10px; border-radius:20px; white-space:nowrap;}
+  .empty{color:var(--ink-soft); font-size:13px; padding:20px 0; text-align:center;}
+  select.status-select{font-size:12px; padding:6px 8px;}
+
+  .parts-row td{background:var(--paper); border-bottom:1px solid var(--line);}
+  .parts-box{display:flex; flex-direction:column; gap:8px; padding:6px 0;}
+  .parts-list{display:flex; flex-direction:column; gap:4px;}
+  .part-line{display:flex; justify-content:space-between; align-items:center; font-size:12.5px; background:var(--card); border:1px solid var(--line); border-radius:7px; padding:6px 10px;}
+  .part-line span.pname{font-weight:500;}
+  .part-line span.pprice{font-family:'JetBrains Mono',monospace; color:var(--ink-soft);}
+  .part-line button{background:none; border:none; color:var(--red); cursor:pointer; font-size:15px; line-height:1; padding:0 2px;}
+  .part-add-row{display:flex; gap:6px;}
+  .part-add-row input{font-size:12.5px; padding:7px 9px;}
+  .part-add-row input.pname-input{flex:2;}
+  .part-add-row input.pprice-input{flex:1; font-family:'JetBrains Mono',monospace;}
+  .part-add-row button{white-space:nowrap;}
+  .parts-total{font-size:13px; font-weight:700; text-align:right; padding-top:2px;}
+  .parts-toggle{font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; background:none; border:1px solid var(--line); border-radius:8px; padding:6px 10px; cursor:pointer; color:var(--ink);}
+  .parts-toggle:hover{border-color:var(--accent); color:var(--accent);}
+
+  /* Device detail page */
+  .detail-head{display:flex; justify-content:space-between; align-items:flex-start; margin:18px 0 22px;}
+  .detail-title{font-family:'Space Grotesk',sans-serif; font-size:22px; font-weight:700;}
+  .detail-code{font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--ink-soft); margin-top:3px;}
+  .detail-meta{display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; font-size:13px; margin-bottom:4px;}
+  .detail-meta div span{color:var(--ink-soft); font-size:11.5px; display:block;}
+  .line-table th, .line-table td{font-size:12.5px;}
+  .badge{font-size:10.5px; font-weight:600; padding:3px 8px; border-radius:20px; white-space:nowrap;}
+  .badge.vat{color:var(--accent); background:#E9EEFF;}
+  .badge.warranty{color:var(--green); background:#E4F3EC;}
+  .badge.no-warranty{color:var(--ink-soft); background:#EEEDE7;}
+  .add-line-form{display:grid; grid-template-columns:1.4fr 1.4fr 1fr 1fr 1fr auto; gap:8px; align-items:end; margin-top:14px;}
+  .add-line-form .field{margin-bottom:0;}
+  .summary-box{margin-top:16px; padding-top:14px; border-top:1px solid var(--line); display:flex; flex-direction:column; align-items:flex-end; gap:3px;}
+  .summary-line{font-size:12.5px; color:var(--ink-soft);}
+  .summary-total{font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:700;}
+  .note-item{background:var(--paper); border:1px solid var(--line); border-radius:9px; padding:10px 12px; font-size:13px; margin-bottom:8px;}
+  .note-time{font-size:11px; color:var(--ink-soft); margin-top:4px;}
+  .row-click{cursor:pointer;}
+  .row-click:hover{background:#FBFAF7;}
+
+  /* Appointments */
+  .appt-item{border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px;}
+  .appt-top{display:flex; justify-content:space-between; align-items:flex-start;}
+  .appt-name{font-weight:600; font-size:14px;}
+  .appt-when{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent); margin-top:2px;}
+  .appt-service{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
+  .wa-preview{margin-top:10px; display:flex; flex-direction:column; gap:6px;}
+  .wa-bubble{background:#E8F8EF; border:1px solid #CDEBDB; border-radius:9px; padding:8px 11px; font-size:12px; line-height:1.45;}
+  .wa-bubble .wa-to{font-weight:700; color:var(--green); font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; display:block; margin-bottom:3px;}
+
+  /* Dealers */
+  .dealer-card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-bottom:14px;}
+  .dealer-top{display:flex; justify-content:space-between; align-items:center;}
+  .dealer-name{font-weight:600; font-size:14.5px;}
+  .dealer-phone{color:var(--ink-soft); font-size:12px; margin-top:2px;}
+  .dealer-balance{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px;}
+  .dealer-balance.owes{color:var(--red);}
+  .dealer-balance.clear{color:var(--green);}
+  .dealer-form{display:grid; grid-template-columns:1fr 1.4fr 1fr auto; gap:8px; margin-top:12px; align-items:end;}
+  .dealer-form .field{margin-bottom:0;}
+  .dealer-tx{font-size:12px; color:var(--ink-soft); margin-top:10px; max-height:110px; overflow-y:auto;}
+  .dealer-tx-line{display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #EEEDE7;}
+
+  /* Payments (device detail) */
+  .pay-row{display:flex; justify-content:space-between; align-items:center; font-size:12.5px; background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin-bottom:6px;}
+  .pay-method{font-weight:600;}
+  .pay-add{display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px; margin-top:12px; align-items:end;}
+  .pay-add .field{margin-bottom:0;}
+  .owed-line{font-size:13px; margin-top:10px; padding-top:10px; border-top:1px solid var(--line);}
+  .owed-line b{font-family:'JetBrains Mono',monospace;}
+  .img-thumb-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
+  .img-thumb{position:relative; width:64px; height:64px; border-radius:8px; overflow:hidden; border:1px solid var(--line);}
+  .img-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .img-thumb button{position:absolute; top:2px; right:2px; width:18px; height:18px; border-radius:50%; background:rgba(23,24,28,.75); color:#fff; border:none; font-size:11px; line-height:1; cursor:pointer; padding:0;}
+  .img-gallery{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
+  .img-gallery img{width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid var(--line); cursor:pointer;}
+  .admin-only{}
+  body.restricted-user .admin-only{display:none !important;}
+  .user-select{margin-top:14px; padding-top:14px; border-top:1px solid #333;}
+  .user-select label{color:#7D7F8B;}
+  .user-select select{background:#1F2027; border-color:#3A3B44; color:var(--paper); font-size:12px; padding:7px 9px;}
+
+  /* Autocomplete suggestions */
+  .suggest-box{position:relative;}
+  .suggest-list{position:absolute; top:100%; left:0; right:0; background:var(--card); border:1px solid var(--line);
+    border-radius:9px; margin-top:3px; z-index:20; max-height:170px; overflow-y:auto; display:none; box-shadow:0 6px 18px rgba(0,0,0,.08);}
+  .suggest-list.show{display:block;}
+  .suggest-item{padding:8px 12px; font-size:12.5px; cursor:pointer; border-bottom:1px solid #F0EFEA;}
+  .suggest-item:last-child{border-bottom:none;}
+  .suggest-item:hover{background:var(--paper);}
+  .suggest-item .s-name{font-weight:600;}
+  .suggest-item .s-sub{color:var(--ink-soft); font-size:11px; margin-top:1px;}
+  .search-mode-btn.active{background:var(--ink); color:var(--paper); border-color:var(--ink);}
+  .report-total{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:17px; text-align:right; padding-top:12px; border-top:1px solid var(--line); margin-top:8px;}
+  .mini-list{max-height:260px; overflow-y:auto;}
+
+  /* Login screen */
+  #loginScreen{display:none; min-height:100vh; align-items:center; justify-content:center; padding:24px;}
+  .login-card{max-width:340px; width:100%; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:28px;}
+  .login-brand{display:flex; align-items:center; gap:10px; margin-bottom:22px;}
+  .login-brand .brand-mark{width:34px; height:34px; border-radius:9px; background:var(--ink); display:flex; align-items:center; justify-content:center;}
+  .login-brand .brand-mark svg{width:16px; height:16px; stroke:var(--paper);}
+  .login-brand-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:18px;}
+  .login-hint{font-size:11.5px; color:var(--ink-soft); margin-top:14px; line-height:1.5;}
+  .login-error{color:var(--red); font-size:12.5px; margin-top:8px; display:none;}
+  #app{display:flex;}
+  .user-badge{margin-top:14px; padding-top:14px; border-top:1px solid #333; font-size:12px; color:var(--paper);}
+  .user-badge .u-name{font-weight:600;}
+  .user-badge .u-role{color:#8B8D99; font-size:11px; margin-top:2px;}
+  .user-badge button{margin-top:8px; width:100%; background:none; border:1px solid #3A3B44; color:#AEB0BC; border-radius:8px; padding:7px; font-size:12px; cursor:pointer;}
+  .user-badge button:hover{border-color:var(--accent); color:var(--paper);}
+
+  .toast{
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--paper); padding:10px 18px; border-radius:9px;
+    font-size:13px; opacity:0; pointer-events:none; transition:opacity .25s;
+  }
+  .toast.show{opacity:1;}
+
+  /* Label print */
+  #printLabel, #printForm{display:none;}
+  .label-editor{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .label-preview{
+    width:227px; height:151px; /* 6cm x 4cm @ ~96dpi/2.54 */
+    border:1.5px dashed var(--line); border-radius:6px; margin:14px 0;
+    padding:12px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px; text-align:center;
+    font-family:'Inter',sans-serif; background:#fff;
+  }
+  .lbl-header{display:flex; align-items:baseline; justify-content:center; gap:8px; flex-wrap:wrap;}
+  .lbl-shop{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;}
+  .lbl-code{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px; color:var(--ink-soft);}
+  .lbl-row{display:flex; align-items:baseline; justify-content:center; gap:10px; flex-wrap:wrap;}
+  .lbl-name{font-size:12px; font-weight:600;}
+  .lbl-phone{font-size:11px; color:var(--ink-soft);}
+  .lbl-issue{font-size:10.5px; color:var(--ink-soft);}
+  .lbl-pass{font-size:10.5px; color:var(--ink-soft);}
+  .lbl-imei{font-size:10px; color:var(--ink-soft); font-family:'JetBrains Mono',monospace;}
+
+  .form-preview{border:1.5px solid var(--line); border-radius:10px; padding:18px; background:#fff; font-size:12.5px;}
+  .form-preview h4{font-family:'Space Grotesk',sans-serif; font-size:15px; margin:0 0 2px;}
+  .form-preview .fp-sub{color:var(--ink-soft); font-size:11.5px; margin-bottom:12px;}
+  .form-preview table{margin:10px 0;}
+  .form-preview .fp-total{text-align:right; font-weight:700; font-size:14px; margin-top:6px;}
+  .form-preview .fp-signrow{display:flex; justify-content:space-between; margin-top:26px; font-size:11px; color:var(--ink-soft);}
+
+  @media print{
+    body.printing-label *{visibility:hidden;}
+    body.printing-label #printLabel, body.printing-label #printLabel *{visibility:visible;}
+    body.printing-label #printLabel{display:flex; position:fixed; top:0; left:0; width:6cm; height:4cm;}
+
+    body.printing-form *{visibility:hidden;}
+    body.printing-form #printForm, body.printing-form #printForm *{visibility:visible;}
+    body.printing-form #printForm{display:block; position:absolute; top:0; left:0; width:100%; padding:14mm; box-sizing:border-box; border:none; background:#fff;}
+  }
+
+  /* Mobile responsive (Safari + Chrome) */
+  @media (max-width:820px){
+    html{-webkit-text-size-adjust:100%;}
+    .app{flex-direction:column; min-height:100vh; min-height:100dvh;}
+    .sidebar{
+      width:100%; flex-direction:column; padding:14px 16px calc(10px + env(safe-area-inset-bottom));
+    }
+    .brand{padding-bottom:0; border-bottom:none; margin-bottom:0;}
+    nav{
+      flex-direction:row; flex-wrap:nowrap; overflow-x:auto; gap:6px;
+      margin-top:12px; padding-bottom:6px; -webkit-overflow-scrolling:touch;
+      scrollbar-width:none;
+    }
+    nav::-webkit-scrollbar{display:none;}
+    nav button{white-space:nowrap; padding:9px 14px; flex-shrink:0;}
+    .user-badge{padding-top:10px; margin-top:10px;}
+    .shared-note{display:none;}
+
+    main{padding:18px 14px 40px; max-width:100%;}
+    h1{font-size:20px;}
+    .detail-title{font-size:19px;}
+
+    .stat-grid{grid-template-columns:repeat(2,1fr);}
+    .form-grid, .add-line-form, .pay-add, .dealer-form, .date-row, .detail-meta{
+      grid-template-columns:1fr !important;
+    }
+    .add-line-form button, .pay-add button, .dealer-form button{width:100%;}
+
+    table{display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap;}
+    table td, table th{white-space:normal;}
+
+    input, select, textarea{font-size:16px;} /* prevents iOS Safari auto-zoom on focus */
+
+    .label-preview{width:100%; max-width:227px; height:auto; aspect-ratio:6/4;}
+    .detail-head{flex-wrap:wrap; gap:10px;}
+    .toast{left:14px; right:14px; transform:none; text-align:center; bottom:calc(16px + env(safe-area-inset-bottom));}
+    .login-card{margin:30px auto 0;}
+    .search-row, .search-mode-btn, .dealer-search-mode-btn{flex-wrap:wrap;}
+  }
+</style>
+</head>
+<body>
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg></div>
+      <div class="login-brand-name">Teknonand Panel</div>
+    </div>
+    <div class="field"><label>Kullanıcı Adı</label><input id="login-username" placeholder="kullanici.adi"></div>
+    <div class="field"><label>Şifre</label><input id="login-password" type="password" placeholder="••••••••"></div>
+    <button class="primary" style="width:100%;" onclick="doLogin()">Giriş Yap</button>
+    <div class="login-error" id="loginError">Kullanıcı adı veya şifre hatalı.</div>
+    <div class="login-hint">İşletme sahibi girişi: <b>yonetici</b> / <b>teknonand</b><br>Personel girişleri "Personel" sayfasından oluşturulur.</div>
+  </div>
+</div>
+
+<div id="app" class="app">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg></div>
+      <div class="brand-name">Teknonand</div>
+    </div>
+    <nav>
+      <button data-view="dashboard" class="active">Panel</button>
+      <button data-view="new-device">Cihaz Kabul</button>
+      <button data-view="devices">Cihazlar</button>
+      <button data-view="customers">Müşteriler</button>
+      <button data-view="appointments">Randevular</button>
+      <button data-view="stock">Stok</button>
+      <button data-view="suppliers">Toptancı</button>
+      <button data-view="employees">Personel</button>
+      <button data-view="dealers">Bayiler</button>
+      <button data-view="label-design" class="admin-only">Etiket Tasarımı</button>
+      <button data-view="doc-design" class="admin-only">Belge Tasarımı</button>
+      <button data-view="cashbox" class="admin-only">Kasa</button>
+      <button data-view="profit" class="admin-only">Kâr / Zarar</button>
+    </nav>
+    <div class="user-badge" id="userBadge"></div>
+    <div class="shared-note">Not: bu prototipteki veriler bu tarayıcıda/uygulamayı açan herkeste paylaşımlı olarak saklanır (demo amaçlı).</div>
+  </div>
+
+  <main>
+    <!-- DASHBOARD -->
+    <div class="view active" id="view-dashboard">
+      <h1>Panel</h1>
+      <p class="subtitle">Bugünkü durum özeti</p>
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="card">
+        <h3>Son Kaydedilen Cihazlar</h3>
+        <table><thead><tr><th>Kod</th><th>Cihaz</th><th>Müşteri</th><th>Durum</th></tr></thead>
+          <tbody id="recentDevices"></tbody></table>
+      </div>
+    </div>
+
+    <!-- NEW DEVICE -->
+    <div class="view" id="view-new-device">
+      <h1>Cihaz Kabul</h1>
+      <p class="subtitle">Yeni müşteri ve cihaz kaydı — takip kodu otomatik üretilir</p>
+
+      <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <button class="ghost search-mode-btn active" data-mode="single" onclick="setIntakeMode('single')">Tekli Kayıt</button>
+        <button class="ghost search-mode-btn" data-mode="bulk" onclick="setIntakeMode('bulk')">Toplu Kayıt (Bayi)</button>
+      </div>
+
+      <div id="intake-single">
+      <div class="card">
+        <div class="form-grid">
+          <div class="field suggest-box"><label>Müşteri Adı Soyadı</label><input id="f-name" placeholder="Ahmet Yılmaz" oninput="customerSuggest('name')" autocomplete="off"><div class="suggest-list" id="f-name-suggest"></div></div>
+          <div class="field suggest-box"><label>Telefon</label><input id="f-phone" placeholder="05xx xxx xx xx" oninput="customerSuggest('phone')" autocomplete="off"><div class="suggest-list" id="f-phone-suggest"></div></div>
+          <div class="field"><label>Marka / Model</label><input id="f-model" list="iphone-models" placeholder="Yazın veya listeden seçin" autocomplete="off"></div>
+          <div class="field"><label>IMEI / Seri No</label><input id="f-imei" placeholder="zorunlu" oninput="onImeiFieldChange()"></div>
+          <div class="field"><label>Kabul Tarihi ve Saati</label><input id="f-received-at" type="datetime-local"></div>
+          <div class="field"><label>Bayi (opsiyonel)</label>
+            <select id="f-dealer" onchange="onDealerPick()"><option value="">— Yok —</option></select>
+          </div>
+        </div>
+        <div class="field"><label>Arıza Açıklaması</label><textarea id="f-issue" rows="2" placeholder="Ekran kırık, batarya değişimi vb."></textarea></div>
+
+        <div class="field" style="display:flex; align-items:center; gap:8px; margin-top:-4px;">
+          <input type="checkbox" id="f-device-off" onchange="onDeviceOffChange()" style="width:auto;">
+          <label style="margin:0; font-weight:500; color:var(--ink); font-size:13px;" for="f-device-off">Cihaz kapalı / açılmıyor — IMEI şu an okunamıyor</label>
+        </div>
+
+        <div id="optionalFields" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          <button type="button" class="ghost" id="btn-backup-phone" onclick="revealField('backup-phone')">+ Yedek telefon numarası</button>
+          <button type="button" class="ghost" id="btn-device-pass" onclick="revealField('device-pass')">+ Cihaz şifresi</button>
+        </div>
+        <div class="form-grid">
+          <div class="field" id="wrap-backup-phone" style="display:none;"><label>Yedek Telefon Numarası</label><input id="f-backup-phone" placeholder="05xx xxx xx xx"></div>
+          <div class="field" id="wrap-device-pass" style="display:none;"><label>Cihaz Şifresi</label><input id="f-device-pass" placeholder="Ekran kilidi / şifre"></div>
+        </div>
+
+        <button class="primary" onclick="createDevice()">Kaydı Oluştur</button>
+      </div>
+      </div>
+
+      <div id="intake-bulk" style="display:none;">
+        <div class="card">
+          <div class="form-grid">
+            <div class="field"><label>Bayi</label>
+              <select id="bulk-dealer"><option value="">— Bayi seçin —</option></select>
+            </div>
+            <div class="field"><label>Kabul Tarihi ve Saati</label><input id="bulk-received-at" type="datetime-local"></div>
+          </div>
+          <p class="login-hint" style="margin-top:0;">Bayiden gelen her cihaz için bir satır ekleyin. Müşteri bilgisi olarak seçtiğiniz bayi kullanılır.</p>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th style="width:24%;">Model</th><th style="width:20%;">IMEI / Seri No</th><th>Arıza</th><th style="width:14%;">Cihaz Şifresi</th><th style="width:8%;">Kapalı</th><th></th></tr></thead>
+            <tbody id="bulk-rows"></tbody>
+          </table>
+          <button class="ghost" style="margin-top:12px;" onclick="addBulkRow()">+ Satır Ekle</button>
+        </div>
+        <button class="primary" onclick="createBulkDevices()">Toplu Kaydı Oluştur</button>
+      </div>
+
+      <datalist id="iphone-models">
+        <option value="iPhone 17 Pro Max">
+        <option value="iPhone 17 Pro">
+        <option value="iPhone 17 Air">
+        <option value="iPhone 17">
+        <option value="iPhone 17e">
+        <option value="iPhone 16 Pro Max">
+        <option value="iPhone 16 Pro">
+        <option value="iPhone 16 Plus">
+        <option value="iPhone 16">
+        <option value="iPhone 16e">
+        <option value="iPhone 15 Pro Max">
+        <option value="iPhone 15 Pro">
+        <option value="iPhone 15 Plus">
+        <option value="iPhone 15">
+        <option value="iPhone 14 Pro Max">
+        <option value="iPhone 14 Pro">
+        <option value="iPhone 14 Plus">
+        <option value="iPhone 14">
+        <option value="iPhone 13 Pro Max">
+        <option value="iPhone 13 Pro">
+        <option value="iPhone 13">
+        <option value="iPhone 13 mini">
+        <option value="iPhone 12 Pro Max">
+        <option value="iPhone 12 Pro">
+        <option value="iPhone 12">
+        <option value="iPhone 12 mini">
+        <option value="iPhone 11 Pro Max">
+        <option value="iPhone 11 Pro">
+        <option value="iPhone 11">
+        <option value="iPhone XS Max">
+        <option value="iPhone XS">
+        <option value="iPhone XR">
+        <option value="iPhone X">
+        <option value="iPhone 8 Plus">
+        <option value="iPhone 8">
+        <option value="iPhone 7 Plus">
+        <option value="iPhone 7">
+        <option value="iPhone 6s Plus">
+        <option value="iPhone 6s">
+        <option value="iPhone 6 Plus">
+        <option value="iPhone 6">
+      </datalist>
+    </div>
+
+    <!-- DEVICES -->
+    <div class="view" id="view-devices">
+      <h1>Cihazlar</h1>
+      <p class="subtitle">Tüm servis kayıtları ve durum güncelleme</p>
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <button class="ghost search-mode-btn active" data-mode="imei" onclick="setSearchMode('imei')">IMEI / Seri No ile Bul</button>
+          <button class="ghost search-mode-btn" data-mode="phone" onclick="setSearchMode('phone')">Telefon Numarası ile Bul</button>
+          <button class="ghost search-mode-btn" data-mode="name" onclick="setSearchMode('name')">İsim Soyisim ile Bul</button>
+          <button class="ghost search-mode-btn" data-mode="model" onclick="setSearchMode('model')">Cihaz Modeli ile Bul</button>
+        </div>
+        <input id="device-search" placeholder="Aramak için yazmaya başlayın..." oninput="renderDeviceTable()">
+      </div>
+      <div class="card">
+        <div style="display:flex; gap:8px; margin-bottom:14px; align-items:center;">
+          <button class="ghost" onclick="exportDevices()">Dışa Aktar (CSV)</button>
+          <button class="ghost" onclick="document.getElementById('device-import-file').click()">İçe Aktar (CSV)</button>
+          <input type="file" id="device-import-file" accept=".csv" style="display:none;" onchange="importDevices(event)">
+          <button class="ghost" id="bulk-delete-btn" onclick="deleteSelectedDevices()" style="display:none; color:var(--red); border-color:var(--red);">Seçilenleri Sil (<span id="bulk-delete-count">0</span>)</button>
+        </div>
+        <table><thead><tr><th><input type="checkbox" id="select-all-devices" onchange="toggleAllDevices(this.checked)"></th><th>Kod</th><th>Kayıt Tarihi</th><th>Cihaz</th><th>Arıza</th><th>Müşteri</th><th>Personel</th><th>Durum</th><th>Parçalar / Tutar</th><th></th></tr></thead>
+          <tbody id="deviceTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- DEVICE DETAIL -->
+    <div class="view" id="view-device-detail">
+      <button class="ghost" onclick="switchView('devices')">← Cihazlara Dön</button>
+      <div id="deviceDetailContent"></div>
+    </div>
+
+    <!-- CUSTOMERS -->
+    <div class="view" id="view-customers">
+      <h1>Müşteriler</h1>
+      <p class="subtitle">Kayıtlı müşteri bilgileri — Cihaz Kabul'de isim/telefon yazınca otomatik bulunur</p>
+      <div class="card">
+        <div class="form-grid">
+          <div class="field"><label>Ad Soyad</label><input id="c-name" placeholder="Ahmet Yılmaz"></div>
+          <div class="field"><label>Telefon</label><input id="c-phone" placeholder="05xx xxx xx xx"></div>
+          <div class="field"><label>Yedek Telefon</label><input id="c-backup-phone" placeholder="opsiyonel"></div>
+        </div>
+        <button class="primary" onclick="addCustomerManual()">Müşteri Ekle</button>
+      </div>
+      <div class="card">
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+          <button class="ghost" onclick="exportCustomers()">Dışa Aktar (CSV)</button>
+          <button class="ghost" onclick="document.getElementById('customer-import-file').click()">İçe Aktar (CSV)</button>
+          <input type="file" id="customer-import-file" accept=".csv" style="display:none;" onchange="importCustomers(event)">
+        </div>
+        <table><thead><tr><th>Ad Soyad</th><th>Telefon</th><th>Yedek Telefon</th><th>Cihaz Sayısı</th><th></th></tr></thead>
+          <tbody id="customerTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- APPOINTMENTS -->
+    <div class="view" id="view-appointments">
+      <h1>Randevular</h1>
+      <p class="subtitle">Randevu oluşturun — müşteriye ve size WhatsApp bildirimi simüle edilir</p>
+      <div class="card">
+        <div class="form-grid">
+          <div class="field"><label>Müşteri Adı Soyadı</label><input id="a-name" placeholder="Ahmet Yılmaz"></div>
+          <div class="field"><label>Telefon</label><input id="a-phone" placeholder="05xx xxx xx xx"></div>
+          <div class="field"><label>Randevu Tarihi ve Saati</label><input id="a-datetime" type="datetime-local"></div>
+          <div class="field"><label>Hizmet / Not</label><input id="a-service" placeholder="Ekran değişimi görüşmesi"></div>
+        </div>
+        <button class="primary" onclick="createAppointment()">Randevu Oluştur</button>
+      </div>
+      <div class="card">
+        <h3>Yaklaşan Randevular</h3>
+        <div id="appointmentList"></div>
+      </div>
+    </div>
+
+    <!-- LABEL DESIGN -->
+    <div class="view" id="view-label-design">
+      <h1>Etiket Tasarımı</h1>
+      <p class="subtitle">Etiket boyutunu, yazı tiplerini ve hangi bilgilerin görüneceğini buradan ayarlayın — "Etiketi Yazdır" her zaman bu tasarımı kullanır</p>
+
+      <div class="card">
+        <h3>Etiket Boyutu</h3>
+        <div class="form-grid">
+          <div class="field"><label>Genişlik (cm)</label><input id="ld-width" type="number" step="0.5" min="2" oninput="onLabelDesignChange()"></div>
+          <div class="field"><label>Yükseklik (cm)</label><input id="ld-height" type="number" step="0.5" min="2" oninput="onLabelDesignChange()"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Alanlar — Yazı Boyutu ve Görünürlük</h3>
+        <table>
+          <thead><tr><th>Alan</th><th>Yazı Boyutu (px)</th><th>Etikette Göster</th></tr></thead>
+          <tbody>
+            <tr><td>"Teknonand" Başlığı</td><td><input id="ld-size-shop" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-shop" onchange="onLabelDesignChange()"></td></tr>
+            <tr><td>Takip Kodu</td><td><input id="ld-size-code" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-code" onchange="onLabelDesignChange()"></td></tr>
+            <tr><td>Müşteri Adı</td><td><input id="ld-size-name" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-name" onchange="onLabelDesignChange()"></td></tr>
+            <tr><td>Telefon</td><td><input id="ld-size-phone" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-phone" onchange="onLabelDesignChange()"></td></tr>
+            <tr><td>Arıza</td><td><input id="ld-size-issue" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-issue" onchange="onLabelDesignChange()"></td></tr>
+            <tr><td>Cihaz Şifresi</td><td><input id="ld-size-pass" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-pass" onchange="onLabelDesignChange()"></td></tr>
+            <tr><td>IMEI / Seri No</td><td><input id="ld-size-imei" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-imei" onchange="onLabelDesignChange()"></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Önizleme</h3>
+        <div class="label-preview" id="designPreview" style="margin-left:auto; margin-right:auto;">
+          <div class="lbl-header">
+            <span class="lbl-shop" id="ldp-shop">Teknonand</span>
+            <span class="lbl-code" id="ldp-code">TKN-2026-0342</span>
+          </div>
+          <div class="lbl-row">
+            <span class="lbl-name" id="ldp-name">Ahmet Yılmaz</span>
+            <span class="lbl-phone" id="ldp-phone">0532 111 22 33</span>
+          </div>
+          <div class="lbl-row">
+            <span class="lbl-issue" id="ldp-issue">Arıza: Ekran kırık</span>
+            <span class="lbl-pass" id="ldp-pass">Şifre: 2468</span>
+          </div>
+          <div class="lbl-imei" id="ldp-imei">IMEI: 351234567891234</div>
+        </div>
+        <div style="display:flex; gap:8px; justify-content:center; margin-top:6px;">
+          <button class="primary" onclick="saveLabelDesign()">Tasarımı Kaydet</button>
+          <button class="ghost" onclick="resetLabelDesign()">Varsayılana Sıfırla</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DOCUMENT DESIGN -->
+    <div class="view" id="view-doc-design">
+      <h1>Belge Tasarımı</h1>
+      <p class="subtitle">Logo ve firma bilgileri — Cihaz Teslim Formu (A5) ve Bayi Raporları (A4) üzerinde otomatik kullanılır</p>
+
+      <div class="card">
+        <h3>Logo</h3>
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+          <img id="doc-logo-preview" src="logo.png" style="height:56px; width:auto; max-width:180px; object-fit:contain; border:1px solid var(--line); border-radius:8px; padding:6px; background:#fff;">
+          <div>
+            <input type="file" id="doc-logo-file" accept="image/*" style="display:none;" onchange="onLogoFileChange(event)">
+            <button class="ghost" onclick="document.getElementById('doc-logo-file').click()">Logo Yükle</button>
+            <button class="ghost" onclick="removeDocLogo()">Logoyu Kaldır</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Firma Bilgileri</h3>
+        <div class="form-grid">
+          <div class="field"><label>Firma Adı</label><input id="doc-company-name" placeholder="Teknonand"></div>
+          <div class="field"><label>Telefon</label><input id="doc-company-phone" placeholder="0212 000 00 00"></div>
+          <div class="field" style="grid-column:1/-1;"><label>Adres</label><input id="doc-company-address" placeholder="Mahalle, Cadde No, İlçe/İl"></div>
+          <div class="field"><label>E-posta</label><input id="doc-company-email" placeholder="info@teknonand.com"></div>
+          <div class="field"><label>Vergi Dairesi / No (opsiyonel)</label><input id="doc-company-tax" placeholder="opsiyonel"></div>
+        </div>
+        <button class="primary" onclick="saveDocDesign()">Belge Bilgilerini Kaydet</button>
+      </div>
+
+      <div class="card">
+        <h3>Önizleme</h3>
+        <div class="form-preview" id="docDesignPreview" style="max-width:400px;"></div>
+      </div>
+    </div>
+
+    <!-- STOCK -->
+    <div class="view" id="view-stock">
+      <h1>Stok</h1>
+      <p class="subtitle">Yedek parça envanteri</p>
+
+      <div class="card admin-only">
+        <h3>Dolar Kuru</h3>
+        <div class="form-grid">
+          <div class="field"><label>USD / TL Satış Kuru</label><input id="fx-rate" type="number" step="0.01"></div>
+          <div class="field"><label>&nbsp;</label><button class="ghost" style="width:100%;" onclick="saveExchangeRate()">Kuru Kaydet</button></div>
+        </div>
+        <div class="login-hint" style="margin-top:0;">Harem Altın'ın (haremaltin.com) güncel USD/TL satış kurunu kontrol edip buraya girin — parça maliyetleri bu kur üzerinden TL'ye çevrilir. Tarayıcı güvenlik kısıtları nedeniyle kur otomatik çekilemiyor, günlük elle güncellenmesi gerekiyor.</div>
+      </div>
+
+      <div class="card admin-only">
+        <div class="form-grid">
+          <div class="field"><label>Parça Adı</label><input id="s-name" placeholder="iPhone 13 Ekran"></div>
+          <div class="field"><label>Adet</label><input id="s-qty" type="number" placeholder="10"></div>
+          <div class="field"><label>Kritik Seviye</label><input id="s-min" type="number" placeholder="3"></div>
+          <div class="field"><label>Maliyet (₺)</label><input id="s-cost-try" type="number" placeholder="850" oninput="syncCostFromTry()"></div>
+          <div class="field"><label>Maliyet ($)</label><input id="s-cost-usd" type="number" placeholder="18" oninput="syncCostFromUsd()"></div>
+        </div>
+        <button class="primary" onclick="addStock()">Parça Ekle</button>
+      </div>
+      <div class="card">
+        <table><thead><tr><th>Parça</th><th>Stok</th><th>Kritik</th><th>Maliyet</th><th></th></tr></thead>
+          <tbody id="stockTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- SUPPLIERS -->
+    <div class="view" id="view-suppliers">
+      <h1>Toptancı</h1>
+      <p class="subtitle">Tedarikçi cari hesapları</p>
+      <div class="card">
+        <div class="form-grid">
+          <div class="field"><label>Toptancı Adı</label><input id="sup-name" placeholder="Parça Dünyası Ltd."></div>
+          <div class="field"><label>Telefon</label><input id="sup-phone" placeholder="05xx xxx xx xx"></div>
+        </div>
+        <button class="primary" onclick="addSupplier()">Toptancı Ekle</button>
+      </div>
+      <div class="card">
+        <table><thead><tr><th>Toptancı</th><th>Telefon</th><th>Bakiye (₺)</th><th></th></tr></thead>
+          <tbody id="supplierTable"></tbody></table>
+      </div>
+    </div>
+    <!-- EMPLOYEES -->
+    <div class="view" id="view-employees">
+      <h1>Personel</h1>
+      <p class="subtitle">Şubedeki çalışanlar — cihaz devri için kullanılır</p>
+      <div class="card">
+        <div class="form-grid">
+          <div class="field"><label>Ad Soyad</label><input id="e-name" placeholder="Mehmet Demir"></div>
+          <div class="field"><label>Görev</label><input id="e-role" placeholder="Teknisyen"></div>
+          <div class="field"><label>Kullanıcı Adı</label><input id="e-username" placeholder="mehmet.demir" autocomplete="off"></div>
+          <div class="field"><label>Şifre</label><input id="e-password" type="text" placeholder="şifre belirleyin" autocomplete="off"></div>
+          <div class="field"><label>Yetki Seviyesi</label>
+            <select id="e-permission"><option value="admin">Yönetici</option><option value="restricted">Kısıtlı</option></select>
+          </div>
+        </div>
+        <button class="primary" onclick="addEmployee()">Personel Ekle</button>
+      </div>
+      <div class="card">
+        <table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Görev</th><th>Yetki</th><th></th></tr></thead>
+          <tbody id="employeeTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- DEALERS -->
+    <div class="view" id="view-dealers">
+      <h1>Bayiler</h1>
+      <p class="subtitle">Bayi cari hesapları — veresiye satış ve tahsilat takibi</p>
+      <div class="card">
+        <div class="form-grid">
+          <div class="field suggest-box"><label>Bayi Adı</label><input id="dl-name" placeholder="Örnek Bayi Ltd." oninput="dealerSuggest()" autocomplete="off"><div class="suggest-list" id="dl-name-suggest"></div></div>
+          <div class="field"><label>Telefon</label><input id="dl-phone" placeholder="05xx xxx xx xx"></div>
+          <div class="field"><label>Portal Kullanıcı Adı</label><input id="dl-username" placeholder="bayi.adi" autocomplete="off"></div>
+          <div class="field"><label>Portal Şifresi</label><input id="dl-password" type="text" placeholder="şifre belirleyin" autocomplete="off"></div>
+        </div>
+        <button class="primary" onclick="addDealer()">Bayi Ekle</button>
+      </div>
+      <div id="dealerList"></div>
+    </div>
+
+    <!-- DEALER DETAIL -->
+    <div class="view" id="view-dealer-detail">
+      <button class="ghost" onclick="switchView('dealers')">← Bayilere Dön</button>
+      <div id="dealerDetailContent"></div>
+    </div>
+
+    <!-- CASHBOX -->
+    <div class="view" id="view-cashbox">
+      <h1>Kasa</h1>
+      <p class="subtitle">Gelir, gider ve yöntem bazında kasa durumu</p>
+      <div class="stat-grid" id="cashStatGrid"></div>
+
+      <div class="card">
+        <h3>Gider / Ödeme Ekle</h3>
+        <div class="form-grid">
+          <div class="field"><label>Kategori</label>
+            <select id="ex-category" onchange="onExpenseCategoryChange()">
+              <option value="Toptancı Ödemesi">Toptancı Ödemesi</option>
+              <option value="Kira">Kira</option>
+              <option value="Fatura">Fatura</option>
+              <option value="Personel Maaşı">Personel Maaşı</option>
+              <option value="Diğer">Diğer</option>
+            </select>
+          </div>
+          <div class="field" id="ex-supplier-wrap"><label>Toptancı</label>
+            <select id="ex-supplier"><option value="">— Seçin —</option></select>
+          </div>
+          <div class="field"><label>Tutar (₺)</label><input id="ex-amount" type="number" placeholder="1500"></div>
+          <div class="field"><label>Yöntem</label>
+            <select id="ex-method"><option>Nakit</option><option>Banka Hesabı</option><option>Kredi Kartı</option><option>Sanal POS</option></select>
+          </div>
+          <div class="field" style="grid-column:1/-1;"><label>Açıklama</label><input id="ex-desc" placeholder="opsiyonel"></div>
+        </div>
+        <button class="primary" onclick="addExpense()">Gideri Kaydet</button>
+      </div>
+
+      <div class="card">
+        <h3>Gelir Hareketleri</h3>
+        <table><thead><tr><th>Tarih</th><th>Kaynak</th><th>Yöntem</th><th>Tutar</th></tr></thead>
+          <tbody id="cashTable" class="mini-list"></tbody></table>
+      </div>
+
+      <div class="card">
+        <h3>Giderler</h3>
+        <table><thead><tr><th>Tarih</th><th>Kategori</th><th>Açıklama</th><th>Yöntem</th><th>Tutar</th><th></th></tr></thead>
+          <tbody id="expenseTable" class="mini-list"></tbody></table>
+      </div>
+    </div>
+
+    <!-- PROFIT / LOSS -->
+    <div class="view" id="view-profit">
+      <h1>Kâr / Zarar</h1>
+      <p class="subtitle">Gelir, maliyet ve net kâr detayı</p>
+      <div class="stat-grid" id="profitStatGrid"></div>
+      <div class="card">
+        <h3>Personel Bazında Tahsilat</h3>
+        <table><thead><tr><th>Personel</th><th>Cihaz Sayısı</th><th>Tahsilat</th></tr></thead>
+          <tbody id="employeeProfitTable"></tbody></table>
+      </div>
+      <div class="card">
+        <h3>Cihaz Bazında Detay</h3>
+        <table><thead><tr><th>Kod</th><th>Gelir (Tahsilat)</th><th>Parça Maliyeti</th><th>Kâr</th></tr></thead>
+          <tbody id="deviceProfitTable"></tbody></table>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<div id="printLabel" style="flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; font-family:'Inter',sans-serif; box-sizing:border-box; padding:10px;">
+  <div style="display:flex; align-items:baseline; justify-content:center; gap:8px; flex-wrap:wrap;">
+    <span id="pl-shop" style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Teknonand</span>
+    <span id="pl-code" style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px; color:#5A5C66;"></span>
+  </div>
+  <div style="display:flex; align-items:baseline; justify-content:center; gap:10px; flex-wrap:wrap;">
+    <span id="pl-name" style="font-size:12px; font-weight:600;"></span>
+    <span id="pl-phone" style="font-size:11px; color:#5A5C66;"></span>
+  </div>
+  <div style="display:flex; align-items:baseline; justify-content:center; gap:10px; flex-wrap:wrap;">
+    <span id="pl-issue" style="font-size:10.5px; color:#5A5C66;"></span>
+    <span id="pl-pass" style="font-size:10.5px; color:#5A5C66;"></span>
+  </div>
+  <div id="pl-imei" style="font-size:10px; color:#5A5C66; font-family:'JetBrains Mono',monospace;"></div>
+</div>
+<div id="printForm" class="form-preview"></div>
+
+<script>
+const STATUS_LABELS = {
+  diagnosing:'İnceleniyor', diagnosis_done:'Arıza Tespiti Bitti', approved:'Fiyat Onaylandı - Onarılıyor',
+  testing:'Test Ediliyor', delivered:'Teslim Edildi', returned:'İade Edildi'
+};
+const STATUS_COLORS = {
+  diagnosing:['#2F5EFF','#E9EEFF'], diagnosis_done:['#E8A33D','#FBF0DD'], approved:['#2F5EFF','#E9EEFF'],
+  testing:['#2F5EFF','#E9EEFF'], delivered:['#2E9E6D','#E4F3EC'], returned:['#C1442A','#FBEAE6']
+};
+
+let devices = [];
+let stock = [];
+let suppliers = [];
+let appointments = [];
+let employees = [];
+let dealers = [];
+let customers = [];
+let expenses = [];
+let exchangeRate = 47.89; // Harem Altın USD/TL satış kuru - varsayılan, elle güncellenebilir
+let currentDeviceId = null;
+let openDealerId = null;
+let currentUserId = null;
+let currentUserName = null;
+let currentUserPermission = null;
+
+const DEFAULT_LABEL_SETTINGS = {
+  widthCm:6, heightCm:4,
+  shop:{size:16, show:true},
+  code:{size:12, show:true},
+  name:{size:12, show:true},
+  phone:{size:11, show:true},
+  issue:{size:10.5, show:true},
+  pass:{size:10.5, show:true},
+  imei:{size:10, show:true}
+};
+let labelSettings = JSON.parse(JSON.stringify(DEFAULT_LABEL_SETTINGS));
+
+const DEFAULT_COMPANY_INFO = {
+  name:'Teknonand', phone:'', address:'', email:'', tax:''
+};
+let companyInfo = JSON.parse(JSON.stringify(DEFAULT_COMPANY_INFO));
+let companyLogo = null; // dataURL veya null (null ise varsayılan logo.png kullanılır)
+
+async function loadAll(){
+  devices = await getList('devices');
+  stock = await getList('stock');
+  suppliers = await getList('suppliers');
+  appointments = await getList('appointments');
+  employees = await getList('employees');
+  dealers = await getList('dealers');
+  customers = await getList('customers');
+  expenses = await getList('expenses');
+  await loadExchangeRate();
+  await loadLabelDesign();
+  await loadCompanyDesign();
+  renderAll();
+  setDefaultReceivedTime();
+  setDefaultApptTime();
+}
+async function getList(key){
+  try{
+    const r = await window.storage.get(key, true);
+    return r ? JSON.parse(r.value) : [];
+  }catch(e){ return []; }
+}
+async function saveList(key, list){
+  try{
+    await window.storage.set(key, JSON.stringify(list), true);
+  }catch(e){ toast('Kaydetme hatası'); }
+}
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+function genCode(){
+  const n = 300 + devices.length;
+  return `TKN-2026-${String(n).padStart(4,'0')}`;
+}
+
+function revealField(key){
+  document.getElementById('wrap-'+key).style.display = 'block';
+  document.getElementById('btn-'+key).style.display = 'none';
+}
+
+function normPhone(p){ return (p||'').replace(/\s|-/g,''); }
+
+function customerSuggest(field){
+  const nameVal = document.getElementById('f-name').value.trim().toLowerCase();
+  const phoneVal = normPhone(document.getElementById('f-phone').value);
+  const box = document.getElementById('f-'+field+'-suggest');
+  let matches = [];
+  if(field==='name' && nameVal.length>=2){
+    matches = customers.filter(c=>c.name.toLowerCase().includes(nameVal));
+  } else if(field==='phone' && phoneVal.length>=3){
+    matches = customers.filter(c=>normPhone(c.phone).includes(phoneVal));
+  }
+  if(!matches.length){ box.classList.remove('show'); box.innerHTML=''; return; }
+  box.innerHTML = matches.slice(0,6).map(c=>`
+    <div class="suggest-item" onclick='pickCustomer(${JSON.stringify(c.id)})'>
+      <div class="s-name">${c.name}</div><div class="s-sub">${c.phone}</div>
+    </div>`).join('');
+  box.classList.add('show');
+}
+
+function onDealerPick(){
+  const id = document.getElementById('f-dealer').value;
+  if(!id) return;
+  const dl = dealers.find(x=>x.id===id);
+  if(!dl) return;
+  document.getElementById('f-name').value = dl.name;
+  document.getElementById('f-phone').value = dl.phone || '';
+  toast(`${dl.name} bilgileri dolduruldu`);
+}
+
+function pickCustomer(id){
+  const c = customers.find(x=>x.id===id);
+  if(!c) return;
+  document.getElementById('f-name').value = c.name;
+  document.getElementById('f-phone').value = c.phone;
+  if(c.backupPhone){
+    document.getElementById('wrap-backup-phone').style.display = 'block';
+    document.getElementById('btn-backup-phone').style.display = 'none';
+    document.getElementById('f-backup-phone').value = c.backupPhone;
+  }
+  document.getElementById('f-name-suggest').classList.remove('show');
+  document.getElementById('f-phone-suggest').classList.remove('show');
+  toast(`Kayıtlı müşteri bulundu: ${c.name}`);
+}
+
+async function upsertCustomer(name, phone, backupPhone){
+  let c = customers.find(x=> normPhone(x.phone) === normPhone(phone) && phone);
+  if(!c){
+    c = {id:'cus_'+Date.now(), name, phone, backupPhone: backupPhone||'', created_at:new Date().toISOString()};
+    customers.unshift(c);
+  } else {
+    c.name = name || c.name;
+    if(backupPhone) c.backupPhone = backupPhone;
+  }
+  await saveList('customers', customers);
+  return c.id;
+}
+
+async function addCustomerManual(){
+  const name = document.getElementById('c-name').value.trim();
+  const phone = document.getElementById('c-phone').value.trim();
+  const backupPhone = document.getElementById('c-backup-phone').value.trim();
+  if(!name || !phone){ toast('Ad ve telefon gerekli'); return; }
+  await upsertCustomer(name, phone, backupPhone);
+  ['c-name','c-phone','c-backup-phone'].forEach(id=>document.getElementById(id).value='');
+  toast('Müşteri eklendi');
+  renderCustomers();
+}
+
+function renderCustomers(){
+  const tbody = document.getElementById('customerTable');
+  if(!tbody) return;
+  tbody.innerHTML = customers.length ? customers.map(c=>{
+    const count = devices.filter(d=>d.customerId===c.id).length;
+    return `<tr><td>${c.name}</td><td>${c.phone}</td><td>${c.backupPhone||'—'}</td><td>${count}</td>
+    <td><button class="ghost" onclick="removeItem('customers','${c.id}')">Sil</button></td></tr>`;
+  }).join('') : `<tr><td colspan="5" class="empty">Henüz müşteri kaydı yok</td></tr>`;
+}
+
+function csvEscape(val){
+  const s = (val==null ? '' : String(val));
+  if(s.includes(',') || s.includes('"') || s.includes('\n')){
+    return '"' + s.replace(/"/g,'""') + '"';
+  }
+  return s;
+}
+
+function exportCustomers(){
+  if(!customers.length){ toast('Aktarılacak müşteri kaydı yok'); return; }
+  const header = ['Ad Soyad','Telefon','Yedek Telefon'];
+  const rows = customers.map(c => [c.name, c.phone, c.backupPhone||''].map(csvEscape).join(','));
+  const csv = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `musteriler-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast(`${customers.length} müşteri dışa aktarıldı`);
+}
+
+function parseCsvLine(line){
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for(let i=0; i<line.length; i++){
+    const ch = line[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(line[i+1] === '"'){ cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else {
+      if(ch === '"') inQuotes = true;
+      else if(ch === ','){ result.push(cur); cur=''; }
+      else cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+async function importCustomers(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const text = await file.text();
+  const lines = text.replace(/^\uFEFF/, '').split(/\r\n|\n/).filter(l => l.trim().length);
+  if(lines.length < 2){ toast('Dosyada okunacak satır bulunamadı'); event.target.value=''; return; }
+
+  const header = parseCsvLine(lines[0]).map(h=>h.trim().toLowerCase());
+  const nameIdx = header.indexOf('ad soyad');
+  const phoneIdx = header.indexOf('telefon');
+  const backupIdx = header.indexOf('yedek telefon');
+  if(nameIdx === -1 || phoneIdx === -1){
+    toast('CSV başlıkları tanınmadı — "Ad Soyad" ve "Telefon" sütunları gerekli');
+    event.target.value = '';
+    return;
+  }
+
+  let added = 0, updated = 0;
+  for(let i=1; i<lines.length; i++){
+    const cols = parseCsvLine(lines[i]);
+    const name = (cols[nameIdx]||'').trim();
+    const phone = (cols[phoneIdx]||'').trim();
+    const backupPhone = backupIdx>-1 ? (cols[backupIdx]||'').trim() : '';
+    if(!name || !phone) continue;
+    const existing = customers.find(c => normPhone(c.phone) === normPhone(phone));
+    if(existing) updated++; else added++;
+    await upsertCustomer(name, phone, backupPhone);
+  }
+
+  event.target.value = '';
+  toast(`${added} yeni, ${updated} güncellenmiş müşteri içe aktarıldı`);
+  renderCustomers();
+}
+
+function exportDevices(){
+  if(!devices.length){ toast('Aktarılacak cihaz kaydı yok'); return; }
+  const header = ['Kod','Kayıt Tarihi','Model','IMEI / Seri No','Müşteri','Telefon','Yedek Telefon','Cihaz Şifresi','Arıza','Durum','Personel','Bayi','Toplam Tutar','Ödenen'];
+  const rows = devices.map(d=>{
+    const parts = d.parts || [];
+    const total = parts.reduce((s,p)=>s+lineGross(p),0);
+    const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+    const empName = d.assignedTo ? (employees.find(e=>e.id===d.assignedTo)?.name || '') : '';
+    const dealerName = d.dealerId ? (dealers.find(dl=>dl.id===d.dealerId)?.name || '') : '';
+    return [
+      d.code, new Date(d.created_at).toLocaleString('tr-TR'), d.model, d.imei||'',
+      d.customer, d.phone||'', d.backupPhone||'', d.devicePass||'', d.issue||'',
+      STATUS_LABELS[d.status]||d.status, empName, dealerName,
+      total.toFixed(2), paid.toFixed(2)
+    ].map(csvEscape).join(',');
+  });
+  const csv = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cihazlar-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast(`${devices.length} cihaz dışa aktarıldı`);
+}
+
+async function importDevices(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const text = await file.text();
+  const lines = text.replace(/^\uFEFF/, '').split(/\r\n|\n/).filter(l => l.trim().length);
+  if(lines.length < 2){ toast('Dosyada okunacak satır bulunamadı'); event.target.value=''; return; }
+
+  const header = parseCsvLine(lines[0]).map(h=>h.trim().toLowerCase());
+  const modelIdx = header.indexOf('model');
+  const nameIdx = header.indexOf('müşteri');
+  const phoneIdx = header.indexOf('telefon');
+  const backupIdx = header.indexOf('yedek telefon');
+  const imeiIdx = header.indexOf('imei / seri no');
+  const passIdx = header.indexOf('cihaz şifresi');
+  const issueIdx = header.indexOf('arıza');
+  if(modelIdx === -1 || nameIdx === -1){
+    toast('CSV başlıkları tanınmadı — "Model" ve "Müşteri" sütunları gerekli');
+    event.target.value = '';
+    return;
+  }
+
+  let added = 0;
+  for(let i=1; i<lines.length; i++){
+    const cols = parseCsvLine(lines[i]);
+    const model = (cols[modelIdx]||'').trim();
+    const name = (cols[nameIdx]||'').trim();
+    if(!model || !name) continue;
+    const phone = phoneIdx>-1 ? (cols[phoneIdx]||'').trim() : '';
+    const backupPhone = backupIdx>-1 ? (cols[backupIdx]||'').trim() : '';
+    const imei = imeiIdx>-1 ? (cols[imeiIdx]||'').trim() : '';
+    const devicePass = passIdx>-1 ? (cols[passIdx]||'').trim() : '';
+    const issue = issueIdx>-1 ? (cols[issueIdx]||'').trim() : '';
+
+    const customerId = await upsertCustomer(name, phone, backupPhone);
+    const receivedAt = new Date().toISOString();
+    devices.unshift({
+      id: 'd_' + Date.now() + '_' + i,
+      code: genCode(),
+      customerId, dealerId: null,
+      customer: name, phone, model, imei, issue, backupPhone, devicePass,
+      status: 'diagnosing',
+      history: [{status:'diagnosing', note:'CSV içe aktarımıyla oluşturuldu', at: receivedAt}],
+      created_at: receivedAt
+    });
+    added++;
+  }
+  await saveList('devices', devices);
+  event.target.value = '';
+  toast(`${added} cihaz içe aktarıldı`);
+  renderAll();
+}
+
+function dealerSuggest(){
+  const val = document.getElementById('dl-name').value.trim().toLowerCase();
+  const box = document.getElementById('dl-name-suggest');
+  if(val.length<2){ box.classList.remove('show'); box.innerHTML=''; return; }
+  const matches = dealers.filter(d=>d.name.toLowerCase().includes(val));
+  if(!matches.length){ box.classList.remove('show'); box.innerHTML=''; return; }
+  box.innerHTML = matches.slice(0,6).map(d=>`
+    <div class="suggest-item" onclick='pickDealer(${JSON.stringify(d.id)})'>
+      <div class="s-name">${d.name}</div><div class="s-sub">${d.phone||'—'} · Bakiye ₺${d.balance.toFixed(2)}</div>
+    </div>`).join('');
+  box.classList.add('show');
+}
+
+function pickDealer(id){
+  const d = dealers.find(x=>x.id===id);
+  if(!d) return;
+  document.getElementById('dl-name-suggest').classList.remove('show');
+  document.getElementById('dl-name').value = '';
+  document.getElementById('dl-phone').value = '';
+  toast(`Kayıtlı bayi bulundu: ${d.name} — hesabı açılıyor`);
+  openDealer(d.id);
+}
+
+document.addEventListener('click', (e)=>{
+  document.querySelectorAll('.suggest-list.show').forEach(box=>{
+    if(!box.parentElement.contains(e.target)) box.classList.remove('show');
+  });
+});
+
+function toLocalInputValue(date){
+  const off = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - off*60000);
+  return local.toISOString().slice(0,16);
+}
+function setDefaultReceivedTime(){
+  document.getElementById('f-received-at').value = toLocalInputValue(new Date());
+  const bulkDt = document.getElementById('bulk-received-at');
+  if(bulkDt) bulkDt.value = toLocalInputValue(new Date());
+}
+function setDefaultApptTime(){
+  const d = new Date(Date.now() + 60*60000); // +1 saat varsayılan
+  document.getElementById('a-datetime').value = toLocalInputValue(d);
+}
+
+function onDeviceOffChange(){
+  const off = document.getElementById('f-device-off').checked;
+  const imeiField = document.getElementById('f-imei');
+  imeiField.placeholder = off ? 'cihaz açılmıyor — teslimde girilecek' : 'zorunlu';
+}
+function onImeiFieldChange(){
+  const imei = document.getElementById('f-imei').value.trim();
+  if(imei) document.getElementById('f-device-off').checked = false;
+}
+
+function setIntakeMode(mode){
+  document.getElementById('intake-single').style.display = mode==='single' ? 'block' : 'none';
+  document.getElementById('intake-bulk').style.display = mode==='bulk' ? 'block' : 'none';
+  document.querySelectorAll('#view-new-device .search-mode-btn').forEach(b=>b.classList.toggle('active', b.dataset.mode===mode));
+  if(mode==='bulk' && !document.getElementById('bulk-rows').children.length){
+    addBulkRow(); addBulkRow();
+  }
+}
+
+let bulkRowCounter = 0;
+
+function addBulkRow(){
+  const id = 'br_' + (bulkRowCounter++);
+  const tbody = document.getElementById('bulk-rows');
+  const tr = document.createElement('tr');
+  tr.id = id;
+  tr.innerHTML = `
+    <td><input list="iphone-models" placeholder="Model seçin veya yazın" autocomplete="off" class="bulk-model"></td>
+    <td><input placeholder="zorunlu" class="bulk-imei"></td>
+    <td><input placeholder="Arıza açıklaması" class="bulk-issue"></td>
+    <td><input placeholder="opsiyonel" class="bulk-pass"></td>
+    <td style="text-align:center;"><input type="checkbox" class="bulk-off" title="Cihaz kapalı/açılmıyor" style="width:auto;"></td>
+    <td><button class="ghost" onclick="document.getElementById('${id}').remove()">Sil</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+async function createBulkDevices(){
+  const dealerId = document.getElementById('bulk-dealer').value;
+  if(!dealerId){ toast('Bir bayi seçin'); return; }
+  const dealer = dealers.find(d=>d.id===dealerId);
+  const receivedAtRaw = document.getElementById('bulk-received-at').value;
+  const receivedAt = receivedAtRaw ? new Date(receivedAtRaw).toISOString() : new Date().toISOString();
+
+  const rows = Array.from(document.querySelectorAll('#bulk-rows tr'));
+  let created = 0;
+  for(const row of rows){
+    const model = row.querySelector('.bulk-model').value.trim();
+    const imei = row.querySelector('.bulk-imei').value.trim();
+    const issue = row.querySelector('.bulk-issue').value.trim();
+    const devicePass = row.querySelector('.bulk-pass').value.trim();
+    const deviceWasOff = row.querySelector('.bulk-off').checked;
+    if(!model) continue;
+    if(!imei && !deviceWasOff){
+      toast(`"${model}" satırında IMEI/Seri No eksik — girin ya da "cihaz kapalı" işaretleyin`);
+      return;
+    }
+
+    devices.unshift({
+      id: 'd_' + Date.now() + '_' + created,
+      code: genCode(),
+      customerId: null, dealerId: dealer.id,
+      customer: dealer.name, phone: dealer.phone||'', model, imei, issue, backupPhone:'', devicePass, deviceWasOff,
+      status: 'diagnosing',
+      history: [{status:'diagnosing', note: deviceWasOff ? `Bayi toplu kaydıyla oluşturuldu (${dealer.name}) — cihaz kapalı/açılmıyor, IMEI teslimde girilecek` : `Bayi toplu kaydıyla oluşturuldu (${dealer.name})`, at: receivedAt}],
+      created_at: receivedAt
+    });
+    created++;
+  }
+
+  if(!created){ toast('En az bir satıra model girin'); return; }
+
+  await saveList('devices', devices);
+  document.getElementById('bulk-rows').innerHTML = '';
+  addBulkRow(); addBulkRow();
+  document.getElementById('bulk-dealer').value = '';
+  toast(`${dealer.name} için ${created} cihaz kaydı oluşturuldu`);
+  renderAll();
+  switchView('devices');
+}
+
+async function createDevice(){
+  const name = document.getElementById('f-name').value.trim();
+  const phone = document.getElementById('f-phone').value.trim();
+  const model = document.getElementById('f-model').value.trim();
+  const imei = document.getElementById('f-imei').value.trim();
+  const issue = document.getElementById('f-issue').value.trim();
+  const backupPhone = document.getElementById('f-backup-phone').value.trim();
+  const devicePass = document.getElementById('f-device-pass').value.trim();
+  const receivedAtRaw = document.getElementById('f-received-at').value;
+  const dealerId = document.getElementById('f-dealer').value || null;
+  const deviceWasOff = document.getElementById('f-device-off').checked;
+  if(!name || !model){ toast('Müşteri adı ve model zorunlu'); return; }
+  if(!imei && !deviceWasOff){ toast('IMEI / Seri No zorunlu — cihaz açılmıyorsa kutucuğu işaretleyin'); return; }
+  const receivedAt = receivedAtRaw ? new Date(receivedAtRaw).toISOString() : new Date().toISOString();
+  const customerId = await upsertCustomer(name, phone, backupPhone);
+
+  const device = {
+    id: 'd_' + Date.now(),
+    code: genCode(),
+    customerId, dealerId,
+    customer: name, phone, model, imei, issue, backupPhone, devicePass, deviceWasOff,
+    status: 'diagnosing',
+    history: [{status:'diagnosing', note: deviceWasOff ? 'Cihaz kaydı alındı (cihaz kapalı/açılmıyor — IMEI teslimde girilecek), inceleme başladı' : 'Cihaz kaydı alındı, inceleme başladı', at: receivedAt}],
+    created_at: receivedAt
+  };
+  devices.unshift(device);
+  await saveList('devices', devices);
+  ['f-name','f-phone','f-model','f-imei','f-issue','f-backup-phone','f-device-pass'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-dealer').value = '';
+  document.getElementById('f-device-off').checked = false;
+  onDeviceOffChange();
+  ['backup-phone','device-pass'].forEach(key=>{
+    document.getElementById('wrap-'+key).style.display = 'none';
+    document.getElementById('btn-'+key).style.display = 'inline-block';
+  });
+  setDefaultReceivedTime();
+  toast(`Kayıt oluşturuldu — takip kodu: ${device.code}`);
+  renderAll();
+  openDevice(device.id);
+}
+
+const WARRANTY_OPTIONS = [0, 1, 3, 6, 12];
+const WARRANTY_LABELS = {0:'Garanti Yok', 1:'1 Ay', 3:'3 Ay', 6:'6 Ay', 12:'1 Yıl'};
+// Yaygın işlemler için önerilen garanti süreleri
+const WARRANTY_SUGGEST = [
+  {kw:['ekran'], months:3},
+  {kw:['anakart','kart tamiri','anakart tamiri'], months:6},
+  {kw:['batarya','pil'], months:12}
+];
+function suggestWarranty(name){
+  const n = name.toLowerCase();
+  const hit = WARRANTY_SUGGEST.find(w => w.kw.some(k => n.includes(k)));
+  return hit ? hit.months : 0;
+}
+function lineGross(p){
+  const price = parseFloat(p.price) || 0;
+  return p.vat === 'haric' ? price * 1.2 : price;
+}
+function lineNet(p){
+  const price = parseFloat(p.price) || 0;
+  return p.vat === 'haric' ? price : price / 1.2;
+}
+
+function openDevice(id){
+  currentDeviceId = id;
+  switchView('device-detail');
+  renderDeviceDetail();
+}
+
+function onPartNameInput(){
+  const nameEl = document.getElementById('ln-name');
+  const warrantyEl = document.getElementById('ln-warranty');
+  warrantyEl.value = suggestWarranty(nameEl.value);
+}
+
+function onStockPick(){
+  const sel = document.getElementById('ln-stock');
+  const stockId = sel.value;
+  if(!stockId) return;
+  const item = stock.find(s=>s.id===stockId);
+  if(!item) return;
+  document.getElementById('ln-name').value = item.name;
+  document.getElementById('ln-price').value = item.cost;
+  document.getElementById('ln-cost').value = item.cost;
+  document.getElementById('ln-warranty').value = suggestWarranty(item.name);
+}
+
+async function addLine(){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  const stockId = document.getElementById('ln-stock').value;
+  const name = document.getElementById('ln-name').value.trim();
+  const price = parseFloat(document.getElementById('ln-price').value);
+  const cost = parseFloat(document.getElementById('ln-cost').value) || 0;
+  const vat = document.getElementById('ln-vat').value;
+  const warranty = parseInt(document.getElementById('ln-warranty').value);
+  if(!name || isNaN(price)){ toast('Parça/işlem adı ve fiyat girin'); return; }
+
+  if(!d.parts) d.parts = [];
+  d.parts.push({name, price, cost, vat, warranty, source: stockId ? 'stok' : 'manuel', stockId: stockId || null});
+  await saveList('devices', devices);
+
+  if(stockId){
+    const item = stock.find(s=>s.id===stockId);
+    if(item && item.qty > 0){ item.qty -= 1; await saveList('stock', stock); }
+  }
+  ['ln-name','ln-price','ln-cost'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ln-stock').value = '';
+  document.getElementById('ln-warranty').value = 0;
+  renderDeviceDetail();
+}
+
+async function removePart(idx){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  d.parts.splice(idx, 1);
+  await saveList('devices', devices);
+  renderDeviceDetail();
+}
+
+async function addNote(){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  const textEl = document.getElementById('note-text');
+  const text = textEl.value.trim();
+  if(!text) return;
+  if(!d.notes) d.notes = [];
+  d.notes.push({text, at: new Date().toISOString()});
+  await saveList('devices', devices);
+  textEl.value = '';
+  renderDeviceDetail();
+}
+
+function renderDeviceDetail(){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  const box = document.getElementById('deviceDetailContent');
+  if(!d){ box.innerHTML = '<p class="empty">Cihaz bulunamadı</p>'; return; }
+  const parts = d.parts || [];
+  const notes = d.notes || [];
+  const netTotal = parts.reduce((s,p)=>s+lineNet(p), 0);
+  const grossTotal = parts.reduce((s,p)=>s+lineGross(p), 0);
+  const vatTotal = grossTotal - netTotal;
+
+  box.innerHTML = `
+    <div class="detail-head">
+      <div>
+        <div class="detail-title">${d.model}</div>
+        <div class="detail-code">${d.code}</div>
+      </div>
+      ${pill(d.status)}
+    </div>
+
+    <div class="card">
+      <div class="detail-meta">
+        <div><span>Müşteri</span>${d.customer}</div>
+        <div><span>Telefon</span>${d.phone || '—'}</div>
+        <div><span>Yedek Telefon</span>${d.backupPhone || '—'}</div>
+        <div><span>Cihaz Şifresi</span>${d.devicePass || '—'}</div>
+        <div><span>IMEI / Seri No</span>${d.imei || '—'}</div>
+        <div><span>Arıza</span>${d.issue || '—'}</div>
+        <div><span>Kabul Tarihi</span>${new Date(d.created_at).toLocaleString('tr-TR')}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Durum Geçmişi</h3>
+      ${(d.history||[]).slice().reverse().map(h=>`
+        <div class="note-item">
+          ${pill(h.status)} ${h.note ? '— '+h.note : ''}
+          <div class="note-time">${new Date(h.at).toLocaleString('tr-TR')}</div>
+        </div>`).join('')}
+      <div class="form-grid" style="margin-top:12px;">
+        <div class="field"><label>Yeni Durum</label>
+          <select id="st-status" onchange="onStatusFieldChange()">${Object.keys(STATUS_LABELS).map(k=>`<option value="${k}" ${k===d.status?'selected':''}>${STATUS_LABELS[k]}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Tarih / Saat</label><input id="st-datetime" type="datetime-local"></div>
+      </div>
+      <div id="st-diagnosis-fields" style="display:none;">
+        <div class="field"><label>Arıza Tespiti</label><textarea id="st-diagnosis-text" rows="2" placeholder="Tespit edilen arızayı yazın">${d.diagnosisText||''}</textarea></div>
+        <div class="field"><label>Tahmini Fiyat (₺)</label><input id="st-estimated-price" type="number" placeholder="1200" value="${d.estimatedPrice||''}"></div>
+        <div class="field">
+          <label>Görsel Ekle (opsiyonel, en fazla 4)</label>
+          <input type="file" id="st-diagnosis-images-input" accept="image/*" multiple onchange="handleImageSelect(event,'diagnosis','st-diagnosis-images-preview')">
+          <div class="img-thumb-row" id="st-diagnosis-images-preview"></div>
+        </div>
+      </div>
+      <div id="st-return-fields" style="display:none;">
+        <div class="field"><label>İade Sebebi</label><textarea id="st-return-reason" rows="2" placeholder="İade sebebini yazın">${d.returnReason||''}</textarea></div>
+        <div class="field">
+          <label>Görsel Ekle (opsiyonel, en fazla 4)</label>
+          <input type="file" id="st-return-images-input" accept="image/*" multiple onchange="handleImageSelect(event,'return','st-return-images-preview')">
+          <div class="img-thumb-row" id="st-return-images-preview"></div>
+        </div>
+      </div>
+      <div id="st-delivery-fields" style="display:none;">
+        <div class="field"><label>Teslim Şekli</label>
+          <select id="st-delivery-method"><option value="Elden Teslim">Elden Teslim</option><option value="Kargo ile Teslim">Kargo ile Teslim</option></select>
+        </div>
+        ${!d.imei ? `
+        <div class="field">
+          <label>IMEI / Seri No (Teslim için zorunlu)</label>
+          <input id="st-delivery-imei" placeholder="Cihazın IMEI/Seri numarasını girin">
+          <div class="login-hint" style="margin-top:6px;">Bu cihaz kayıt sırasında kapalı/açılmıyor olarak işaretlenmişti — teslim edebilmek için IMEI/Seri numarasının şimdi girilmesi gerekiyor.</div>
+        </div>` : ''}
+        <div class="field"><label>Teslim Notu (opsiyonel)</label><textarea id="st-delivery-note" rows="2" placeholder="örn. cihaz temiz teslim edildi, kılıf takıldı">${d.deliveryNote||''}</textarea></div>
+        <div class="field">
+          <label>Görsel Ekle (opsiyonel, en fazla 4)</label>
+          <input type="file" id="st-delivery-images-input" accept="image/*" multiple onchange="handleImageSelect(event,'delivery','st-delivery-images-preview')">
+          <div class="img-thumb-row" id="st-delivery-images-preview"></div>
+        </div>
+      </div>
+      <div class="field"><label>Not (opsiyonel)</label><input id="st-note" placeholder="örn. parça kargoya verildi"></div>
+      <button class="primary" onclick="addStatusEntry()">Durumu Güncelle</button>
+    </div>
+
+    <div class="card">
+      <h3>Arıza Tespiti ve Onay</h3>
+      ${d.diagnosisText ? `
+        <div class="detail-meta" style="margin-bottom:10px;">
+          <div><span>Arıza Tespiti</span>${d.diagnosisText}</div>
+          <div><span>Tahmini Fiyat</span>₺${d.estimatedPrice||0}</div>
+        </div>
+        ${(d.diagnosisImages && d.diagnosisImages.length) ? `<div class="img-gallery">${d.diagnosisImages.map(src=>`<img src="${src}" onclick="window.open('${src}','_blank')">`).join('')}</div>` : ''}
+        <button class="ghost" style="margin-top:10px;" onclick="sendDiagnosisApprovalWhatsApp('${d.id}')">WhatsApp ile Onay İste</button>
+      ` : `<p class="empty">Durum "Arıza Tespiti Bitti" olarak güncellendiğinde arıza tespiti ve tahmini fiyat burada görünür.</p>`}
+    </div>
+
+    <div class="card">
+      <h3>İade Bilgisi</h3>
+      ${d.returnReason ? `
+        <div class="detail-meta" style="margin-bottom:10px;">
+          <div><span>İade Sebebi</span>${d.returnReason}</div>
+        </div>
+        ${(d.returnImages && d.returnImages.length) ? `<div class="img-gallery">${d.returnImages.map(src=>`<img src="${src}" onclick="window.open('${src}','_blank')">`).join('')}</div>` : ''}
+      ` : `<p class="empty">Cihaz "İade Edildi" durumuna alındığında iade sebebi ve görseller burada görünür.</p>`}
+    </div>
+
+    <div class="card">
+      <h3>Teslim Notu ve Görseller</h3>
+      ${d.deliveryNote || (d.deliveryImages && d.deliveryImages.length) ? `
+        ${d.deliveryNote ? `<div style="font-size:13px; margin-bottom:8px;">${d.deliveryNote}</div>` : ''}
+        ${(d.deliveryImages && d.deliveryImages.length) ? `<div class="img-gallery">${d.deliveryImages.map(src=>`<img src="${src}" onclick="window.open('${src}','_blank')">`).join('')}</div>` : ''}
+      ` : `<p class="empty">Cihaz teslim edilirken eklenen not ve görseller (varsa) burada görünür.</p>`}
+    </div>
+
+    <div class="card">
+      <h3>Parçalar / Yapılan İşlemler</h3>
+      <table class="line-table">
+        <thead><tr><th>Parça / İşlem</th><th>Kaynak</th><th>KDV</th><th>Garanti</th><th>Fiyat</th><th></th></tr></thead>
+        <tbody>
+          ${parts.length ? parts.map((p,i)=>`
+            <tr>
+              <td>${p.name}</td>
+              <td>${p.source==='stok' ? 'Stok' : 'Manuel'}</td>
+              <td><span class="badge vat">%20 KDV ${p.vat==='haric'?'Hariç':'Dahil'}</span></td>
+              <td><span class="badge ${p.warranty>0?'warranty':'no-warranty'}">${WARRANTY_LABELS[p.warranty]}</span></td>
+              <td class="code">₺${lineGross(p).toFixed(2)}</td>
+              <td><button class="ghost" onclick="removePart(${i})">Sil</button></td>
+            </tr>`).join('') : `<tr><td colspan="6" class="empty">Henüz parça/işlem eklenmedi</td></tr>`}
+        </tbody>
+      </table>
+
+      <div class="add-line-form" style="grid-template-columns:1.2fr 1.2fr 0.8fr 0.8fr 0.9fr 0.9fr auto;">
+        <div class="field"><label>Stoktan Seç</label>
+          <select id="ln-stock" onchange="onStockPick()">
+            <option value="">— Manuel giriş —</option>
+            ${stock.map(s=>`<option value="${s.id}">${s.name} (${s.qty} adet)</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Parça / İşlem Adı</label><input id="ln-name" placeholder="Ekran değişimi" oninput="onPartNameInput()"></div>
+        <div class="field"><label>Satış Fiyatı (₺)</label><input id="ln-price" type="number" placeholder="1200"></div>
+        <div class="field"><label>Maliyet (₺)</label><input id="ln-cost" type="number" placeholder="850"></div>
+        <div class="field"><label>KDV</label>
+          <select id="ln-vat"><option value="dahil">%20 Dahil</option><option value="haric">%20 Hariç</option></select>
+        </div>
+        <div class="field"><label>Garanti</label>
+          <select id="ln-warranty">${WARRANTY_OPTIONS.map(m=>`<option value="${m}">${WARRANTY_LABELS[m]}</option>`).join('')}</select>
+        </div>
+        <button class="primary" style="margin-top:0;" onclick="addLine()">Ekle</button>
+      </div>
+
+      <div class="summary-box">
+        <div class="summary-line">Ara Toplam (KDV Hariç): ₺${netTotal.toFixed(2)}</div>
+        <div class="summary-line">KDV Tutarı: ₺${vatTotal.toFixed(2)}</div>
+        <div class="summary-total">Genel Toplam: ₺${grossTotal.toFixed(2)}</div>
+      </div>
+      <button class="ghost" style="margin-top:10px;" onclick="sendNetPriceWhatsApp('${d.id}')">WhatsApp ile Net Fiyat Bilgisi Gönder</button>
+    </div>
+
+    <div class="card">
+      <h3>Etiket Yazdır (6cm × 4cm)</h3>
+      <div class="label-editor">
+        <div class="field"><label>Müşteri Adı Soyadı</label><input id="lbl-name" oninput="updateLabelPreview()"></div>
+        <div class="field"><label>Telefon</label><input id="lbl-phone" oninput="updateLabelPreview()"></div>
+        <div class="field"><label>Arıza Kaydı</label><input id="lbl-issue" oninput="updateLabelPreview()"></div>
+        <div class="field"><label>Cihaz Şifresi</label><input id="lbl-pass" oninput="updateLabelPreview()"></div>
+        <div class="field"><label>IMEI / Seri No</label><input id="lbl-imei" oninput="updateLabelPreview()"></div>
+        <div class="field"><label>Kayıt Numarası</label><input id="lbl-code" oninput="updateLabelPreview()"></div>
+      </div>
+      <div class="label-preview" id="labelPreview">
+        <div class="lbl-header">
+          <span class="lbl-shop" id="lp-shop">Teknonand</span>
+          <span class="lbl-code" id="lp-code"></span>
+        </div>
+        <div class="lbl-row">
+          <span class="lbl-name" id="lp-name"></span>
+          <span class="lbl-phone" id="lp-phone"></span>
+        </div>
+        <div class="lbl-row">
+          <span class="lbl-issue" id="lp-issue"></span>
+          <span class="lbl-pass" id="lp-pass"></span>
+        </div>
+        <div class="lbl-imei" id="lp-imei"></div>
+      </div>
+      <button class="primary" onclick="printLabel()">Etiketi Yazdır</button>
+    </div>
+
+    <div class="card">
+      <h3>Personel Devri</h3>
+      <div class="detail-meta" style="margin-bottom:10px;">
+        <div><span>Şu An Atanan</span>${d.assignedTo ? (employees.find(e=>e.id===d.assignedTo)?.name || '—') : 'Atanmadı'}</div>
+      </div>
+      ${(d.assignments||[]).length ? `
+      <div class="dealer-tx">
+        ${d.assignments.slice().reverse().map(a=>`
+          <div class="dealer-tx-line"><span>${a.name}</span><span>${new Date(a.at).toLocaleString('tr-TR')}</span></div>`).join('')}
+      </div>` : ''}
+      <div class="form-grid" style="margin-top:12px;">
+        <div class="field"><label>Personel Seç</label>
+          <select id="assign-employee">
+            <option value="">— Seçin —</option>
+            ${employees.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>&nbsp;</label><button class="primary" style="margin-top:0; width:100%;" onclick="assignDevice()">Devret</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Ödeme / Tahsilat</h3>
+      ${(d.payments||[]).length ? (d.payments.map((p,i)=>`
+        <div class="pay-row"><span class="pay-method">${p.method}</span><span>₺${p.amount.toFixed(2)} · ${new Date(p.at).toLocaleString('tr-TR')} <button class="ghost" style="padding:3px 8px; margin-left:6px;" onclick="removePayment(${i})">Sil</button></span></div>`).join('')) : `<p class="empty">Henüz tahsilat girilmedi</p>`}
+      <div class="pay-add">
+        <div class="field"><label>Yöntem</label>
+          <select id="pay-method"><option>Nakit</option><option>Banka Hesabı</option><option>Kredi Kartı</option><option>Sanal POS</option></select>
+        </div>
+        <div class="field"><label>Tutar (₺)</label><input id="pay-amount" type="number" placeholder="500"></div>
+        <div class="field"><label>Tarih / Saat</label><input id="pay-datetime" type="datetime-local"></div>
+        <button class="primary" style="margin-top:0;" onclick="addPayment()">Tahsilat Ekle</button>
+      </div>
+      <div class="owed-line">
+        Cihaz Toplamı: <b>₺${grossTotal.toFixed(2)}</b> &nbsp;·&nbsp;
+        Tahsil Edilen: <b>₺${(d.payments||[]).reduce((s,p)=>s+p.amount,0).toFixed(2)}</b> &nbsp;·&nbsp;
+        Kalan: <b>₺${(grossTotal - (d.payments||[]).reduce((s,p)=>s+p.amount,0)).toFixed(2)}</b>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Cihaz Teslim Formu</h3>
+      ${d.status === 'delivered' ? `
+        <div class="form-preview" id="deliveryFormPreview">${buildDeliveryFormHTML(d)}</div>
+        <div style="display:flex; gap:8px; margin-top:14px;">
+          <button class="primary" style="margin-top:0;" onclick="printDeliveryForm('${d.id}')">Formu Yazdır</button>
+          <button class="ghost" onclick="sendDeliveryFormWhatsApp('${d.id}')">WhatsApp ile Gönder</button>
+        </div>
+      ` : `<p class="empty">Cihaz "Teslim Edildi" durumuna alındığında teslim formu burada otomatik oluşur.</p>`}
+    </div>
+
+    <div class="card">
+      <h3>İşlem Notları</h3>
+      ${notes.length ? notes.map(n=>`
+        <div class="note-item">${n.text}<div class="note-time">${new Date(n.at).toLocaleString('tr-TR')}</div></div>
+      `).join('') : `<p class="empty">Henüz not eklenmedi</p>`}
+      <div class="field" style="margin-top:10px;"><textarea id="note-text" rows="2" placeholder="Yapılan işlemi açıklayın (örn. Ekran sökülüp yeni panel takıldı, test edildi)"></textarea></div>
+      <button class="primary" onclick="addNote()">Not Ekle</button>
+    </div>
+  `;
+  document.getElementById('st-datetime').value = toLocalInputValue(new Date());
+  onStatusFieldChange();
+
+  tempImages.diagnosis = (d.diagnosisImages || []).slice();
+  tempImages.return = (d.returnImages || []).slice();
+  tempImages.delivery = (d.deliveryImages || []).slice();
+  renderImageThumbs(tempImages.diagnosis, 'st-diagnosis-images-preview', 'diagnosis');
+  renderImageThumbs(tempImages.return, 'st-return-images-preview', 'return');
+  renderImageThumbs(tempImages.delivery, 'st-delivery-images-preview', 'delivery');
+
+  document.getElementById('pay-datetime').value = toLocalInputValue(new Date());
+
+  document.getElementById('lbl-name').value = d.customer;
+  document.getElementById('lbl-phone').value = d.phone || '';
+  document.getElementById('lbl-issue').value = d.issue || '';
+  document.getElementById('lbl-pass').value = d.devicePass || '';
+  document.getElementById('lbl-imei').value = d.imei || '';
+  document.getElementById('lbl-code').value = d.code;
+  updateLabelPreview();
+}
+
+function updateLabelPreview(){
+  const name = document.getElementById('lbl-name').value;
+  const phone = document.getElementById('lbl-phone').value;
+  const issue = document.getElementById('lbl-issue').value;
+  const pass = document.getElementById('lbl-pass').value;
+  const imei = document.getElementById('lbl-imei').value;
+  const code = document.getElementById('lbl-code').value;
+
+  document.getElementById('lp-name').textContent = name;
+  document.getElementById('lp-phone').textContent = phone ? '· ' + phone : '';
+  document.getElementById('lp-issue').textContent = issue ? 'Arıza: ' + issue : '';
+  document.getElementById('lp-pass').textContent = pass ? 'Şifre: ' + pass : '';
+  document.getElementById('lp-imei').textContent = imei ? 'IMEI: ' + imei : '';
+  document.getElementById('lp-code').textContent = code;
+
+  document.getElementById('pl-name').textContent = name;
+  document.getElementById('pl-phone').textContent = phone ? '· ' + phone : '';
+  document.getElementById('pl-issue').textContent = issue ? 'Arıza: ' + issue : '';
+  document.getElementById('pl-pass').textContent = pass ? 'Şifre: ' + pass : '';
+  document.getElementById('pl-imei').textContent = imei ? 'IMEI: ' + imei : '';
+  document.getElementById('pl-code').textContent = code;
+
+  applyLabelSettings('lp');
+  applyLabelSettings('pl');
+  const previewBox = document.getElementById('labelPreview');
+  if(previewBox){
+    previewBox.style.width = (labelSettings.widthCm*37.8)+'px';
+    previewBox.style.height = (labelSettings.heightCm*37.8)+'px';
+  }
+}
+
+function setPrintPage(size, margin){
+  let styleEl = document.getElementById('dynPageStyle');
+  if(!styleEl){
+    styleEl = document.createElement('style');
+    styleEl.id = 'dynPageStyle';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `@page{ size:${size}; margin:${margin}; }`;
+}
+
+function buildDeliveryFormHTML(d){
+  const parts = d.parts || [];
+  const total = parts.reduce((s,p)=>s+lineGross(p),0);
+  const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+  const remaining = total - paid;
+  const deliveredEntry = (d.history||[]).slice().reverse().find(h=>h.status==='delivered');
+  const deliveredAt = deliveredEntry ? new Date(deliveredEntry.at).toLocaleString('tr-TR') : '—';
+
+  return `
+    ${buildCompanyHeaderHTML()}
+    <h4>Cihaz Teslim Formu</h4>
+    <div class="fp-sub">Kayıt No: ${d.code} · Teslim Tarihi: ${deliveredAt}</div>
+    <div class="detail-meta">
+      <div><span>Müşteri</span>${d.customer}</div>
+      <div><span>Telefon</span>${d.phone || '—'}</div>
+      <div><span>Cihaz</span>${d.model}</div>
+      <div><span>IMEI / Seri No</span>${d.imei || '—'}</div>
+    </div>
+    <div style="margin-top:8px;"><span style="color:var(--ink-soft); font-size:11.5px;">Arıza</span><br>${d.issue || '—'}</div>
+    <table class="line-table">
+      <thead><tr><th>Yapılan İşlem</th><th>Garanti</th><th>Fiyat</th></tr></thead>
+      <tbody>
+        ${parts.length ? parts.map(p=>`
+          <tr><td>${p.name}</td><td>${WARRANTY_LABELS[p.warranty]}</td><td>₺${lineGross(p).toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Kayıtlı işlem yok</td></tr>`}
+      </tbody>
+    </table>
+    <div class="fp-total">Toplam: ₺${total.toFixed(2)} &nbsp;·&nbsp; Ödenen: ₺${paid.toFixed(2)} &nbsp;·&nbsp; Kalan: ₺${remaining.toFixed(2)}</div>
+    <div class="fp-signrow"><span>Teslim Eden (Teknonand)</span><span>Teslim Alan (Müşteri)</span></div>
+  `;
+}
+
+function printDeliveryForm(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  document.getElementById('printForm').innerHTML = buildDeliveryFormHTML(d);
+  setPrintPage('A5', '10mm');
+  document.body.classList.add('printing-form');
+  window.print();
+  document.body.classList.remove('printing-form');
+}
+
+function toWhatsAppNumber(phone){
+  let n = normPhone(phone);
+  if(n.startsWith('0')) n = '90' + n.slice(1);
+  else if(n.startsWith('5')) n = '90' + n;
+  else if(!n.startsWith('90')) n = '90' + n;
+  return n;
+}
+
+function sendDeliveryFormWhatsApp(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  const parts = d.parts || [];
+  const total = parts.reduce((s,p)=>s+lineGross(p),0);
+  const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+  const remaining = total - paid;
+  const deliveredEntry = (d.history||[]).slice().reverse().find(h=>h.status==='delivered');
+  const deliveredAt = deliveredEntry ? new Date(deliveredEntry.at).toLocaleString('tr-TR') : '—';
+
+  const lines = [
+    `Teknonand — Cihaz Teslim Formu`,
+    `Kayıt No: ${d.code}`,
+    `Müşteri: ${d.customer}`,
+    `Cihaz: ${d.model}`,
+    `Teslim Tarihi: ${deliveredAt}`,
+    `Teslim Şekli: ${d.deliveryMethod || 'Elden Teslim'}`,
+    ``,
+    `Yapılan İşlemler:`,
+    ...(parts.length ? parts.map(p=>`- ${p.name}: ₺${lineGross(p).toFixed(2)} (Garanti: ${WARRANTY_LABELS[p.warranty]})`) : ['- Kayıtlı işlem yok']),
+    ``,
+    `Toplam: ₺${total.toFixed(2)}`,
+    `Ödenen: ₺${paid.toFixed(2)}`,
+    `Kalan: ₺${remaining.toFixed(2)}`,
+    ``,
+    `Bizi tercih ettiğiniz için teşekkür ederiz!`
+  ];
+  const text = encodeURIComponent(lines.join('\n'));
+  const number = toWhatsAppNumber(d.phone);
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
+function sendDiagnosisApprovalWhatsApp(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  const lines = [
+    `Teknonand — Arıza Tespiti ve Fiyat Onayı`,
+    `Kayıt No: ${d.code}`,
+    `Sayın ${d.customer},`,
+    `Cihazınız (${d.model}) için yapılan inceleme sonucunda tespit edilen arıza:`,
+    d.diagnosisText || '—',
+    ``,
+    `Tahmini onarım bedeli: ₺${d.estimatedPrice||0}`,
+    ``,
+    `Bu fiyat ve işlemi onaylıyorsanız lütfen bu mesaja "ONAYLIYORUM" yazarak dönüş yapabilir misiniz? Onayınızı aldıktan sonra cihazınızın onarımına başlayacağız.`
+  ];
+  const text = encodeURIComponent(lines.join('\n'));
+  const number = toWhatsAppNumber(d.phone);
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
+function sendNetPriceWhatsApp(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  const parts = d.parts || [];
+  const total = parts.reduce((s,p)=>s+lineGross(p),0);
+  const lines = [
+    `Teknonand — Net Fiyat Bilgisi`,
+    `Kayıt No: ${d.code}`,
+    `Sayın ${d.customer},`,
+    `Cihazınız (${d.model}) için yapılan işlemler ve net tutar aşağıdadır:`,
+    ``,
+    ...(parts.length ? parts.map(p=>`- ${p.name}: ₺${lineGross(p).toFixed(2)}`) : ['- Kayıtlı işlem yok']),
+    ``,
+    `Net Tutar: ₺${total.toFixed(2)}`,
+    ``,
+    `Cihazınız test aşamasını tamamladığında teslimat için sizinle iletişime geçeceğiz.`
+  ];
+  const text = encodeURIComponent(lines.join('\n'));
+  const number = toWhatsAppNumber(d.phone);
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
+function printDeviceLabel(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  document.getElementById('pl-name').textContent = d.customer || '';
+  document.getElementById('pl-phone').textContent = d.phone ? '· ' + d.phone : '';
+  document.getElementById('pl-issue').textContent = d.issue ? 'Arıza: ' + d.issue : '';
+  document.getElementById('pl-pass').textContent = d.devicePass ? 'Şifre: ' + d.devicePass : '';
+  document.getElementById('pl-imei').textContent = d.imei ? 'IMEI: ' + d.imei : '';
+  document.getElementById('pl-code').textContent = d.code;
+  applyLabelSettings('pl');
+  const printBox = document.getElementById('printLabel');
+  printBox.style.width = labelSettings.widthCm + 'cm';
+  printBox.style.height = labelSettings.heightCm + 'cm';
+  setPrintPage(`${labelSettings.widthCm}cm ${labelSettings.heightCm}cm`, '0');
+  document.body.classList.add('printing-label');
+  window.print();
+  document.body.classList.remove('printing-label');
+}
+
+function printLabel(){
+  updateLabelPreview();
+  const printBox = document.getElementById('printLabel');
+  printBox.style.width = labelSettings.widthCm + 'cm';
+  printBox.style.height = labelSettings.heightCm + 'cm';
+  setPrintPage(`${labelSettings.widthCm}cm ${labelSettings.heightCm}cm`, '0');
+  document.body.classList.add('printing-label');
+  window.print();
+  document.body.classList.remove('printing-label');
+}
+
+function onStatusFieldChange(){
+  const status = document.getElementById('st-status').value;
+  document.getElementById('st-diagnosis-fields').style.display = status === 'diagnosis_done' ? 'block' : 'none';
+  document.getElementById('st-return-fields').style.display = status === 'returned' ? 'block' : 'none';
+  document.getElementById('st-delivery-fields').style.display = status === 'delivered' ? 'block' : 'none';
+}
+
+let tempImages = {diagnosis:[], return:[], delivery:[]};
+
+function resizeImageFile(file, maxDim, quality){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = () => {
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if(w > maxDim || h > maxDim){
+          if(w > h){ h = Math.round(h * maxDim/w); w = maxDim; }
+          else { w = Math.round(w * maxDim/h); h = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleImageSelect(event, key, previewElId){
+  const files = Array.from(event.target.files);
+  const arr = tempImages[key];
+  for(const file of files){
+    if(arr.length >= 4){ toast('En fazla 4 görsel ekleyebilirsiniz'); break; }
+    const dataUrl = await resizeImageFile(file, 900, 0.72);
+    arr.push(dataUrl);
+  }
+  event.target.value = '';
+  renderImageThumbs(arr, previewElId, key);
+}
+
+function removeTempImage(key, idx, previewElId){
+  tempImages[key].splice(idx, 1);
+  renderImageThumbs(tempImages[key], previewElId, key);
+}
+
+function renderImageThumbs(arr, previewElId, key){
+  const box = document.getElementById(previewElId);
+  if(!box) return;
+  box.innerHTML = arr.map((src,i)=>`
+    <div class="img-thumb"><img src="${src}"><button onclick="removeTempImage('${key}',${i},'${previewElId}')">×</button></div>
+  `).join('');
+}
+
+async function addStatusEntry(){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  const status = document.getElementById('st-status').value;
+  const whenRaw = document.getElementById('st-datetime').value;
+  let note = document.getElementById('st-note').value.trim();
+  const at = whenRaw ? new Date(whenRaw).toISOString() : new Date().toISOString();
+
+  if(status === 'diagnosis_done'){
+    const diagnosisText = document.getElementById('st-diagnosis-text').value.trim();
+    const estimatedPrice = parseFloat(document.getElementById('st-estimated-price').value) || 0;
+    d.diagnosisText = diagnosisText;
+    d.estimatedPrice = estimatedPrice;
+    d.diagnosisImages = tempImages.diagnosis.slice(0,4);
+    note = note || `Arıza tespiti: ${diagnosisText} — Tahmini fiyat: ₺${estimatedPrice}`;
+  }
+  if(status === 'returned'){
+    const returnReason = document.getElementById('st-return-reason').value.trim();
+    d.returnReason = returnReason;
+    d.returnImages = tempImages.return.slice(0,4);
+    note = note || `İade sebebi: ${returnReason}`;
+  }
+  if(status === 'delivered'){
+    if(!d.imei){
+      const imeiInput = document.getElementById('st-delivery-imei');
+      const enteredImei = imeiInput ? imeiInput.value.trim() : '';
+      if(!enteredImei){
+        toast('Teslim etmeden önce IMEI / Seri No girilmelidir');
+        return;
+      }
+      d.imei = enteredImei;
+    }
+    const deliveryMethod = document.getElementById('st-delivery-method').value;
+    const deliveryNote = document.getElementById('st-delivery-note').value.trim();
+    d.deliveryMethod = deliveryMethod;
+    d.deliveryNote = deliveryNote;
+    d.deliveryImages = tempImages.delivery.slice(0,4);
+    note = note || deliveryMethod;
+  }
+
+  d.status = status;
+  if(!d.history) d.history = [];
+  d.history.push({status, note, at});
+  await saveList('devices', devices);
+  toast(status==='delivered' ? `${d.code} teslim edildi — teslim formu hazır` : `${d.code} → ${STATUS_LABELS[status]} (WhatsApp bildirimi tetiklenir)`);
+  renderDeviceDetail();
+}
+
+async function assignDevice(){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  const empId = document.getElementById('assign-employee').value;
+  if(!empId){ toast('Personel seçin'); return; }
+  const emp = employees.find(e=>e.id===empId);
+  d.assignedTo = empId;
+  if(!d.assignments) d.assignments = [];
+  d.assignments.push({employeeId: empId, name: emp.name, at: new Date().toISOString()});
+  await saveList('devices', devices);
+  toast(`${d.code} → ${emp.name}'a devredildi`);
+  renderDeviceDetail();
+}
+
+async function addPayment(){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  const method = document.getElementById('pay-method').value;
+  const amount = parseFloat(document.getElementById('pay-amount').value);
+  const whenRaw = document.getElementById('pay-datetime').value;
+  if(isNaN(amount) || amount<=0){ toast('Geçerli bir tutar girin'); return; }
+  const at = whenRaw ? new Date(whenRaw).toISOString() : new Date().toISOString();
+  if(!d.payments) d.payments = [];
+  d.payments.push({method, amount, at});
+  await saveList('devices', devices);
+  document.getElementById('pay-amount').value = '';
+  toast(`₺${amount.toFixed(2)} ${method} tahsilatı kaydedildi`);
+  renderDeviceDetail();
+}
+
+async function removePayment(idx){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  d.payments.splice(idx, 1);
+  await saveList('devices', devices);
+  toast('Tahsilat silindi');
+  renderDeviceDetail();
+}
+
+async function addEmployee(){
+  const name = document.getElementById('e-name').value.trim();
+  const role = document.getElementById('e-role').value.trim();
+  const username = document.getElementById('e-username').value.trim().toLowerCase();
+  const password = document.getElementById('e-password').value;
+  const permission = document.getElementById('e-permission').value;
+  if(!name || !username || !password){ toast('Ad soyad, kullanıcı adı ve şifre gerekli'); return; }
+  if(employees.some(e=>e.username===username)){ toast('Bu kullanıcı adı zaten kullanılıyor'); return; }
+  employees.unshift({id:'emp_'+Date.now(), name, role, username, password, permission});
+  await saveList('employees', employees);
+  ['e-name','e-role','e-username','e-password'].forEach(id=>document.getElementById(id).value='');
+  toast('Personel eklendi');
+  renderEmployees();
+}
+
+async function resetEmployeePassword(id){
+  const emp = employees.find(e=>e.id===id);
+  if(!emp) return;
+  const newPass = prompt(`${emp.name} için yeni şifre girin:`);
+  if(!newPass) return;
+  emp.password = newPass;
+  await saveList('employees', employees);
+  toast('Şifre güncellendi');
+}
+
+function renderEmployees(){
+  const tbody = document.getElementById('employeeTable');
+  if(!tbody) return;
+  tbody.innerHTML = employees.length ? employees.map(e=>`
+    <tr><td>${e.name}</td><td class="code">${e.username||'—'}</td><td>${e.role||'—'}</td>
+    <td>${e.permission==='restricted' ? '<span class="pill" style="color:var(--amber); background:#FBF0DD;">Kısıtlı</span>' : '<span class="pill" style="color:var(--green); background:#E4F3EC;">Yönetici</span>'}</td>
+    <td><button class="ghost" onclick="resetEmployeePassword('${e.id}')">Şifre Değiştir</button> <button class="ghost" onclick="removeItem('employees','${e.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz personel eklenmedi</td></tr>`;
+}
+
+function doLogin(){
+  const username = document.getElementById('login-username').value.trim().toLowerCase();
+  const password = document.getElementById('login-password').value;
+  const errorEl = document.getElementById('loginError');
+
+  if(username === 'yonetici' && password === 'teknonand'){
+    startSession(null, 'İşletme Sahibi', 'admin', 'Yönetici');
+    return;
+  }
+  const emp = employees.find(e=> (e.username||'').toLowerCase() === username && e.password === password);
+  if(emp){
+    startSession(emp.id, emp.name, emp.permission, emp.role || (emp.permission==='restricted'?'Kısıtlı':'Yönetici'));
+    return;
+  }
+  errorEl.style.display = 'block';
+}
+
+function startSession(userId, name, permission, roleLabel){
+  currentUserId = userId;
+  currentUserName = name;
+  currentUserPermission = permission;
+  document.body.classList.toggle('restricted-user', permission==='restricted');
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('userBadge').innerHTML = `
+    <div class="u-name">${name}</div>
+    <div class="u-role">${permission==='restricted'?'Kısıtlı Yetki':'Yönetici'} · ${roleLabel}</div>
+    <button onclick="doLogout()">Çıkış Yap</button>
+  `;
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('loginError').style.display = 'none';
+  switchView('dashboard');
+}
+
+function doLogout(){
+  currentUserId = null; currentUserName = null; currentUserPermission = null;
+  document.body.classList.remove('restricted-user');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+async function addDealer(){
+  const name = document.getElementById('dl-name').value.trim();
+  const phone = document.getElementById('dl-phone').value.trim();
+  const username = document.getElementById('dl-username').value.trim().toLowerCase();
+  const password = document.getElementById('dl-password').value;
+  if(!name){ toast('Bayi adı gerekli'); return; }
+  const existing = dealers.find(d=>d.name.toLowerCase() === name.toLowerCase());
+  if(existing){
+    toast(`Bu bayi zaten kayıtlı: ${existing.name}`);
+    document.getElementById('dl-name').value=''; document.getElementById('dl-phone').value='';
+    openDealer(existing.id);
+    return;
+  }
+  if(username && dealers.some(d=>d.username===username)){ toast('Bu kullanıcı adı zaten kullanılıyor'); return; }
+  dealers.unshift({id:'dl_'+Date.now(), name, phone, username, password, balance:0, transactions:[]});
+  await saveList('dealers', dealers);
+  ['dl-name','dl-phone','dl-username','dl-password'].forEach(id=>document.getElementById(id).value='');
+  toast('Bayi eklendi');
+  renderDealers();
+}
+
+async function addDealerTx(id){
+  const dealer = dealers.find(x=>x.id===id);
+  const amount = parseFloat(document.getElementById('dtx-amount-'+id).value);
+  const type = document.getElementById('dtx-type-'+id).value;
+  if(isNaN(amount) || amount<=0){ toast('Geçerli bir tutar girin'); return; }
+  if(!dealer.transactions) dealer.transactions = [];
+  dealer.transactions.push({type, amount, at:new Date().toISOString()});
+  dealer.balance += (type === 'veresiye' ? amount : -amount);
+  await saveList('dealers', dealers);
+  toast(type==='veresiye' ? 'Veresiye satış eklendi' : 'Tahsilat kaydedildi');
+  renderDealers();
+}
+
+function renderDealers(){
+  const box = document.getElementById('dealerList');
+  if(!box) return;
+  box.innerHTML = dealers.length ? dealers.map(dl=>`
+    <div class="dealer-card row-click" onclick="openDealer('${dl.id}')">
+      <div class="dealer-top">
+        <div>
+          <div class="dealer-name">${dl.name}</div>
+          <div class="dealer-phone">${dl.phone || '—'}</div>
+        </div>
+        <div class="dealer-balance ${dl.balance>0?'owes':'clear'}">₺${dl.balance.toFixed(2)}</div>
+      </div>
+    </div>`).join('') : `<p class="empty">Henüz bayi eklenmedi</p>`;
+
+  // Cihaz Kabul formundaki bayi seçim listelerini güncelle
+  const sel = document.getElementById('f-dealer');
+  if(sel){
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— Yok —</option>' + dealers.map(dl=>`<option value="${dl.id}">${dl.name}</option>`).join('');
+    sel.value = current;
+  }
+  const bulkSel = document.getElementById('bulk-dealer');
+  if(bulkSel){
+    const current = bulkSel.value;
+    bulkSel.innerHTML = '<option value="">— Bayi seçin —</option>' + dealers.map(dl=>`<option value="${dl.id}">${dl.name}</option>`).join('');
+    bulkSel.value = current;
+  }
+}
+
+let dealerSearchMode = 'imei';
+let currentDealerId = null;
+
+function openDealer(id){
+  currentDealerId = id;
+  openDealerId = id;
+  switchView('dealer-detail');
+  renderDealerDetail();
+}
+
+function setDealerSearchMode(mode){
+  dealerSearchMode = mode;
+  document.querySelectorAll('.dealer-search-mode-btn').forEach(b=>b.classList.toggle('active', b.dataset.mode===mode));
+  renderDealerDeviceList();
+}
+
+function renderDealerDeviceList(){
+  const tbody = document.getElementById('dealerDeviceTable');
+  if(!tbody) return;
+  const query = (document.getElementById('dealer-device-search').value||'').trim().toLowerCase();
+  let list = devices.filter(d=>d.dealerId===currentDealerId);
+  if(query){
+    list = list.filter(d=>{
+      if(dealerSearchMode==='imei') return (d.imei||'').toLowerCase().includes(query);
+      if(dealerSearchMode==='model') return (d.model||'').toLowerCase().includes(query);
+      return true;
+    });
+  }
+  tbody.innerHTML = list.length ? list.map(d=>{
+    const total = (d.parts||[]).reduce((s,p)=>s+lineGross(p),0);
+    return `
+    <tr class="row-click" onclick="openDevice('${d.id}')">
+      <td class="code">${d.code}</td><td>${d.model}</td><td>${d.customer}</td><td>${pill(d.status)}</td>
+      <td class="code">₺${total.toFixed(2)}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="5" class="empty">${query?'Eşleşen cihaz bulunamadı':'Bu bayiye bağlı cihaz yok'}</td></tr>`;
+}
+
+let lastDealerReport = null;
+
+function generateDealerReport(){
+  const box = document.getElementById('dealerReportResult');
+  const fromRaw = document.getElementById('dealer-report-from').value;
+  const toRaw = document.getElementById('dealer-report-to').value;
+  if(!fromRaw || !toRaw){ toast('Başlangıç ve bitiş tarihi seçin'); return; }
+  const from = new Date(fromRaw);
+  const to = new Date(toRaw); to.setHours(23,59,59,999);
+
+  const list = devices.filter(d=> d.dealerId===currentDealerId && new Date(d.created_at) >= from && new Date(d.created_at) <= to);
+  let total = 0;
+  const rows = list.map(d=>{
+    const parts = d.parts || [];
+    const partNames = parts.map(p=>p.name).join(', ') || '—';
+    const price = parts.reduce((s,p)=>s+lineGross(p),0);
+    total += price;
+    const deliveredEntry = (d.history||[]).find(h=>h.status==='delivered');
+    return `<tr>
+      <td>${new Date(d.created_at).toLocaleDateString('tr-TR')}</td>
+      <td>${d.model}</td>
+      <td>${d.issue||'—'}</td>
+      <td>${partNames}</td>
+      <td class="code">₺${price.toFixed(2)}</td>
+      <td>${deliveredEntry ? new Date(deliveredEntry.at).toLocaleDateString('tr-TR') : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const dealer = dealers.find(d=>d.id===currentDealerId);
+  lastDealerReport = {
+    dealerName: dealer ? dealer.name : '—',
+    fromLabel: from.toLocaleDateString('tr-TR'), toLabel: to.toLocaleDateString('tr-TR'),
+    rowsHTML: rows, total
+  };
+
+  box.innerHTML = `
+    <table class="line-table">
+      <thead><tr><th>Kayıt Tarihi</th><th>Model</th><th>Arıza</th><th>Kullanılan Parça</th><th>Fiyat</th><th>Teslim Tarihi</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="6" class="empty">Bu tarih aralığında kayıt yok</td></tr>`}</tbody>
+    </table>
+    <div class="report-total">Toplam Bakiye: ₺${total.toFixed(2)}</div>
+    <button class="ghost" style="margin-top:12px;" onclick="printDealerReportPDF()">Raporu PDF Olarak Yazdır (A4)</button>
+  `;
+}
+
+function printDealerReportPDF(){
+  if(!lastDealerReport) return;
+  const r = lastDealerReport;
+  document.getElementById('printForm').innerHTML = `
+    ${buildCompanyHeaderHTML()}
+    <h4>Bayi Raporu — ${r.dealerName}</h4>
+    <div class="fp-sub">Tarih Aralığı: ${r.fromLabel} — ${r.toLabel}</div>
+    <table class="line-table">
+      <thead><tr><th>Kayıt Tarihi</th><th>Model</th><th>Arıza</th><th>Kullanılan Parça</th><th>Fiyat</th><th>Teslim Tarihi</th></tr></thead>
+      <tbody>${r.rowsHTML || `<tr><td colspan="6" class="empty">Bu tarih aralığında kayıt yok</td></tr>`}</tbody>
+    </table>
+    <div class="fp-total">Toplam Bakiye: ₺${r.total.toFixed(2)}</div>
+  `;
+  setPrintPage('A4', '14mm');
+  document.body.classList.add('printing-form');
+  window.print();
+  document.body.classList.remove('printing-form');
+}
+
+function renderDealerDetail(){
+  const dl = dealers.find(x=>x.id===currentDealerId);
+  const box = document.getElementById('dealerDetailContent');
+  if(!dl){ box.innerHTML = '<p class="empty">Bayi bulunamadı</p>'; return; }
+  const txs = dl.transactions || [];
+  const cashIn = txs.filter(t=>t.type==='tahsilat').reduce((s,t)=>s+t.amount,0);
+
+  box.innerHTML = `
+    <div class="detail-head">
+      <div>
+        <div class="detail-title">${dl.name}</div>
+        <div class="detail-code">${dl.phone || '—'}</div>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="num" style="color:${dl.balance>0?'var(--red)':'var(--green)'}">₺${dl.balance.toFixed(2)}</div><div class="lbl">Veresiye Bakiyesi</div></div>
+      <div class="stat"><div class="num">₺${cashIn.toFixed(2)}</div><div class="lbl">Kasaya Giren (Bu Bayiden)</div></div>
+      <div class="stat"><div class="num">${devices.filter(d=>d.dealerId===dl.id).length}</div><div class="lbl">Bağlı Cihaz</div></div>
+    </div>
+
+    <div class="card">
+      <h3>Bayi Portal Girişi</h3>
+      <div class="detail-meta" style="margin-bottom:10px;">
+        <div><span>Kullanıcı Adı</span>${dl.username || '—'}</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="ghost" onclick="resetDealerPassword('${dl.id}')">Şifre Değiştir</button>
+        <button class="ghost" onclick="sendDealerBalanceWhatsApp('${dl.id}')">WhatsApp ile Bakiye Bildir</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Veresiye / Tahsilat Hareketi Ekle</h3>
+      ${txs.length ? `<div class="dealer-tx mini-list">${txs.slice().reverse().map(t=>`
+        <div class="dealer-tx-line"><span>${t.type==='veresiye'?'Veresiye Satış':'Tahsilat'}</span><span>₺${t.amount.toFixed(2)} · ${new Date(t.at).toLocaleDateString('tr-TR')}</span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
+      <div class="dealer-form" style="margin-top:12px;">
+        <div class="field"><label>Tür</label>
+          <select id="dtx-type-${dl.id}"><option value="veresiye">Veresiye Satış</option><option value="tahsilat">Tahsilat</option></select>
+        </div>
+        <div class="field"><label>Tutar (₺)</label><input id="dtx-amount-${dl.id}" type="number" placeholder="500"></div>
+        <div class="field"><label>&nbsp;</label><button class="ghost" onclick="removeItem('dealers','${dl.id}'); switchView('dealers');" style="width:100%;">Bayiyi Sil</button></div>
+        <button class="primary" style="margin-top:0;" onclick="addDealerTx('${dl.id}'); renderDealerDetail();">Ekle</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Bu Bayiye Bağlı Cihazlar</h3>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+        <button class="ghost dealer-search-mode-btn active" data-mode="imei" onclick="setDealerSearchMode('imei')">IMEI / Seri No ile Bul</button>
+        <button class="ghost dealer-search-mode-btn" data-mode="model" onclick="setDealerSearchMode('model')">Cihaz Modeli ile Bul</button>
+      </div>
+      <input id="dealer-device-search" placeholder="Aramak için yazmaya başlayın..." oninput="renderDealerDeviceList()" style="margin-bottom:12px;">
+      <table><thead><tr><th>Kod</th><th>Model</th><th>Müşteri</th><th>Durum</th><th>Tamir Fiyatı</th></tr></thead>
+        <tbody id="dealerDeviceTable" class="mini-list"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h3>Tarih Aralığı Raporu</h3>
+      <div class="form-grid">
+        <div class="field"><label>Başlangıç Tarihi</label><input id="dealer-report-from" type="date"></div>
+        <div class="field"><label>Bitiş Tarihi</label><input id="dealer-report-to" type="date"></div>
+      </div>
+      <button class="primary" onclick="generateDealerReport()">Rapor Et</button>
+      <div id="dealerReportResult" style="margin-top:16px;"></div>
+    </div>
+  `;
+  renderDealerDeviceList();
+}
+
+async function resetDealerPassword(id){
+  const dl = dealers.find(x=>x.id===id);
+  if(!dl) return;
+  const newPass = prompt(`${dl.name} bayi portalı için yeni şifre girin:`);
+  if(!newPass) return;
+  dl.password = newPass;
+  await saveList('dealers', dealers);
+  toast('Şifre güncellendi');
+}
+
+function sendDealerBalanceWhatsApp(id){
+  const dl = dealers.find(x=>x.id===id);
+  if(!dl) return;
+  const txs = (dl.transactions||[]).slice().reverse().slice(0,10);
+  const lines = [
+    `Teknonand — Bayi Hesap Bildirimi`,
+    `Sayın ${dl.name},`,
+    ``,
+    `Güncel Veresiye Bakiyeniz: ₺${dl.balance.toFixed(2)}`,
+    ``,
+    `Son Hareketler:`,
+    ...(txs.length ? txs.map(t=>`- ${t.type==='veresiye'?'Veresiye Satış':'Tahsilat'}: ₺${t.amount.toFixed(2)} (${new Date(t.at).toLocaleDateString('tr-TR')})`) : ['- Hareket yok']),
+    ``,
+    `Bilgilerinize sunarız.`
+  ];
+  const text = encodeURIComponent(lines.join('\n'));
+  const number = toWhatsAppNumber(dl.phone);
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
+function allPayments(){
+  const list = [];
+  devices.forEach(d=>{
+    (d.payments||[]).forEach(p=>list.push({at:p.at, source:`${d.code} · ${d.customer}`, method:p.method, amount:p.amount}));
+  });
+  dealers.forEach(dl=>{
+    (dl.transactions||[]).filter(t=>t.type==='tahsilat').forEach(t=>list.push({at:t.at, source:`Bayi: ${dl.name}`, method:'Bayi Tahsilatı', amount:t.amount}));
+  });
+  return list.sort((a,b)=> new Date(b.at) - new Date(a.at));
+}
+
+function onExpenseCategoryChange(){
+  const cat = document.getElementById('ex-category').value;
+  document.getElementById('ex-supplier-wrap').style.display = cat === 'Toptancı Ödemesi' ? 'block' : 'none';
+}
+
+async function addExpense(){
+  const category = document.getElementById('ex-category').value;
+  const supplierId = document.getElementById('ex-supplier').value || null;
+  const amount = parseFloat(document.getElementById('ex-amount').value);
+  const method = document.getElementById('ex-method').value;
+  const description = document.getElementById('ex-desc').value.trim();
+  if(isNaN(amount) || amount<=0){ toast('Geçerli bir tutar girin'); return; }
+  const supplier = supplierId ? suppliers.find(s=>s.id===supplierId) : null;
+  expenses.unshift({
+    id:'ex_'+Date.now(), category, supplierId, supplierName: supplier?supplier.name:null,
+    amount, method, description, at:new Date().toISOString()
+  });
+  await saveList('expenses', expenses);
+  document.getElementById('ex-amount').value=''; document.getElementById('ex-desc').value='';
+  toast('Gider kaydedildi');
+  renderCashbox();
+}
+
+function renderExpenseSupplierSelect(){
+  const sel = document.getElementById('ex-supplier');
+  if(!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— Seçin —</option>' + suppliers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  sel.value = current;
+}
+
+function renderCashbox(){
+  const grid = document.getElementById('cashStatGrid');
+  const cashTbody = document.getElementById('cashTable');
+  const exTbody = document.getElementById('expenseTable');
+  if(!grid || !cashTbody || !exTbody) return;
+
+  const all = allPayments();
+  const income = all.reduce((s,p)=>s+p.amount,0);
+  const byMethod = {};
+  all.forEach(p=>{ byMethod[p.method] = (byMethod[p.method]||0) + p.amount; });
+
+  const totalExpense = expenses.reduce((s,e)=>s+e.amount,0);
+  const net = income - totalExpense;
+
+  grid.innerHTML = `
+    <div class="stat"><div class="num">₺${(byMethod['Nakit']||0).toFixed(0)}</div><div class="lbl">Nakit Hesap</div></div>
+    <div class="stat"><div class="num">₺${(byMethod['Banka Hesabı']||0).toFixed(0)}</div><div class="lbl">Banka Hesabı</div></div>
+    <div class="stat"><div class="num">₺${(byMethod['Kredi Kartı']||0).toFixed(0)}</div><div class="lbl">Kredi Kartı</div></div>
+    <div class="stat"><div class="num">₺${(byMethod['Sanal POS']||0).toFixed(0)}</div><div class="lbl">Sanal POS</div></div>
+    <div class="stat"><div class="num">₺${income.toFixed(0)}</div><div class="lbl">Toplam Gelir</div></div>
+    <div class="stat"><div class="num" style="color:var(--red);">₺${totalExpense.toFixed(0)}</div><div class="lbl">Toplam Gider</div></div>
+    <div class="stat"><div class="num" style="color:${net>=0?'var(--green)':'var(--red)'}">₺${net.toFixed(0)}</div><div class="lbl">Net Kasa</div></div>
+  `;
+
+  cashTbody.innerHTML = all.length ? all.map(p=>`
+    <tr><td>${new Date(p.at).toLocaleString('tr-TR')}</td><td>${p.source}</td><td>${p.method}</td><td class="code">₺${p.amount.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz tahsilat yok</td></tr>`;
+
+  exTbody.innerHTML = expenses.length ? expenses.map(e=>`
+    <tr><td>${new Date(e.at).toLocaleString('tr-TR')}</td><td>${e.category}${e.supplierName?` · ${e.supplierName}`:''}</td>
+    <td>${e.description||'—'}</td><td>${e.method}</td><td class="code">₺${e.amount.toFixed(2)}</td>
+    <td><button class="ghost" onclick="removeItem('expenses','${e.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="6" class="empty">Henüz gider kaydı yok</td></tr>`;
+
+  renderExpenseSupplierSelect();
+}
+
+function renderProfit(){
+  const grid = document.getElementById('profitStatGrid');
+  const empTbody = document.getElementById('employeeProfitTable');
+  const devTbody = document.getElementById('deviceProfitTable');
+  if(!grid || !empTbody || !devTbody) return;
+
+  let totalRevenue = 0, totalCost = 0;
+  const empStats = {};
+  const deviceRows = [];
+
+  devices.forEach(d=>{
+    const revenue = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+    const cost = (d.parts||[]).reduce((s,p)=>s+(parseFloat(p.cost)||0),0);
+    totalRevenue += revenue; totalCost += cost;
+    if(revenue>0 || cost>0) deviceRows.push({code:d.code, revenue, cost, profit:revenue-cost});
+
+    if(d.assignedTo){
+      const emp = employees.find(e=>e.id===d.assignedTo);
+      const key = emp ? emp.name : 'Bilinmiyor';
+      if(!empStats[key]) empStats[key] = {count:0, revenue:0};
+      empStats[key].count += 1;
+      empStats[key].revenue += revenue;
+    }
+  });
+
+  const netProfit = totalRevenue - totalCost;
+  grid.innerHTML = `
+    <div class="stat"><div class="num">₺${totalRevenue.toFixed(0)}</div><div class="lbl">Toplam Gelir</div></div>
+    <div class="stat"><div class="num">₺${totalCost.toFixed(0)}</div><div class="lbl">Toplam Parça Maliyeti</div></div>
+    <div class="stat"><div class="num" style="color:${netProfit>=0?'var(--green)':'var(--red)'}">₺${netProfit.toFixed(0)}</div><div class="lbl">Net Kâr</div></div>
+    <div class="stat"><div class="num">%${totalRevenue>0 ? ((netProfit/totalRevenue)*100).toFixed(0) : 0}</div><div class="lbl">Kâr Marjı</div></div>
+  `;
+  const empKeys = Object.keys(empStats);
+  empTbody.innerHTML = empKeys.length ? empKeys.map(k=>`
+    <tr><td>${k}</td><td>${empStats[k].count}</td><td class="code">₺${empStats[k].revenue.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Henüz devredilmiş cihaz yok</td></tr>`;
+  devTbody.innerHTML = deviceRows.length ? deviceRows.map(r=>`
+    <tr><td class="code">${r.code}</td><td>₺${r.revenue.toFixed(2)}</td><td>₺${r.cost.toFixed(2)}</td>
+    <td style="color:${r.profit>=0?'var(--green)':'var(--red)'}">₺${r.profit.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz veri yok</td></tr>`;
+}
+
+async function addStock(){
+  const name = document.getElementById('s-name').value.trim();
+  const qty = parseInt(document.getElementById('s-qty').value) || 0;
+  const min = parseInt(document.getElementById('s-min').value) || 0;
+  const costTry = parseFloat(document.getElementById('s-cost-try').value) || 0;
+  const costUsd = parseFloat(document.getElementById('s-cost-usd').value) || 0;
+  if(!name){ toast('Parça adı gerekli'); return; }
+  const cost = costTry > 0 ? costTry : (costUsd * exchangeRate);
+  stock.unshift({id:'s_'+Date.now(), name, qty, min, cost, costUsd, fxRate: exchangeRate});
+  await saveList('stock', stock);
+  ['s-name','s-qty','s-min','s-cost-try','s-cost-usd'].forEach(id=>document.getElementById(id).value='');
+  toast('Parça eklendi');
+  renderAll();
+}
+
+function syncCostFromTry(){
+  const tl = parseFloat(document.getElementById('s-cost-try').value);
+  if(!isNaN(tl) && exchangeRate>0) document.getElementById('s-cost-usd').value = (tl / exchangeRate).toFixed(2);
+}
+function syncCostFromUsd(){
+  const usd = parseFloat(document.getElementById('s-cost-usd').value);
+  if(!isNaN(usd)) document.getElementById('s-cost-try').value = (usd * exchangeRate).toFixed(2);
+}
+
+async function loadExchangeRate(){
+  try{
+    const r = await window.storage.get('exchangeRate', true);
+    if(r){ const data = JSON.parse(r.value); exchangeRate = data.rate; }
+  }catch(e){ /* no saved rate yet, keep default */ }
+  const fxInput = document.getElementById('fx-rate');
+  if(fxInput) fxInput.value = exchangeRate;
+}
+
+async function saveExchangeRate(){
+  const val = parseFloat(document.getElementById('fx-rate').value);
+  if(isNaN(val) || val<=0){ toast('Geçerli bir kur girin'); return; }
+  exchangeRate = val;
+  try{
+    await window.storage.set('exchangeRate', JSON.stringify({rate: val, updatedAt: new Date().toISOString()}), true);
+    toast(`Kur güncellendi: ₺${val}`);
+  }catch(e){ toast('Kur kaydedilemedi'); }
+}
+
+async function loadLabelDesign(){
+  try{
+    const r = await window.storage.get('labelSettings', true);
+    if(r) labelSettings = JSON.parse(r.value);
+  }catch(e){ /* saved design yok, varsayılan kullanılır */ }
+  populateLabelDesignForm();
+}
+
+function populateLabelDesignForm(){
+  const widthEl = document.getElementById('ld-width');
+  if(!widthEl) return;
+  document.getElementById('ld-width').value = labelSettings.widthCm;
+  document.getElementById('ld-height').value = labelSettings.heightCm;
+  ['shop','code','name','phone','issue','pass','imei'].forEach(key=>{
+    document.getElementById('ld-size-'+key).value = labelSettings[key].size;
+    document.getElementById('ld-show-'+key).checked = labelSettings[key].show;
+  });
+  renderDesignPreview();
+}
+
+function onLabelDesignChange(){
+  labelSettings.widthCm = parseFloat(document.getElementById('ld-width').value) || DEFAULT_LABEL_SETTINGS.widthCm;
+  labelSettings.heightCm = parseFloat(document.getElementById('ld-height').value) || DEFAULT_LABEL_SETTINGS.heightCm;
+  ['shop','code','name','phone','issue','pass','imei'].forEach(key=>{
+    const size = parseFloat(document.getElementById('ld-size-'+key).value) || DEFAULT_LABEL_SETTINGS[key].size;
+    const show = document.getElementById('ld-show-'+key).checked;
+    labelSettings[key] = {size, show};
+  });
+  renderDesignPreview();
+}
+
+function renderDesignPreview(){
+  const box = document.getElementById('designPreview');
+  if(!box) return;
+  box.style.width = (labelSettings.widthCm*37.8)+'px';
+  box.style.height = (labelSettings.heightCm*37.8)+'px';
+  applyLabelSettings('ldp');
+}
+
+async function saveLabelDesign(){
+  await saveList('labelSettings', labelSettings);
+  toast('Etiket tasarımı kaydedildi');
+}
+
+async function resetLabelDesign(){
+  labelSettings = JSON.parse(JSON.stringify(DEFAULT_LABEL_SETTINGS));
+  populateLabelDesignForm();
+  await saveList('labelSettings', labelSettings);
+  toast('Etiket tasarımı varsayılana sıfırlandı');
+}
+
+function applyLabelSettings(prefix){
+  ['shop','code','name','phone','issue','pass','imei'].forEach(key=>{
+    const el = document.getElementById(prefix+'-'+key);
+    if(!el) return;
+    const cfg = labelSettings[key] || DEFAULT_LABEL_SETTINGS[key];
+    el.style.fontSize = cfg.size + 'px';
+    el.style.display = cfg.show ? '' : 'none';
+  });
+}
+
+async function loadCompanyDesign(){
+  try{
+    const r = await window.storage.get('companyInfo', true);
+    if(r) companyInfo = JSON.parse(r.value);
+  }catch(e){}
+  try{
+    const r2 = await window.storage.get('companyLogo', true);
+    if(r2) companyLogo = r2.value;
+  }catch(e){}
+  populateDocDesignForm();
+}
+
+function populateDocDesignForm(){
+  const nameEl = document.getElementById('doc-company-name');
+  if(!nameEl) return;
+  document.getElementById('doc-company-name').value = companyInfo.name || '';
+  document.getElementById('doc-company-phone').value = companyInfo.phone || '';
+  document.getElementById('doc-company-address').value = companyInfo.address || '';
+  document.getElementById('doc-company-email').value = companyInfo.email || '';
+  document.getElementById('doc-company-tax').value = companyInfo.tax || '';
+  document.getElementById('doc-logo-preview').src = companyLogo || 'logo.png';
+  renderDocDesignPreview();
+}
+
+function onLogoFileChange(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    companyLogo = reader.result;
+    document.getElementById('doc-logo-preview').src = companyLogo;
+    renderDocDesignPreview();
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeDocLogo(){
+  companyLogo = null;
+  document.getElementById('doc-logo-preview').src = 'logo.png';
+  renderDocDesignPreview();
+}
+
+function buildCompanyHeaderHTML(){
+  const logoSrc = companyLogo || 'logo.png';
+  const c = companyInfo;
+  const lines = [c.address, [c.phone, c.email].filter(Boolean).join(' · '), c.tax ? 'Vergi: '+c.tax : ''].filter(Boolean);
+  return `
+    <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px; padding-bottom:14px; border-bottom:1.5px solid var(--line);">
+      <img src="${logoSrc}" style="height:48px; width:auto; max-width:140px; object-fit:contain;">
+      <div style="text-align:left;">
+        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">${c.name || 'Teknonand'}</div>
+        ${lines.map(l=>`<div style="font-size:10.5px; color:var(--ink-soft);">${l}</div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderDocDesignPreview(){
+  const box = document.getElementById('docDesignPreview');
+  if(!box) return;
+  companyInfo = {
+    name: document.getElementById('doc-company-name').value.trim() || 'Teknonand',
+    phone: document.getElementById('doc-company-phone').value.trim(),
+    address: document.getElementById('doc-company-address').value.trim(),
+    email: document.getElementById('doc-company-email').value.trim(),
+    tax: document.getElementById('doc-company-tax').value.trim()
+  };
+  box.innerHTML = buildCompanyHeaderHTML() + `<div class="fp-sub" style="margin-top:0;">Cihaz Teslim Formu / Bayi Raporu belgelerinde bu başlık görünecek</div>`;
+}
+['doc-company-name','doc-company-phone','doc-company-address','doc-company-email','doc-company-tax'].forEach(id=>{
+  document.addEventListener('input', (e)=>{ if(e.target && e.target.id===id) renderDocDesignPreview(); });
+});
+
+async function saveDocDesign(){
+  companyInfo = {
+    name: document.getElementById('doc-company-name').value.trim() || 'Teknonand',
+    phone: document.getElementById('doc-company-phone').value.trim(),
+    address: document.getElementById('doc-company-address').value.trim(),
+    email: document.getElementById('doc-company-email').value.trim(),
+    tax: document.getElementById('doc-company-tax').value.trim()
+  };
+  await saveList('companyInfo', companyInfo);
+  try{
+    if(companyLogo) await window.storage.set('companyLogo', companyLogo, true);
+    else await window.storage.delete('companyLogo', true);
+  }catch(e){}
+  toast('Belge bilgileri kaydedildi');
+}
+
+async function addSupplier(){
+  const name = document.getElementById('sup-name').value.trim();
+  const phone = document.getElementById('sup-phone').value.trim();
+  if(!name){ toast('Toptancı adı gerekli'); return; }
+  suppliers.unshift({id:'sup_'+Date.now(), name, phone, balance:0});
+  await saveList('suppliers', suppliers);
+  document.getElementById('sup-name').value=''; document.getElementById('sup-phone').value='';
+  toast('Toptancı eklendi');
+  renderAll();
+}
+
+async function createAppointment(){
+  const name = document.getElementById('a-name').value.trim();
+  const phone = document.getElementById('a-phone').value.trim();
+  const whenRaw = document.getElementById('a-datetime').value;
+  const service = document.getElementById('a-service').value.trim();
+  if(!name || !phone || !whenRaw){ toast('Ad, telefon ve tarih/saat zorunlu'); return; }
+  const when = new Date(whenRaw);
+  const whenStr = when.toLocaleString('tr-TR', {dateStyle:'long', timeStyle:'short'});
+
+  const customerMsg = `Sayın ${name}, ${whenStr} tarihinde Teknonand'da randevunuz oluşturuldu.${service ? ' Hizmet: '+service+'.' : ''} Bekliyoruz!`;
+  const shopMsg = `Yeni randevu: ${name} (${phone}) — ${whenStr}.${service ? ' Not: '+service : ''}`;
+
+  const appt = {
+    id: 'a_' + Date.now(),
+    customerName: name, phone, datetime: when.toISOString(), service,
+    created_at: new Date().toISOString(),
+    notifications: [
+      {to:'Müşteri', text: customerMsg},
+      {to:'İşletme (Siz)', text: shopMsg}
+    ]
+  };
+  appointments.push(appt);
+  await saveList('appointments', appointments);
+  ['a-name','a-phone','a-service'].forEach(id=>document.getElementById(id).value='');
+  setDefaultApptTime();
+  toast('Randevu oluşturuldu — WhatsApp bildirimleri gönderildi (simülasyon)');
+  renderAppointments();
+}
+
+async function deleteAppointment(id){
+  appointments = appointments.filter(a=>a.id!==id);
+  await saveList('appointments', appointments);
+  renderAppointments();
+}
+
+function renderAppointments(){
+  const list = document.getElementById('appointmentList');
+  if(!list) return;
+  const sorted = appointments.slice().sort((a,b)=> new Date(a.datetime) - new Date(b.datetime));
+  const now = new Date();
+  list.innerHTML = sorted.length ? sorted.map(a=>{
+    const when = new Date(a.datetime);
+    const past = when < now;
+    const hoursAway = (when - now) / 3600000;
+    const upcoming = !past && hoursAway <= 24;
+    return `
+    <div class="appt-item">
+      <div class="appt-top">
+        <div>
+          <div class="appt-name">${a.customerName} <span style="color:var(--ink-soft); font-weight:400;">· ${a.phone}</span> ${a.source==='website' ? '<span class="badge vat" style="margin-left:4px;">Web Sitesi</span>' : ''} ${upcoming ? '<span class="badge warranty" style="margin-left:4px;">Yaklaşıyor</span>' : ''}</div>
+          <div class="appt-when">${when.toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})} ${past?'(geçti)':''}</div>
+          ${a.service ? `<div class="appt-service">${a.service}</div>` : ''}
+        </div>
+        <button class="ghost" onclick="deleteAppointment('${a.id}')">Sil</button>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+        <button class="ghost" onclick="sendAppointmentConfirmationWhatsApp('${a.id}')">WhatsApp ile Onay Gönder</button>
+        <button class="ghost" onclick="sendAppointmentReminderWhatsApp('${a.id}')">Hatırlatma Gönder</button>
+      </div>
+      <div class="wa-preview">
+        ${a.notifications.map(n=>`<div class="wa-bubble"><span class="wa-to">${n.to} — WhatsApp</span>${n.text}</div>`).join('')}
+      </div>
+    </div>`;
+  }).join('') : `<p class="empty">Henüz randevu yok</p>`;
+}
+
+function sendAppointmentConfirmationWhatsApp(id){
+  const a = appointments.find(x=>x.id===id);
+  if(!a) return;
+  const when = new Date(a.datetime);
+  const whenStr = when.toLocaleString('tr-TR', {dateStyle:'long', timeStyle:'short'});
+  const lines = [
+    `Teknonand — Randevu Onayı`,
+    `Sayın ${a.customerName},`,
+    `${whenStr} tarihindeki randevunuz onaylanmıştır.${a.service ? ' Not: '+a.service+'.' : ''}`,
+    ``,
+    `Sizi bu tarihte bekliyoruz. İyi günler dileriz!`
+  ];
+  const text = encodeURIComponent(lines.join('\n'));
+  const number = toWhatsAppNumber(a.phone);
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
+function sendAppointmentReminderWhatsApp(id){
+  const a = appointments.find(x=>x.id===id);
+  if(!a) return;
+  const when = new Date(a.datetime);
+  const whenStr = when.toLocaleString('tr-TR', {dateStyle:'long', timeStyle:'short'});
+  const lines = [
+    `Teknonand — Randevu Hatırlatması`,
+    `Sayın ${a.customerName},`,
+    `${whenStr} tarihinde Teknonand'da randevunuz olduğunu hatırlatmak isteriz.${a.service ? ' Not: '+a.service+'.' : ''}`,
+    ``,
+    `Görüşmek üzere!`
+  ];
+  const text = encodeURIComponent(lines.join('\n'));
+  const number = toWhatsAppNumber(a.phone);
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
+let deviceSearchMode = 'imei';
+let selectedDeviceIds = new Set();
+
+function toggleDeviceSelect(id, checked){
+  if(checked) selectedDeviceIds.add(id);
+  else selectedDeviceIds.delete(id);
+  const selectAllBox = document.getElementById('select-all-devices');
+  if(selectAllBox){
+    const visibleIds = Array.from(document.querySelectorAll('.device-row-check')).map(el=>el.dataset.id);
+    selectAllBox.checked = visibleIds.length>0 && visibleIds.every(vid=>selectedDeviceIds.has(vid));
+    selectAllBox.indeterminate = !selectAllBox.checked && visibleIds.some(vid=>selectedDeviceIds.has(vid));
+  }
+  updateBulkDeleteButton();
+}
+
+function toggleAllDevices(checked){
+  document.querySelectorAll('.device-row-check').forEach(el=>{
+    el.checked = checked;
+    if(checked) selectedDeviceIds.add(el.dataset.id);
+    else selectedDeviceIds.delete(el.dataset.id);
+  });
+  updateBulkDeleteButton();
+}
+
+function updateBulkDeleteButton(){
+  const btn = document.getElementById('bulk-delete-btn');
+  const countEl = document.getElementById('bulk-delete-count');
+  if(!btn) return;
+  if(selectedDeviceIds.size > 0){
+    btn.style.display = 'inline-block';
+    countEl.textContent = selectedDeviceIds.size;
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+async function deleteSelectedDevices(){
+  if(!selectedDeviceIds.size) return;
+  const count = selectedDeviceIds.size;
+  if(!confirm(`${count} cihaz kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return;
+  devices = devices.filter(d => !selectedDeviceIds.has(d.id));
+  await saveList('devices', devices);
+  selectedDeviceIds.clear();
+  toast(`${count} cihaz kaydı silindi`);
+  renderAll();
+}
+
+function setSearchMode(mode){
+  deviceSearchMode = mode;
+  document.querySelectorAll('.search-mode-btn').forEach(b=>b.classList.toggle('active', b.dataset.mode===mode));
+  renderDeviceTable();
+}
+
+function renderDeviceTable(){
+  const tbody = document.getElementById('deviceTable');
+  if(!tbody) return;
+  const searchEl = document.getElementById('device-search');
+  const query = searchEl ? searchEl.value.trim().toLowerCase() : '';
+
+  let list = devices;
+  if(query){
+    list = devices.filter(d=>{
+      if(deviceSearchMode==='imei') return (d.imei||'').toLowerCase().includes(query);
+      if(deviceSearchMode==='phone') return normPhone(d.phone).includes(normPhone(query)) || normPhone(d.backupPhone).includes(normPhone(query));
+      if(deviceSearchMode==='name') return (d.customer||'').toLowerCase().includes(query);
+      if(deviceSearchMode==='model') return (d.model||'').toLowerCase().includes(query);
+      return true;
+    });
+  }
+
+  tbody.innerHTML = list.length ? list.map(d=>{
+    const parts = d.parts || [];
+    const total = parts.reduce((sum,p)=> sum + lineGross(p), 0);
+    return `
+    <tr class="row-click" onclick="openDevice('${d.id}')">
+      <td onclick="event.stopPropagation()"><input type="checkbox" class="device-row-check" data-id="${d.id}" ${selectedDeviceIds.has(d.id)?'checked':''} onchange="toggleDeviceSelect('${d.id}', this.checked)"></td>
+      <td class="code">${d.code}</td>
+      <td>${new Date(d.created_at).toLocaleDateString('tr-TR')}<br><span style="color:var(--ink-soft); font-size:11px;">${new Date(d.created_at).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}</span></td>
+      <td>${d.model}${d.devicePass?`<br><span style="color:var(--ink-soft); font-size:11px;">Şifre: ${d.devicePass}</span>`:''}</td>
+      <td>${d.issue||'—'}</td>
+      <td>${d.customer}<br><span style="color:var(--ink-soft); font-size:11.5px;">${d.phone||''}</span>${d.backupPhone?`<br><span style="color:var(--ink-soft); font-size:11px;">Yedek: ${d.backupPhone}</span>`:''}</td>
+      <td>${d.assignedTo ? (employees.find(e=>e.id===d.assignedTo)?.name || '—') : '<span style="color:var(--ink-soft);">Atanmadı</span>'}</td>
+      <td onclick="event.stopPropagation()">${pill(d.status)}</td>
+      <td>${parts.length} kalem · ₺${total.toFixed(0)}</td>
+      <td onclick="event.stopPropagation()"><button class="ghost" onclick="printDeviceLabel('${d.id}')">Etiket Bas</button></td>
+    </tr>`;
+  }).join('') : (query ? `<tr><td colspan="10" class="empty">Eşleşen kayıt bulunamadı</td></tr>` : `<tr><td colspan="10" class="empty">Henüz cihaz kaydı yok — "Cihaz Kabul"tan ekleyin</td></tr>`);
+
+  const selectAllBox = document.getElementById('select-all-devices');
+  if(selectAllBox){
+    const visibleIds = list.map(d=>d.id);
+    selectAllBox.checked = visibleIds.length>0 && visibleIds.every(id=>selectedDeviceIds.has(id));
+    selectAllBox.indeterminate = !selectAllBox.checked && visibleIds.some(id=>selectedDeviceIds.has(id));
+  }
+  updateBulkDeleteButton();
+}
+
+function renderAll(){
+  // Dashboard stats
+  const activeCount = devices.filter(d=>d.status!=='delivered').length;
+  const testingCount = devices.filter(d=>d.status==='testing').length;
+  const lowStock = stock.filter(s=>s.qty <= s.min).length;
+  document.getElementById('statGrid').innerHTML = `
+    <div class="stat"><div class="num">${devices.length}</div><div class="lbl">Toplam Kayıt</div></div>
+    <div class="stat"><div class="num">${activeCount}</div><div class="lbl">Aktif Serviste</div></div>
+    <div class="stat"><div class="num">${testingCount}</div><div class="lbl">Test Aşamasında</div></div>
+    <div class="stat"><div class="num">${lowStock}</div><div class="lbl">Kritik Stok</div></div>
+  `;
+  const recent = devices.slice(0,5);
+  document.getElementById('recentDevices').innerHTML = recent.length ? recent.map(d=>`
+    <tr><td class="code">${d.code}</td><td>${d.model}</td><td>${d.customer}</td>
+    <td>${pill(d.status)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz kayıt yok</td></tr>`;
+
+  // Devices table
+  renderDeviceTable();
+
+  // Stock table
+  document.getElementById('stockTable').innerHTML = stock.length ? stock.map(s=>`
+    <tr><td>${s.name}</td>
+    <td style="color:${s.qty<=s.min?'var(--red)':'var(--ink)'}">${s.qty}</td>
+    <td>${s.min}</td><td>₺${s.cost.toFixed(2)}${s.costUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${s.costUsd.toFixed(2)})</span>`:''}</td>
+    <td><button class="ghost admin-only" onclick="removeItem('stock','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz parça eklenmedi</td></tr>`;
+
+  // Suppliers table
+  document.getElementById('supplierTable').innerHTML = suppliers.length ? suppliers.map(s=>`
+    <tr><td>${s.name}</td><td>${s.phone||'—'}</td><td>₺${s.balance}</td>
+    <td><button class="ghost" onclick="removeItem('suppliers','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz toptancı eklenmedi</td></tr>`;
+
+  renderAppointments();
+  renderEmployees();
+  renderDealers();
+  renderCashbox();
+  renderProfit();
+  renderCustomers();
+}
+
+async function removeItem(type, id){
+  if(type==='stock'){ stock = stock.filter(x=>x.id!==id); await saveList('stock', stock); }
+  if(type==='suppliers'){ suppliers = suppliers.filter(x=>x.id!==id); await saveList('suppliers', suppliers); }
+  if(type==='employees'){ employees = employees.filter(x=>x.id!==id); await saveList('employees', employees); }
+  if(type==='dealers'){ dealers = dealers.filter(x=>x.id!==id); await saveList('dealers', dealers); }
+  if(type==='customers'){ customers = customers.filter(x=>x.id!==id); await saveList('customers', customers); }
+  if(type==='expenses'){ expenses = expenses.filter(x=>x.id!==id); await saveList('expenses', expenses); }
+  renderAll();
+}
+
+function pill(status){
+  const [c,bg] = STATUS_COLORS[status];
+  return `<span class="pill" style="color:${c}; background:${bg};">${STATUS_LABELS[status]}</span>`;
+}
+
+function switchView(name){
+  if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit')){
+    toast('Bu sayfayı görüntüleme yetkiniz yok');
+    return;
+  }
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+  if(name==='new-device') setDefaultReceivedTime();
+  if(name==='appointments') setDefaultApptTime();
+  if(name==='devices') renderDeviceTable();
+  if(name==='label-design') populateLabelDesignForm();
+  if(name==='doc-design') populateDocDesignForm();
+}
+document.querySelectorAll('nav button').forEach(b=>{
+  b.addEventListener('click', ()=>switchView(b.dataset.view));
+});
+
+loadAll();
+document.getElementById('userBadge').innerHTML = `
+  <div class="u-name">Yönetici</div>
+  <div class="u-role">Tam Yetki</div>
+`;
+</script>
+</body>
+</html>

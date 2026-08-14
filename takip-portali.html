@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teknonand — Cihaz Takip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F5F1; --ink:#17181C; --ink-soft:#5A5C66;
+    --accent:#2F5EFF; --amber:#E8A33D; --green:#2E9E6D; --red:#C1442A;
+    --line:#DEDCD4; --card:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif;
+    min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding:48px 20px;
+  }
+  .wrap{max-width:480px; width:100%;}
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:36px;}
+  .brand-mark{width:34px;height:34px;border-radius:9px;background:var(--ink); display:flex;align-items:center;justify-content:center;}
+  .brand-mark svg{width:16px;height:16px;stroke:var(--paper);}
+  .brand-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;letter-spacing:-0.02em;}
+  .brand-sub{color:var(--ink-soft);font-size:12px;}
+
+  h1{font-family:'Space Grotesk',sans-serif; font-size:28px; font-weight:700; letter-spacing:-0.03em; margin:0 0 8px;}
+  .lead{color:var(--ink-soft); font-size:14.5px; margin:0 0 28px; line-height:1.5;}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px; margin-bottom:16px;}
+  .input-row{display:flex; gap:8px;}
+  input{
+    flex:1; font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600;
+    border:1.5px solid var(--line); border-radius:10px; padding:13px 14px;
+    background:var(--paper); color:var(--ink); letter-spacing:0.02em; outline:none; transition:border-color .15s;
+  }
+  input:focus{border-color:var(--accent);}
+  input::placeholder{color:#A6A69C; font-weight:500;}
+  button{
+    font-family:'Inter',sans-serif; font-weight:600; font-size:14px;
+    background:var(--ink); color:var(--paper); border:none; border-radius:10px;
+    padding:0 20px; cursor:pointer; transition:opacity .15s;
+  }
+  button:hover{opacity:.85;}
+  .error{display:none; color:#C1442A; font-size:13px; margin-top:10px;}
+
+  .result{display:none;}
+  .device-head{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px;}
+  .device-model{font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:700;}
+  .device-code{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--ink-soft); margin-top:3px;}
+  .status-pill{font-size:12px; font-weight:600; padding:6px 12px; border-radius:20px; white-space:nowrap;}
+
+  .pulse-track{position:relative; padding-left:26px; margin-top:6px;}
+  .pulse-line{position:absolute; left:9px; top:6px; bottom:6px; width:2px; background:var(--line);}
+  .pulse-line-fill{position:absolute; left:9px; top:6px; width:2px; background:var(--accent); transition:height .6s ease;}
+  .step{position:relative; padding-bottom:22px;}
+  .step:last-child{padding-bottom:0;}
+  .dot{position:absolute; left:-26px; top:1px; width:20px; height:20px; border-radius:50%; background:var(--card); border:2px solid var(--line); display:flex; align-items:center; justify-content:center;}
+  .dot.done{border-color:var(--accent); background:var(--accent);}
+  .dot.current{border-color:var(--accent); background:var(--card);}
+  .dot.current::after{content:''; width:8px; height:8px; border-radius:50%; background:var(--accent);}
+  .dot svg{width:11px;height:11px;stroke:white;}
+  .step-label{font-size:14px; font-weight:600;}
+  .step-note{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
+  .step.pending .step-label{color:#B4B4AC;}
+
+  .meta{display:flex; gap:18px; margin-top:20px; padding-top:16px; border-top:1px solid var(--line); font-size:12.5px; color:var(--ink-soft); flex-wrap:wrap;}
+  .meta b{color:var(--ink); font-weight:600; display:block; font-size:13px;}
+
+  .approve-box{background:#FBF0DD; border:1px solid #EFD8A6; border-radius:12px; padding:16px; margin-top:6px;}
+  .approve-box .a-title{font-weight:600; font-size:13.5px; margin-bottom:6px;}
+  .approve-box .a-line{font-size:12.5px; margin-bottom:4px;}
+  .approve-box .a-line span{color:var(--ink-soft);}
+  .approve-box textarea{width:100%; font-family:'Inter',sans-serif; font-size:12.5px; border:1.5px solid var(--line); border-radius:8px; padding:9px 11px; margin-top:10px; background:var(--card); color:var(--ink); resize:vertical;}
+  .approve-box button{width:100%; margin-top:10px;}
+  .approved-note{color:var(--green); font-weight:600; font-size:13px; margin-top:6px;}
+
+  .parts-mini{font-size:12.5px; margin-top:4px;}
+  .parts-mini .p-line{display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #EEEDE7;}
+  .parts-mini .p-line:last-child{border-bottom:none;}
+
+  footer{margin-top:20px; font-size:11.5px; color:#A6A69C; text-align:center;}
+
+  @media (max-width:480px){
+    html{-webkit-text-size-adjust:100%;}
+    body{padding:32px 16px;}
+    input{font-size:16px; min-width:0;} /* prevents iOS Safari auto-zoom on focus; min-width:0 stops flex overflow */
+    h1{font-size:24px;}
+    .meta{gap:14px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <img src="logo.png" alt="Teknonand" style="height:44px; width:auto;">
+    <div>
+      <div class="brand-sub">Cihaz Takip Portalı</div>
+    </div>
+  </div>
+
+  <h1>Cihazınız nerede?</h1>
+  <p class="lead">Size verilen takip kodunu girin, cihazınızın tamir sürecini anlık görün.</p>
+
+  <div class="card">
+    <div class="input-row">
+      <input id="codeInput" type="text" placeholder="TKN-2026-0342" maxlength="20" onkeydown="if(event.key==='Enter') lookup()">
+      <button onclick="lookup()">Sorgula</button>
+    </div>
+    <div class="error" id="errorMsg">Bu koda ait bir kayıt bulunamadı. Kodu kontrol edip tekrar deneyin.</div>
+  </div>
+
+  <div class="card result" id="resultCard"></div>
+
+  <footer>Sorularınız için bize WhatsApp üzerinden ulaşabilirsiniz.</footer>
+</div>
+
+<script>
+const STATUS_STEPS = [
+  {key:'diagnosing', label:'İnceleniyor'},
+  {key:'diagnosis_done', label:'Arıza Tespiti Bitti'},
+  {key:'approved', label:'Fiyat Onaylandı - Onarılıyor'},
+  {key:'testing', label:'Test Ediliyor'},
+  {key:'delivered', label:'Teslim Edildi'}
+];
+
+let devices = [];
+let currentDevice = null;
+
+async function loadDevices(){
+  try{
+    const r = await window.storage.get('devices', true);
+    devices = r ? JSON.parse(r.value) : [];
+  }catch(e){ devices = []; }
+}
+
+function lineGross(p){
+  const price = parseFloat(p.price) || 0;
+  return p.vat === 'haric' ? price * 1.2 : price;
+}
+
+async function lookup(){
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  const errorEl = document.getElementById('errorMsg');
+  const resultEl = document.getElementById('resultCard');
+  if(!code){ return; }
+
+  await loadDevices();
+  const device = devices.find(d => d.code.toUpperCase() === code);
+
+  if(!device){
+    errorEl.style.display = 'block';
+    resultEl.style.display = 'none';
+    return;
+  }
+  errorEl.style.display = 'none';
+  resultEl.style.display = 'block';
+  currentDevice = device;
+  render(device);
+}
+
+function render(d){
+  const currentIndex = STATUS_STEPS.findIndex(s => s.key === d.status);
+  const pct = currentIndex >= 0 ? (currentIndex / (STATUS_STEPS.length - 1)) * 100 : 0;
+  const currentStepLabel = STATUS_STEPS[currentIndex] ? STATUS_STEPS[currentIndex].label : d.status;
+  const pillColor = d.status === 'delivered' ? 'var(--green)' : d.status === 'diagnosis_done' ? 'var(--amber)' : 'var(--accent)';
+  const pillBg = d.status === 'delivered' ? '#E4F3EC' : d.status === 'diagnosis_done' ? '#FBF0DD' : '#E9EEFF';
+
+  let stepsHtml = '';
+  STATUS_STEPS.forEach((s, i) => {
+    let dotClass = 'dot';
+    let icon = '';
+    let note = '';
+    if(i < currentIndex){ dotClass += ' done'; icon = '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
+    else if(i === currentIndex){
+      dotClass += ' current';
+      if(s.key === 'diagnosis_done' && d.diagnosisText) note = `Arıza: ${d.diagnosisText}`;
+      if(s.key === 'delivered' && d.deliveryMethod) note = d.deliveryMethod;
+    }
+    stepsHtml += `
+      <div class="step ${i > currentIndex ? 'pending' : ''}">
+        <div class="${dotClass}">${icon}</div>
+        <div class="step-label">${s.label}</div>
+        ${note ? `<div class="step-note">${note}</div>` : ''}
+      </div>`;
+  });
+
+  const parts = d.parts || [];
+  const total = parts.reduce((s,p)=>s+lineGross(p),0);
+  const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+
+  let approveHtml = '';
+  if(d.status === 'diagnosis_done' && !d.customerApproved){
+    approveHtml = `
+      <div class="approve-box">
+        <div class="a-title">Onayınız Bekleniyor</div>
+        <div class="a-line"><span>Tespit Edilen Arıza:</span> ${d.diagnosisText || '—'}</div>
+        <div class="a-line"><span>Tahmini Fiyat:</span> ₺${d.estimatedPrice || 0}</div>
+        <textarea id="approveNote" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)"></textarea>
+        <button onclick="approveDiagnosis()">Onaylıyorum</button>
+      </div>`;
+  } else if(d.customerApproved){
+    approveHtml = `<div class="approved-note">✓ Fiyatı onayladınız, cihazınız onarılıyor</div>`;
+  }
+
+  let partsHtml = '';
+  if(parts.length){
+    partsHtml = `
+      <div class="parts-mini">
+        ${parts.map(p=>`<div class="p-line"><span>${p.name}</span><span>₺${lineGross(p).toFixed(2)}</span></div>`).join('')}
+      </div>`;
+  }
+
+  document.getElementById('resultCard').innerHTML = `
+    <div class="device-head">
+      <div>
+        <div class="device-model">${d.model}</div>
+        <div class="device-code">${d.code}</div>
+      </div>
+      <div class="status-pill" style="color:${pillColor}; background:${pillBg};">${currentStepLabel}</div>
+    </div>
+    <div class="pulse-track">
+      <div class="pulse-line"></div>
+      <div class="pulse-line-fill" style="height:${Math.max(pct,0)}%;"></div>
+      ${stepsHtml}
+    </div>
+    ${approveHtml}
+    ${partsHtml}
+    <div class="meta">
+      <div><b>${new Date(d.created_at).toLocaleDateString('tr-TR')}</b>Kabul Tarihi</div>
+      ${total>0 ? `<div><b>₺${total.toFixed(2)}</b>Toplam Tutar</div>` : ''}
+      ${paid>0 ? `<div><b>₺${paid.toFixed(2)}</b>Ödenen</div>` : ''}
+    </div>
+  `;
+}
+
+async function approveDiagnosis(){
+  if(!currentDevice) return;
+  await loadDevices();
+  const d = devices.find(x=>x.id===currentDevice.id);
+  if(!d) return;
+  const noteEl = document.getElementById('approveNote');
+  const note = noteEl ? noteEl.value.trim() : '';
+  d.customerApproved = true;
+  d.status = 'approved';
+  if(!d.history) d.history = [];
+  d.history.push({status:'approved', note: note ? `Müşteri tarafından onaylandı — Not: ${note}` : 'Müşteri tarafından onaylandı', at:new Date().toISOString()});
+  try{
+    await window.storage.set('devices', JSON.stringify(devices), true);
+  }catch(e){}
+  currentDevice = d;
+  render(d);
+}
+</script>
+</body>
+</html>
