@@ -63,6 +63,8 @@ model DealerTransaction {
   id          String       @id @default(uuid())
   dealerId    String
   dealer      Dealer       @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  deviceId    String? // otomatik olusturulan "teslim edildi" veresiye kayitlari icin
+  device      Device?      @relation(fields: [deviceId], references: [id])
   type        DealerTxType
   amount      Decimal      @db.Decimal(12, 2)
   description String?
@@ -148,6 +150,7 @@ model Device {
   stockMovements StockMovement[]
   repair        Repair?
   whatsappMessages WhatsappMessage[]
+  dealerTransactions DealerTransaction[]
 
   @@index([status])
   @@index([customerId])

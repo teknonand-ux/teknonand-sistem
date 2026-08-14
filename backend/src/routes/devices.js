@@ -1,11 +1,16 @@
 const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
-const { requireAuth, requireEmployee } = require('../middleware/auth');
+const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
 const { sendStatusWhatsapp } = require('../services/whatsapp');
 
 const router = express.Router();
 router.use(requireAuth, requireEmployee);
+
+function lineGross(part) {
+  const price = Number(part.price);
+  return part.vatMode === 'HARIC' ? price * 1.2 : price;
+}
 
 async function nextTrackingCode() {
   const year = new Date().getFullYear();
@@ -207,6 +212,32 @@ router.patch('/:id/status', async (req, res, next) => {
       },
     });
 
+    // Bayiye ait cihaz teslim edildiğinde, yapılan işlemlerin tutarı otomatik olarak
+    // bayinin veresiye hesabına eklenir (bir cihaz için yalnızca bir kez).
+    if (status === 'DELIVERED' && device.dealerId) {
+      const already = await prisma.dealerTransaction.findFirst({
+        where: { deviceId: device.id, type: 'VERESIYE_SATIS' },
+      });
+      if (!already) {
+        const parts = await prisma.devicePart.findMany({ where: { deviceId: device.id } });
+        const total = parts.reduce((s, p) => s + lineGross(p), 0);
+        if (total > 0) {
+          await prisma.$transaction([
+            prisma.dealer.update({ where: { id: device.dealerId }, data: { balance: { increment: total } } }),
+            prisma.dealerTransaction.create({
+              data: {
+                dealerId: device.dealerId,
+                deviceId: device.id,
+                type: 'VERESIYE_SATIS',
+                amount: total,
+                description: `${device.trackingCode} teslim edildi — otomatik veresiye`,
+              },
+            }),
+          ]);
+        }
+      }
+    }
+
     await sendStatusWhatsapp(device, device.customer, status);
 
     res.json(device);
@@ -318,7 +349,7 @@ router.delete('/:id/payments/:paymentId', async (req, res, next) => {
   }
 });
 
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requireAdmin, async (req, res, next) => {
   try {
     await prisma.device.delete({ where: { id: req.params.id } });
     res.status(204).end();
