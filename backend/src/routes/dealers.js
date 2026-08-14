@@ -1,7 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
-const { requireAuth, requireEmployee, requireDealer, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireEmployee, requireDealer } = require('../middleware/auth');
 const { hashPassword } = require('../lib/auth');
 
 const router = express.Router();
@@ -13,6 +13,7 @@ router.get('/', requireAuth, requireEmployee, async (req, res, next) => {
     const dealers = await prisma.dealer.findMany({
       where: query ? { name: { contains: query, mode: 'insensitive' } } : undefined,
       orderBy: { name: 'asc' },
+      include: { transactions: { orderBy: { createdAt: 'desc' } } },
     });
     res.json(dealers);
   } catch (e) {
@@ -44,10 +45,14 @@ router.post('/:id/transactions', requireAuth, requireEmployee, async (req, res, 
     const schema = z.object({ type: z.enum(['VERESIYE_SATIS', 'TAHSILAT']), amount: z.number().positive(), description: z.string().optional() });
     const { type, amount, description } = schema.parse(req.body);
     const delta = type === 'VERESIYE_SATIS' ? amount : -amount;
-    const [dealer] = await prisma.$transaction([
+    await prisma.$transaction([
       prisma.dealer.update({ where: { id: req.params.id }, data: { balance: { increment: delta } } }),
       prisma.dealerTransaction.create({ data: { dealerId: req.params.id, type, amount, description } }),
     ]);
+    const dealer = await prisma.dealer.findUnique({
+      where: { id: req.params.id },
+      include: { transactions: { orderBy: { createdAt: 'desc' } } },
+    });
     res.json(dealer);
   } catch (e) {
     next(e);
@@ -67,7 +72,7 @@ router.patch('/:id', requireAuth, requireEmployee, async (req, res, next) => {
   }
 });
 
-router.delete('/:id', requireAuth, requireEmployee, requireAdmin, async (req, res, next) => {
+router.delete('/:id', requireAuth, requireEmployee, async (req, res, next) => {
   try {
     await prisma.dealer.delete({ where: { id: req.params.id } });
     res.status(204).end();

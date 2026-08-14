@@ -2074,7 +2074,7 @@ async function addDealerTx(id){
     body: JSON.stringify({ type, amount })
   });
   const idx = dealers.findIndex(d=>d.id===id);
-  if(idx>=0) dealers[idx] = { ...dealers[idx], balance: dealer.balance };
+  if(idx>=0) dealers[idx] = dealer;
   toast(type==='VERESIYE_SATIS' ? 'Veresiye satış eklendi' : 'Tahsilat kaydedildi');
   renderDealers();
   if(currentDealerId===id) renderDealerDetail();
@@ -2246,8 +2246,8 @@ function renderDealerDetail(){
 
     <div class="card">
       <h3>Veresiye / Tahsilat Hareketi Ekle</h3>
-      ${txs.length ? `<div class="dealer-tx mini-list">${txs.slice().reverse().map(t=>`
-        <div class="dealer-tx-line"><span>${t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat'}</span><span>₺${(parseFloat(t.amount)||0).toFixed(2)} · ${new Date(t.createdAt).toLocaleDateString('tr-TR')}</span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
+      ${txs.length ? `<div class="dealer-tx mini-list">${txs.map(t=>`
+        <div class="dealer-tx-line"><span style="color:${t.type==='VERESIYE_SATIS'?'var(--red)':'var(--green)'}; font-weight:600;">${t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat'}</span><span>₺${(parseFloat(t.amount)||0).toFixed(2)} · ${new Date(t.createdAt).toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})}</span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
       <div class="dealer-form" style="margin-top:12px;">
         <div class="field"><label>Tür</label>
           <select id="dtx-type-${dl.id}"><option value="VERESIYE_SATIS">Veresiye Satış</option><option value="TAHSILAT">Tahsilat</option></select>
