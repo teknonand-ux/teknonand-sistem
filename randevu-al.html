@@ -112,6 +112,8 @@
 </div>
 
 <script>
+const API_BASE = 'https://backend-production-a04d.up.railway.app/api';
+
 function toLocalInputValue(date){
   const off = date.getTimezoneOffset();
   const local = new Date(date.getTime() - off*60000);
@@ -125,16 +127,6 @@ function setMinDatetime(){
   if(!input.value) input.value = toLocalInputValue(new Date(now.getTime() + 60*60000));
 }
 setMinDatetime();
-
-async function getList(key){
-  try{
-    const r = await window.storage.get(key, true);
-    return r ? JSON.parse(r.value) : [];
-  }catch(e){ return []; }
-}
-async function saveList(key, list){
-  try{ await window.storage.set(key, JSON.stringify(list), true); }catch(e){}
-}
 
 async function submitAppointment(){
   const name = document.getElementById('r-name').value.trim();
@@ -154,22 +146,26 @@ async function submitAppointment(){
   const whenStr = when.toLocaleString('tr-TR', {dateStyle:'long', timeStyle:'short'});
   const service = [model, serviceText].filter(Boolean).join(' — ');
 
-  const customerMsg = `Sayın ${name}, ${whenStr} tarihinde Teknonand'da randevu talebiniz alındı.${service ? ' Not: '+service+'.' : ''} Ekibimiz sizi teyit için arayacak.`;
-  const shopMsg = `Web sitesinden yeni randevu talebi: ${name} (${phone}) — ${whenStr}.${service ? ' Not: '+service : ''}`;
-
-  const appointments = await getList('appointments');
-  const appt = {
-    id: 'a_' + Date.now(),
-    customerName: name, phone, datetime: when.toISOString(), service,
-    source: 'website',
-    created_at: new Date().toISOString(),
-    notifications: [
-      {to:'Müşteri', text: customerMsg},
-      {to:'İşletme (Siz)', text: shopMsg}
-    ]
-  };
-  appointments.push(appt);
-  await saveList('appointments', appointments);
+  const submitBtn = document.querySelector('#formView button');
+  submitBtn.disabled = true;
+  try{
+    const res = await fetch(`${API_BASE}/appointments`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ customerName: name, phone, datetime: when.toISOString(), service: service || undefined })
+    });
+    if(!res.ok){
+      errorEl.textContent = 'Randevu gönderilemedi, lütfen tekrar deneyin.';
+      errorEl.style.display = 'block';
+      return;
+    }
+  }catch(e){
+    errorEl.textContent = 'Bağlantı hatası, lütfen tekrar deneyin.';
+    errorEl.style.display = 'block';
+    return;
+  }finally{
+    submitBtn.disabled = false;
+  }
 
   document.getElementById('successSummary').innerHTML = `
     <div><span>Ad Soyad</span>${name}</div>

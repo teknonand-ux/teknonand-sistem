@@ -147,62 +147,90 @@
 </div>
 
 <script>
+const API_BASE = 'https://backend-production-a04d.up.railway.app/api';
+
 const STATUS_LABELS = {
-  diagnosing:'İnceleniyor', diagnosis_done:'Arıza Tespiti Bitti', approved:'Fiyat Onaylandı - Onarılıyor',
-  testing:'Test Ediliyor', delivered:'Teslim Edildi'
+  RECEIVED:'Alındı', DIAGNOSING:'İnceleniyor', DIAGNOSIS_DONE:'Arıza Tespiti Bitti',
+  AWAITING_PARTS:'Parça Bekleniyor', APPROVED:'Fiyat Onaylandı - Onarılıyor', IN_REPAIR:'Tamir Ediliyor',
+  TESTING:'Test Ediliyor', READY:'Teslime Hazır', DELIVERED:'Teslim Edildi',
+  RETURNED:'İade Edildi', CANCELLED:'İptal Edildi'
 };
 const STATUS_COLORS = {
-  diagnosing:['#2F5EFF','#E9EEFF'], diagnosis_done:['#E8A33D','#FBF0DD'], approved:['#2F5EFF','#E9EEFF'],
-  testing:['#2F5EFF','#E9EEFF'], delivered:['#2E9E6D','#E4F3EC']
+  RECEIVED:['#5A5C66','#EEEDE7'], DIAGNOSING:['#2F5EFF','#E9EEFF'], DIAGNOSIS_DONE:['#E8A33D','#FBF0DD'],
+  AWAITING_PARTS:['#E8A33D','#FBF0DD'], APPROVED:['#2F5EFF','#E9EEFF'], IN_REPAIR:['#2F5EFF','#E9EEFF'],
+  TESTING:['#2F5EFF','#E9EEFF'], READY:['#2E9E6D','#E4F3EC'], DELIVERED:['#2E9E6D','#E4F3EC'],
+  RETURNED:['#C1442A','#FBEAE6'], CANCELLED:['#C1442A','#FBEAE6']
 };
 
-let dealers = [];
-let devices = [];
+let authToken = null;
 let currentDealer = null;
+let devices = [];
 let searchMode = 'imei';
 let openDeviceId = null;
-
-async function getList(key){
-  try{
-    const r = await window.storage.get(key, true);
-    return r ? JSON.parse(r.value) : [];
-  }catch(e){ return []; }
-}
-async function saveList(key, list){
-  try{ await window.storage.set(key, JSON.stringify(list), true); }catch(e){}
-}
-
-async function loadAll(){
-  dealers = await getList('dealers');
-  devices = await getList('devices');
-}
 
 function pill(status){
   const [c,bg] = STATUS_COLORS[status] || ['#5A5C66','#EEEDE7'];
   return `<span class="pill" style="color:${c}; background:${bg};">${STATUS_LABELS[status]||status}</span>`;
 }
 
+async function apiFetch(path, options = {}){
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? {Authorization: `Bearer ${authToken}`} : {}),
+      ...(options.headers || {})
+    }
+  });
+  if(res.status === 401){ doLogout(); throw new Error('Oturum süresi doldu'); }
+  return res;
+}
+
 async function doLogin(){
-  await loadAll();
   const username = document.getElementById('login-username').value.trim().toLowerCase();
   const password = document.getElementById('login-password').value;
-  const dl = dealers.find(d => (d.username||'').toLowerCase() === username && d.password === password);
   const errorEl = document.getElementById('loginError');
-  if(!dl){ errorEl.style.display = 'block'; return; }
-  currentDealer = dl;
-  errorEl.style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('dealerNameLabel').textContent = dl.name;
-  document.getElementById('login-username').value = '';
-  document.getElementById('login-password').value = '';
-  renderAll();
+  try{
+    const res = await fetch(`${API_BASE}/auth/dealer-login`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ username, password })
+    });
+    if(!res.ok){ errorEl.style.display = 'block'; return; }
+    const data = await res.json();
+    authToken = data.token;
+    localStorage.setItem('teknonand_dealer_token', authToken);
+    errorEl.style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('login-username').value = '';
+    document.getElementById('login-password').value = '';
+    await loadAndRenderAll();
+  }catch(e){
+    errorEl.textContent = 'Bağlantı hatası, lütfen tekrar deneyin.';
+    errorEl.style.display = 'block';
+  }
 }
 
 function doLogout(){
+  authToken = null;
   currentDealer = null;
+  localStorage.removeItem('teknonand_dealer_token');
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'block';
+}
+
+async function tryResumeSession(){
+  const saved = localStorage.getItem('teknonand_dealer_token');
+  if(!saved) return;
+  authToken = saved;
+  try{
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    await loadAndRenderAll();
+  }catch(e){
+    doLogout();
+  }
 }
 
 function setSearchMode(mode){
@@ -217,25 +245,32 @@ function clearDateFilter(){
   renderDevices();
 }
 
-function myDevices(){
-  return devices.filter(d => d.dealerId === currentDealer.id);
+async function loadAndRenderAll(){
+  const [dealerRes, devicesRes] = await Promise.all([
+    apiFetch('/dealers/me'),
+    apiFetch('/dealers/me/devices')
+  ]);
+  currentDealer = await dealerRes.json();
+  devices = await devicesRes.json();
+  document.getElementById('dealerNameLabel').textContent = currentDealer.name;
+  renderAll();
 }
 
 function renderAll(){
-  const mine = myDevices();
-  const activeCount = mine.filter(d=>d.status!=='delivered').length;
+  const activeCount = devices.filter(d=>d.status!=='DELIVERED').length;
+  const balance = parseFloat(currentDealer.balance) || 0;
 
   document.getElementById('statGrid').innerHTML = `
-    <div class="stat"><div class="num" style="color:${currentDealer.balance>0?'var(--red)':'var(--green)'}">₺${currentDealer.balance.toFixed(0)}</div><div class="lbl">Veresiye Bakiyesi</div></div>
-    <div class="stat"><div class="num">${mine.length}</div><div class="lbl">Toplam Cihaz</div></div>
+    <div class="stat"><div class="num" style="color:${balance>0?'var(--red)':'var(--green)'}">₺${balance.toFixed(0)}</div><div class="lbl">Veresiye Bakiyesi</div></div>
+    <div class="stat"><div class="num">${devices.length}</div><div class="lbl">Toplam Cihaz</div></div>
     <div class="stat"><div class="num">${activeCount}</div><div class="lbl">Aktif Serviste</div></div>
   `;
 
   const txs = (currentDealer.transactions||[]).slice().reverse();
   document.getElementById('balanceBox').innerHTML = txs.length ? txs.map(t=>`
     <div class="tx-line">
-      <span>${t.type==='veresiye'?'Veresiye Satış':'Tahsilat'}</span>
-      <span>₺${t.amount.toFixed(2)} · ${new Date(t.at).toLocaleDateString('tr-TR')}</span>
+      <span>${t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat'}</span>
+      <span>₺${(parseFloat(t.amount)||0).toFixed(2)} · ${new Date(t.createdAt).toLocaleDateString('tr-TR')}</span>
     </div>`).join('') : `<p class="empty">Henüz hesap hareketi yok</p>`;
 
   renderDevices();
@@ -246,23 +281,23 @@ function renderDevices(){
   const fromRaw = document.getElementById('date-from').value;
   const toRaw = document.getElementById('date-to').value;
 
-  let list = myDevices();
+  let list = devices;
   if(query){
     list = list.filter(d=>{
-      if(searchMode==='imei') return (d.imei||'').toLowerCase().includes(query);
+      if(searchMode==='imei') return (d.imeiSerial||'').toLowerCase().includes(query);
       if(searchMode==='model') return (d.model||'').toLowerCase().includes(query);
       return true;
     });
   }
   if(fromRaw){
     const from = new Date(fromRaw);
-    list = list.filter(d => new Date(d.created_at) >= from);
+    list = list.filter(d => new Date(d.createdAt) >= from);
   }
   if(toRaw){
     const to = new Date(toRaw); to.setHours(23,59,59,999);
-    list = list.filter(d => new Date(d.created_at) <= to);
+    list = list.filter(d => new Date(d.createdAt) <= to);
   }
-  list = list.slice().sort((a,b)=> new Date(b.created_at) - new Date(a.created_at));
+  list = list.slice().sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt));
 
   const box = document.getElementById('deviceList');
   if(!list.length){
@@ -274,22 +309,22 @@ function renderDevices(){
     const parts = d.parts || [];
     const total = parts.reduce((s,p)=>{
       const price = parseFloat(p.price)||0;
-      return s + (p.vat==='haric' ? price*1.2 : price);
+      return s + (p.vatMode==='HARIC' ? price*1.2 : price);
     }, 0);
     const isOpen = openDeviceId === d.id;
-    const needsApproval = d.status === 'diagnosis_done' && !d.dealerApproved;
+    const needsApproval = d.status === 'DIAGNOSIS_DONE' && !d.dealerApproved;
     return `
     <div class="device-item" onclick="toggleDevice('${d.id}')">
       <div class="device-top">
         <div>
           <div class="device-model">${d.model}</div>
-          <div class="device-code">${d.code}</div>
+          <div class="device-code">${d.trackingCode}</div>
         </div>
         ${pill(d.status)}
       </div>
       <div class="device-detail ${isOpen?'open':''}">
-        <div class="d-line"><span>Arıza</span>${d.issue || '—'}</div>
-        <div class="d-line"><span>Kayıt Tarihi</span>${new Date(d.created_at).toLocaleString('tr-TR')}</div>
+        <div class="d-line"><span>Arıza</span>${d.issueDescription || '—'}</div>
+        <div class="d-line"><span>Kayıt Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
         ${total>0 ? `<div class="d-line"><span>Tutar</span>₺${total.toFixed(2)}</div>` : ''}
         ${d.diagnosisText ? `<div class="d-line"><span>Arıza Tespiti</span>${d.diagnosisText}</div>` : ''}
         ${d.estimatedPrice ? `<div class="d-line"><span>Tahmini Fiyat</span>₺${d.estimatedPrice}</div>` : ''}
@@ -311,20 +346,22 @@ function toggleDevice(id){
 }
 
 async function approveDevice(id){
-  devices = await getList('devices');
-  const d = devices.find(x=>x.id===id);
-  if(!d) return;
   const noteEl = document.getElementById('approveNote-'+id);
   const note = noteEl ? noteEl.value.trim() : '';
-  d.dealerApproved = true;
-  d.status = 'approved';
-  if(!d.history) d.history = [];
-  d.history.push({status:'approved', note: note ? `Bayi tarafından onaylandı — Not: ${note}` : 'Bayi tarafından onaylandı', at:new Date().toISOString()});
-  await saveList('devices', devices);
-  renderDevices();
+  try{
+    const res = await apiFetch(`/dealers/me/devices/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ note: note || undefined })
+    });
+    if(!res.ok) return;
+    const updated = await res.json();
+    const idx = devices.findIndex(x=>x.id===id);
+    if(idx>=0) devices[idx] = { ...devices[idx], ...updated };
+    renderDevices();
+  }catch(e){ /* apiFetch zaten 401'de oturumu kapatır */ }
 }
 
-loadAll();
+tryResumeSession();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => {

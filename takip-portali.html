@@ -116,27 +116,27 @@
 </div>
 
 <script>
+const API_BASE = 'https://backend-production-a04d.up.railway.app/api';
+
+// Ana akış (7 adım). AWAITING_PARTS/IN_REPAIR "Fiyat Onaylandı" adımıyla aynı noktada,
+// farklı bir notla gösterilir. RETURNED/CANCELLED bu çizgide değil, ayrı bir banner olarak gösterilir.
 const STATUS_STEPS = [
-  {key:'diagnosing', label:'İnceleniyor'},
-  {key:'diagnosis_done', label:'Arıza Tespiti Bitti'},
-  {key:'approved', label:'Fiyat Onaylandı - Onarılıyor'},
-  {key:'testing', label:'Test Ediliyor'},
-  {key:'delivered', label:'Teslim Edildi'}
+  {key:'RECEIVED', label:'Alındı'},
+  {key:'DIAGNOSING', label:'İnceleniyor'},
+  {key:'DIAGNOSIS_DONE', label:'Arıza Tespiti Bitti'},
+  {key:'APPROVED', label:'Fiyat Onaylandı - Onarılıyor'},
+  {key:'TESTING', label:'Test Ediliyor'},
+  {key:'READY', label:'Teslime Hazır'},
+  {key:'DELIVERED', label:'Teslim Edildi'}
 ];
+const STEP_ALIAS = { AWAITING_PARTS: 'APPROVED', IN_REPAIR: 'APPROVED' };
+const TERMINAL_LABELS = { RETURNED: 'İade Edildi', CANCELLED: 'İptal Edildi' };
 
-let devices = [];
 let currentDevice = null;
-
-async function loadDevices(){
-  try{
-    const r = await window.storage.get('devices', true);
-    devices = r ? JSON.parse(r.value) : [];
-  }catch(e){ devices = []; }
-}
 
 function lineGross(p){
   const price = parseFloat(p.price) || 0;
-  return p.vat === 'haric' ? price * 1.2 : price;
+  return p.vatMode === 'HARIC' ? price * 1.2 : price;
 }
 
 async function lookup(){
@@ -145,8 +145,11 @@ async function lookup(){
   const resultEl = document.getElementById('resultCard');
   if(!code){ return; }
 
-  await loadDevices();
-  const device = devices.find(d => d.code.toUpperCase() === code);
+  let device = null;
+  try{
+    const res = await fetch(`${API_BASE}/track/${encodeURIComponent(code)}`);
+    if(res.ok) device = await res.json();
+  }catch(e){ /* ağ hatası aşağıda "bulunamadı" olarak ele alınır */ }
 
   if(!device){
     errorEl.style.display = 'block';
@@ -160,11 +163,13 @@ async function lookup(){
 }
 
 function render(d){
-  const currentIndex = STATUS_STEPS.findIndex(s => s.key === d.status);
+  const effectiveKey = STEP_ALIAS[d.status] || d.status;
+  const currentIndex = STATUS_STEPS.findIndex(s => s.key === effectiveKey);
   const pct = currentIndex >= 0 ? (currentIndex / (STATUS_STEPS.length - 1)) * 100 : 0;
-  const currentStepLabel = STATUS_STEPS[currentIndex] ? STATUS_STEPS[currentIndex].label : d.status;
-  const pillColor = d.status === 'delivered' ? 'var(--green)' : d.status === 'diagnosis_done' ? 'var(--amber)' : 'var(--accent)';
-  const pillBg = d.status === 'delivered' ? '#E4F3EC' : d.status === 'diagnosis_done' ? '#FBF0DD' : '#E9EEFF';
+  const currentStepLabel = TERMINAL_LABELS[d.status] || (STATUS_STEPS[currentIndex] ? STATUS_STEPS[currentIndex].label : d.status);
+  const isTerminalException = d.status === 'RETURNED' || d.status === 'CANCELLED';
+  const pillColor = d.status === 'DELIVERED' ? 'var(--green)' : d.status === 'DIAGNOSIS_DONE' ? 'var(--amber)' : isTerminalException ? 'var(--red)' : 'var(--accent)';
+  const pillBg = d.status === 'DELIVERED' ? '#E4F3EC' : d.status === 'DIAGNOSIS_DONE' ? '#FBF0DD' : isTerminalException ? '#FBEAE6' : '#E9EEFF';
 
   let stepsHtml = '';
   STATUS_STEPS.forEach((s, i) => {
@@ -174,8 +179,10 @@ function render(d){
     if(i < currentIndex){ dotClass += ' done'; icon = '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
     else if(i === currentIndex){
       dotClass += ' current';
-      if(s.key === 'diagnosis_done' && d.diagnosisText) note = `Arıza: ${d.diagnosisText}`;
-      if(s.key === 'delivered' && d.deliveryMethod) note = d.deliveryMethod;
+      if(s.key === 'DIAGNOSIS_DONE' && d.diagnosisText) note = `Arıza: ${d.diagnosisText}`;
+      if(s.key === 'APPROVED' && d.status === 'AWAITING_PARTS') note = 'Parça bekleniyor';
+      if(s.key === 'APPROVED' && d.status === 'IN_REPAIR') note = 'Tamir ediliyor';
+      if(s.key === 'DELIVERED' && d.deliveryMethod) note = d.deliveryMethod;
     }
     stepsHtml += `
       <div class="step ${i > currentIndex ? 'pending' : ''}">
@@ -187,10 +194,10 @@ function render(d){
 
   const parts = d.parts || [];
   const total = parts.reduce((s,p)=>s+lineGross(p),0);
-  const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+  const paid = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
 
   let approveHtml = '';
-  if(d.status === 'diagnosis_done' && !d.customerApproved){
+  if(d.status === 'DIAGNOSIS_DONE' && !d.customerApproved){
     approveHtml = `
       <div class="approve-box">
         <div class="a-title">Onayınız Bekleniyor</div>
@@ -215,7 +222,7 @@ function render(d){
     <div class="device-head">
       <div>
         <div class="device-model">${d.model}</div>
-        <div class="device-code">${d.code}</div>
+        <div class="device-code">${d.trackingCode}</div>
       </div>
       <div class="status-pill" style="color:${pillColor}; background:${pillBg};">${currentStepLabel}</div>
     </div>
@@ -227,7 +234,7 @@ function render(d){
     ${approveHtml}
     ${partsHtml}
     <div class="meta">
-      <div><b>${new Date(d.created_at).toLocaleDateString('tr-TR')}</b>Kabul Tarihi</div>
+      <div><b>${new Date(d.receivedAt || d.createdAt).toLocaleDateString('tr-TR')}</b>Kabul Tarihi</div>
       ${total>0 ? `<div><b>₺${total.toFixed(2)}</b>Toplam Tutar</div>` : ''}
       ${paid>0 ? `<div><b>₺${paid.toFixed(2)}</b>Ödenen</div>` : ''}
     </div>
@@ -236,20 +243,23 @@ function render(d){
 
 async function approveDiagnosis(){
   if(!currentDevice) return;
-  await loadDevices();
-  const d = devices.find(x=>x.id===currentDevice.id);
-  if(!d) return;
   const noteEl = document.getElementById('approveNote');
   const note = noteEl ? noteEl.value.trim() : '';
-  d.customerApproved = true;
-  d.status = 'approved';
-  if(!d.history) d.history = [];
-  d.history.push({status:'approved', note: note ? `Müşteri tarafından onaylandı — Not: ${note}` : 'Müşteri tarafından onaylandı', at:new Date().toISOString()});
+  const btn = document.querySelector('.approve-box button');
+  if(btn) btn.disabled = true;
   try{
-    await window.storage.set('devices', JSON.stringify(devices), true);
-  }catch(e){}
-  currentDevice = d;
-  render(d);
+    const res = await fetch(`${API_BASE}/track/${encodeURIComponent(currentDevice.trackingCode)}/approve`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ note: note || undefined })
+    });
+    if(res.ok){
+      currentDevice = await res.json();
+      render(currentDevice);
+    }
+  }catch(e){
+    if(btn) btn.disabled = false;
+  }
 }
 </script>
 </body>
