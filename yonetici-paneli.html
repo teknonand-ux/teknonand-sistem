@@ -299,10 +299,10 @@
       <button data-view="suppliers">Toptancı</button>
       <button data-view="employees">Personel</button>
       <button data-view="dealers">Bayiler</button>
-      <button data-view="label-design" class="admin-only">Etiket Tasarımı</button>
-      <button data-view="doc-design" class="admin-only">Belge Tasarımı</button>
+      <button data-view="label-design">Etiket Tasarımı</button>
+      <button data-view="doc-design">Belge Tasarımı</button>
       <button data-view="cashbox" class="admin-only">Kasa</button>
-      <button data-view="profit" class="admin-only">Kâr / Zarar</button>
+      <button data-view="profit">Kâr / Zarar</button>
     </nav>
     <div class="user-badge" id="userBadge"></div>
     <div class="shared-note">Not: bu prototipteki veriler bu tarayıcıda/uygulamayı açan herkeste paylaşımlı olarak saklanır (demo amaçlı).</div>
@@ -446,7 +446,7 @@
           <button class="ghost" onclick="exportDevices()">Dışa Aktar (CSV)</button>
           <button class="ghost" onclick="document.getElementById('device-import-file').click()">İçe Aktar (CSV)</button>
           <input type="file" id="device-import-file" accept=".csv" style="display:none;" onchange="importDevices(event)">
-          <button class="ghost" id="bulk-delete-btn" onclick="deleteSelectedDevices()" style="display:none; color:var(--red); border-color:var(--red);">Seçilenleri Sil (<span id="bulk-delete-count">0</span>)</button>
+          <button class="ghost admin-only" id="bulk-delete-btn" onclick="deleteSelectedDevices()" style="display:none; color:var(--red); border-color:var(--red);">Seçilenleri Sil (<span id="bulk-delete-count">0</span>)</button>
         </div>
         <table><thead><tr><th><input type="checkbox" id="select-all-devices" onchange="toggleAllDevices(this.checked)"></th><th>Kod</th><th>Kayıt Tarihi</th><th>Cihaz</th><th>Arıza</th><th>Müşteri</th><th>Personel</th><th>Durum</th><th>Parçalar / Tutar</th><th></th></tr></thead>
           <tbody id="deviceTable"></tbody></table>
@@ -594,7 +594,7 @@
       <h1>Stok</h1>
       <p class="subtitle">Yedek parça envanteri</p>
 
-      <div class="card admin-only">
+      <div class="card">
         <h3>Dolar Kuru</h3>
         <div class="form-grid">
           <div class="field"><label>USD / TL Satış Kuru</label><input id="fx-rate" type="number" step="0.01"></div>
@@ -603,7 +603,7 @@
         <div class="login-hint" style="margin-top:0;">Harem Altın'ın (haremaltin.com) güncel USD/TL satış kurunu kontrol edip buraya girin — parça maliyetleri bu kur üzerinden TL'ye çevrilir. Tarayıcı güvenlik kısıtları nedeniyle kur otomatik çekilemiyor, günlük elle güncellenmesi gerekiyor.</div>
       </div>
 
-      <div class="card admin-only">
+      <div class="card">
         <div class="form-grid">
           <div class="field"><label>Parça Adı</label><input id="s-name" placeholder="iPhone 13 Ekran"></div>
           <div class="field"><label>Adet</label><input id="s-qty" type="number" placeholder="10"></div>
@@ -832,6 +832,7 @@ async function apiFetch(path, options = {}){
 }
 
 async function loadAll(){
+  const isAdmin = currentUserPermission === 'ADMIN';
   [devices, stock, suppliers, appointments, employees, dealers, customers, expenses] = await Promise.all([
     apiFetch('/devices'),
     apiFetch('/stock'),
@@ -840,7 +841,7 @@ async function loadAll(){
     apiFetch('/employees'),
     apiFetch('/dealers'),
     apiFetch('/customers'),
-    apiFetch('/reports/cashbox').then(r => r.expenses),
+    isAdmin ? apiFetch('/reports/cashbox').then(r => r.expenses) : Promise.resolve([]),
   ]);
   await loadExchangeRate();
   await loadLabelDesign();
@@ -933,7 +934,7 @@ function renderCustomers(){
   tbody.innerHTML = customers.length ? customers.map(c=>{
     const count = devices.filter(d=>d.customerId===c.id).length;
     return `<tr><td>${c.fullName}</td><td>${c.phone}</td><td>${c.backupPhone||'—'}</td><td>${count}</td>
-    <td><button class="ghost" onclick="removeItem('customers','${c.id}')">Sil</button></td></tr>`;
+    <td><button class="ghost admin-only" onclick="removeItem('customers','${c.id}')">Sil</button></td></tr>`;
   }).join('') : `<tr><td colspan="5" class="empty">Henüz müşteri kaydı yok</td></tr>`;
 }
 
@@ -2846,7 +2847,7 @@ function renderAll(){
     <tr><td>${s.name}</td>
     <td style="color:${s.quantity<=s.minThreshold?'var(--red)':'var(--ink)'}">${s.quantity}</td>
     <td>${s.minThreshold}</td><td>₺${(parseFloat(s.unitCostTry)||0).toFixed(2)}${s.unitCostUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(s.unitCostUsd).toFixed(2)})</span>`:''}</td>
-    <td><button class="ghost admin-only" onclick="removeItem('stock','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz parça eklenmedi</td></tr>`;
+    <td><button class="ghost" onclick="removeItem('stock','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz parça eklenmedi</td></tr>`;
 
   // Suppliers table
   document.getElementById('supplierTable').innerHTML = suppliers.length ? suppliers.map(s=>`
@@ -2891,7 +2892,7 @@ function pill(status){
 }
 
 function switchView(name){
-  if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit')){
+  if(document.body.classList.contains('restricted-user') && name==='cashbox'){
     toast('Bu sayfayı görüntüleme yetkiniz yok');
     return;
   }
