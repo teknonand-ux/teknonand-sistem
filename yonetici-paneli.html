@@ -146,6 +146,9 @@
   .img-thumb button{position:absolute; top:2px; right:2px; width:18px; height:18px; border-radius:50%; background:rgba(23,24,28,.75); color:#fff; border:none; font-size:11px; line-height:1; cursor:pointer; padding:0;}
   .img-gallery{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
   .img-gallery img{width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid var(--line); cursor:pointer;}
+  .lightbox{display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:200; align-items:center; justify-content:center; padding:24px;}
+  .lightbox.show{display:flex;}
+  .lightbox img{max-width:100%; max-height:100%; border-radius:8px;}
   .admin-only{}
   body.restricted-user .admin-only{display:none !important;}
   .user-select{margin-top:14px; padding-top:14px; border-top:1px solid #333;}
@@ -771,6 +774,7 @@
   <div id="pl-imei" style="font-size:10px; color:#5A5C66; font-family:'JetBrains Mono',monospace;"></div>
 </div>
 <div id="printForm" class="form-preview"></div>
+<div class="lightbox" id="lightbox" onclick="closeLightbox()"><img src=""></div>
 
 <script>
 const API_BASE = 'https://backend-production-a04d.up.railway.app/api';
@@ -870,6 +874,15 @@ function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+function openLightbox(src){
+  const box = document.getElementById('lightbox');
+  box.querySelector('img').src = src;
+  box.classList.add('show');
+}
+function closeLightbox(){
+  document.getElementById('lightbox').classList.remove('show');
 }
 
 function revealField(key){
@@ -1451,7 +1464,7 @@ function renderDeviceDetail(){
           <div><span>Arıza Tespiti</span>${d.diagnosisText}</div>
           <div><span>Tahmini Fiyat</span>₺${d.estimatedPrice||0}</div>
         </div>
-        ${(d.diagnosisImages && d.diagnosisImages.length) ? `<div class="img-gallery">${d.diagnosisImages.map(src=>`<img src="${src}" onclick="window.open('${src}','_blank')">`).join('')}</div>` : ''}
+        ${(d.diagnosisImages && d.diagnosisImages.length) ? `<div class="img-gallery">${d.diagnosisImages.map(src=>`<img src="${src}" onclick="openLightbox('${src}')">`).join('')}</div>` : ''}
         <button class="ghost" style="margin-top:10px;" onclick="sendDiagnosisApprovalWhatsApp('${d.id}')">WhatsApp ile Onay İste</button>
       ` : `<p class="empty">Durum "Arıza Tespiti Bitti" olarak güncellendiğinde arıza tespiti ve tahmini fiyat burada görünür.</p>`}
       ${d.status === 'AWAITING_PARTS' ? `<button class="ghost" style="margin-top:10px;" onclick="sendAwaitingPartsWhatsApp('${d.id}')">WhatsApp ile "Parça Bekleniyor" Bildir</button>` : ''}
@@ -1463,7 +1476,7 @@ function renderDeviceDetail(){
         <div class="detail-meta" style="margin-bottom:10px;">
           <div><span>İade Sebebi</span>${d.returnReason}</div>
         </div>
-        ${(d.returnImages && d.returnImages.length) ? `<div class="img-gallery">${d.returnImages.map(src=>`<img src="${src}" onclick="window.open('${src}','_blank')">`).join('')}</div>` : ''}
+        ${(d.returnImages && d.returnImages.length) ? `<div class="img-gallery">${d.returnImages.map(src=>`<img src="${src}" onclick="openLightbox('${src}')">`).join('')}</div>` : ''}
       ` : `<p class="empty">Cihaz "İade Edildi" durumuna alındığında iade sebebi ve görseller burada görünür.</p>`}
     </div>
 
@@ -1471,7 +1484,7 @@ function renderDeviceDetail(){
       <h3>Teslim Notu ve Görseller</h3>
       ${d.deliveryNote || (d.deliveryImages && d.deliveryImages.length) ? `
         ${d.deliveryNote ? `<div style="font-size:13px; margin-bottom:8px;">${d.deliveryNote}</div>` : ''}
-        ${(d.deliveryImages && d.deliveryImages.length) ? `<div class="img-gallery">${d.deliveryImages.map(src=>`<img src="${src}" onclick="window.open('${src}','_blank')">`).join('')}</div>` : ''}
+        ${(d.deliveryImages && d.deliveryImages.length) ? `<div class="img-gallery">${d.deliveryImages.map(src=>`<img src="${src}" onclick="openLightbox('${src}')">`).join('')}</div>` : ''}
       ` : `<p class="empty">Cihaz teslim edilirken eklenen not ve görseller (varsa) burada görünür.</p>`}
     </div>
 
