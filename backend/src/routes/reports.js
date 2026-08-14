@@ -4,7 +4,7 @@ const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(requireAuth, requireEmployee, requireAdmin);
+router.use(requireAuth, requireEmployee);
 
 function dateRange(req) {
   const { from, to } = req.query;
@@ -13,6 +13,10 @@ function dateRange(req) {
   if (to) range.lte = new Date(to);
   return Object.keys(range).length ? range : undefined;
 }
+
+// Kasa ve Kâr/Zarar uç noktaları yönetici-özel — kısıtlı personel bu finansal verileri göremez
+router.use('/cashbox', requireAdmin);
+router.use('/profit', requireAdmin);
 
 // GET /api/reports/cashbox — gelir (ödemeler) + gider dökümü
 router.get('/cashbox', async (req, res, next) => {

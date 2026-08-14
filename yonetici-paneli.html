@@ -302,7 +302,7 @@
       <button data-view="label-design">Etiket Tasarımı</button>
       <button data-view="doc-design">Belge Tasarımı</button>
       <button data-view="cashbox" class="admin-only">Kasa</button>
-      <button data-view="profit">Kâr / Zarar</button>
+      <button data-view="profit" class="admin-only">Kâr / Zarar</button>
     </nav>
     <div class="user-badge" id="userBadge"></div>
     <div class="shared-note">Not: bu prototipteki veriler bu tarayıcıda/uygulamayı açan herkeste paylaşımlı olarak saklanır (demo amaçlı).</div>
@@ -2892,7 +2892,7 @@ function pill(status){
 }
 
 function switchView(name){
-  if(document.body.classList.contains('restricted-user') && name==='cashbox'){
+  if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit')){
     toast('Bu sayfayı görüntüleme yetkiniz yok');
     return;
   }
