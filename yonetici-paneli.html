@@ -217,13 +217,14 @@
   .form-preview .fp-signrow{display:flex; justify-content:space-between; margin-top:26px; font-size:11px; color:var(--ink-soft);}
 
   @media print{
-    body.printing-label *{visibility:hidden;}
-    body.printing-label #printLabel, body.printing-label #printLabel *{visibility:visible;}
-    body.printing-label #printLabel{display:flex; position:fixed; top:0; left:0; width:6cm; height:4cm;}
+    /* Yazdırma sırasında panelin tüm normal içeriğini DOM'dan tamamen kaldırıyoruz (sadece
+       gizlemek değil) — aksi halde panelin uzun (çok sayfalık) düzeni, sabit konumlu etiket/formun
+       her sayfada tekrar basılmasına (birden fazla kopya çıkmasına) neden oluyordu. */
+    body.printing-label > *{display:none !important;}
+    body.printing-label #printLabel{display:flex !important; position:static; margin:0; width:6cm; height:4cm;}
 
-    body.printing-form *{visibility:hidden;}
-    body.printing-form #printForm, body.printing-form #printForm *{visibility:visible;}
-    body.printing-form #printForm{display:block; position:absolute; top:0; left:0; width:100%; padding:14mm; box-sizing:border-box; border:none; background:#fff;}
+    body.printing-form > *{display:none !important;}
+    body.printing-form #printForm{display:block !important; position:static; width:100%; padding:14mm; box-sizing:border-box; border:none; background:#fff;}
   }
 
   /* Mobile responsive (Safari + Chrome) */
