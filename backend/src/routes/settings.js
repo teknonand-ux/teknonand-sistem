@@ -5,7 +5,7 @@ const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/au
 
 const router = express.Router();
 
-const ALLOWED_KEYS = ['exchangeRate', 'labelDesign', 'companyInfo'];
+const ALLOWED_KEYS = ['exchangeRate', 'labelDesign', 'companyInfo', 'companyLogo'];
 
 // GET /api/settings/:key — panel + gerektiğinde herkese açık şablonlar için de kullanılabilir
 router.get('/:key', requireAuth, requireEmployee, async (req, res, next) => {

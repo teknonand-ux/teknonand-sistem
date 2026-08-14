@@ -125,11 +125,18 @@ model Device {
 
   diagnosisText   String?
   estimatedPrice  Decimal? @db.Decimal(12, 2)
+  diagnosisImages Json     @default("[]") // base64 dataURL dizisi (en fazla 4)
   customerApproved Boolean @default(false)
   dealerApproved   Boolean @default(false)
   approvalNote     String?
   approvedAt       DateTime?
-  deliveryMethod   String?
+
+  returnReason  String?
+  returnImages  Json    @default("[]")
+
+  deliveryMethod String?
+  deliveryNote   String?
+  deliveryImages Json    @default("[]")
 
   receivedAt DateTime @default(now())
   createdAt  DateTime @default(now())
@@ -140,7 +147,6 @@ model Device {
   payments      Payment[]
   stockMovements StockMovement[]
   repair        Repair?
-  images        DeviceImage[]
   whatsappMessages WhatsappMessage[]
 
   @@index([status])
@@ -185,24 +191,19 @@ enum VatMode {
 }
 
 model DevicePart {
-  id          String   @id @default(uuid())
-  deviceId    String
-  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  stockItemId String?
-  stockItem   StockItem? @relation(fields: [stockItemId], references: [id])
-  name        String
-  price       Decimal  @db.Decimal(12, 2)
-  vatMode     VatMode  @default(DAHIL)
-  warranty    Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id             String   @id @default(uuid())
+  deviceId       String
+  device         Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  stockItemId    String?
+  stockItem      StockItem? @relation(fields: [stockItemId], references: [id])
+  name           String
+  price          Decimal  @db.Decimal(12, 2) // satış fiyatı
+  cost           Decimal  @default(0) @db.Decimal(12, 2) // maliyet (kâr/zarar hesaplamasında kullanılır)
+  vatMode        VatMode  @default(DAHIL)
+  warrantyMonths Int      @default(0) // 0 = garanti yok
+  createdAt      DateTime @default(now())
 
   @@map("device_parts")
-}
-
-enum PaymentMethod {
-  NAKIT
-  KART
-  HAVALE
 }
 
 enum PaymentType {
@@ -216,22 +217,12 @@ model Payment {
   deviceId String
   device   Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   amount   Decimal       @db.Decimal(12, 2)
-  method   PaymentMethod
-  type     PaymentType
+  method   String // Nakit / Banka Hesabı / Kredi Kartı / Sanal POS
+  type     PaymentType   @default(ARA_ODEME)
   paidAt   DateTime      @default(now())
   createdAt DateTime     @default(now())
 
   @@map("payments")
-}
-
-model DeviceImage {
-  id        String   @id @default(uuid())
-  deviceId  String
-  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  url       String // nesne depolama (ör. Cloudflare R2) üzerindeki URL
-  createdAt DateTime @default(now())
-
-  @@map("device_images")
 }
 
 // ---------------------------------------------------------------------------

@@ -42,8 +42,14 @@ router.post('/', requireAdmin, async (req, res, next) => {
 
 router.patch('/:id', requireAdmin, async (req, res, next) => {
   try {
-    const schema = z.object({ active: z.boolean().optional(), permission: z.enum(['ADMIN', 'RESTRICTED']).optional(), role: z.string().optional() });
-    const data = schema.parse(req.body);
+    const schema = z.object({
+      active: z.boolean().optional(),
+      permission: z.enum(['ADMIN', 'RESTRICTED']).optional(),
+      role: z.string().optional(),
+      password: z.string().min(4).optional(),
+    });
+    const { password, ...rest } = schema.parse(req.body);
+    const data = password ? { ...rest, passwordHash: await hashPassword(password) } : rest;
     const employee = await prisma.employee.update({ where: { id: req.params.id }, data });
     res.json(employee);
   } catch (e) {

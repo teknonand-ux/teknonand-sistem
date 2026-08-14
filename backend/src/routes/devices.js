@@ -44,7 +44,10 @@ router.get('/', async (req, res, next) => {
     const devices = await prisma.device.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: { customer: true, dealer: true, assignedEmployee: true, parts: true, payments: true },
+      include: {
+        customer: true, dealer: true, assignedEmployee: true, parts: true, payments: true,
+        statusHistory: { orderBy: { changedAt: 'desc' } },
+      },
     });
     res.json(devices);
   } catch (e) {
@@ -64,7 +67,6 @@ router.get('/:id', async (req, res, next) => {
         payments: true,
         statusHistory: { orderBy: { changedAt: 'desc' }, include: { changedByEmployee: true } },
         repair: true,
-        images: true,
       },
     });
     if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
@@ -179,24 +181,63 @@ router.patch('/:id/status', async (req, res, next) => {
         'IN_REPAIR', 'TESTING', 'READY', 'DELIVERED', 'RETURNED', 'CANCELLED',
       ]),
       note: z.string().optional(),
+      changedAt: z.string().datetime().optional(),
       diagnosisText: z.string().optional(),
       estimatedPrice: z.number().optional(),
+      diagnosisImages: z.array(z.string()).max(4).optional(),
+      returnReason: z.string().optional(),
+      returnImages: z.array(z.string()).max(4).optional(),
       deliveryMethod: z.string().optional(),
+      deliveryNote: z.string().optional(),
+      deliveryImages: z.array(z.string()).max(4).optional(),
+      imeiSerial: z.string().optional(), // cihaz kapalı kabul edilmişse teslimde girilir
     });
-    const { status, note, diagnosisText, estimatedPrice, deliveryMethod } = schema.parse(req.body);
+    const { status, note, changedAt, imeiSerial, ...fields } = schema.parse(req.body);
 
     const device = await prisma.device.update({
       where: { id: req.params.id },
-      data: { status, diagnosisText, estimatedPrice, deliveryMethod },
+      data: { status, ...fields, ...(imeiSerial ? { imeiSerial } : {}) },
       include: { customer: true },
     });
 
     await prisma.deviceStatusHistory.create({
-      data: { deviceId: device.id, status, note, changedByEmployeeId: req.user.sub },
+      data: {
+        deviceId: device.id, status, note, changedByEmployeeId: req.user.sub,
+        ...(changedAt ? { changedAt: new Date(changedAt) } : {}),
+      },
     });
 
     await sendStatusWhatsapp(device, device.customer, status);
 
+    res.json(device);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/devices/:id/notes — durumu değiştirmeden serbest metin not ekler
+router.post('/:id/notes', async (req, res, next) => {
+  try {
+    const { note } = z.object({ note: z.string().min(1) }).parse(req.body);
+    const device = await prisma.device.findUniqueOrThrow({ where: { id: req.params.id } });
+    const entry = await prisma.deviceStatusHistory.create({
+      data: { deviceId: device.id, status: device.status, note, changedByEmployeeId: req.user.sub },
+      include: { changedByEmployee: true },
+    });
+    res.status(201).json(entry);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// PATCH /api/devices/:id/assign — personel devri
+router.patch('/:id/assign', async (req, res, next) => {
+  try {
+    const { employeeId } = z.object({ employeeId: z.string().uuid() }).parse(req.body);
+    const device = await prisma.device.update({
+      where: { id: req.params.id },
+      data: { assignedEmployeeId: employeeId },
+    });
     res.json(device);
   } catch (e) {
     next(e);
@@ -210,8 +251,9 @@ router.post('/:id/parts', async (req, res, next) => {
       stockItemId: z.string().uuid().optional(),
       name: z.string().min(1),
       price: z.number().nonnegative(),
+      cost: z.number().nonnegative().default(0),
       vatMode: z.enum(['DAHIL', 'HARIC']).default('DAHIL'),
-      warranty: z.boolean().optional(),
+      warrantyMonths: z.number().int().nonnegative().default(0),
     });
     const input = schema.parse(req.body);
 
@@ -256,12 +298,21 @@ router.post('/:id/payments', async (req, res, next) => {
   try {
     const schema = z.object({
       amount: z.number().positive(),
-      method: z.enum(['NAKIT', 'KART', 'HAVALE']),
-      type: z.enum(['KAPORA', 'ARA_ODEME', 'FINAL']),
+      method: z.string().min(1),
+      type: z.enum(['KAPORA', 'ARA_ODEME', 'FINAL']).default('ARA_ODEME'),
     });
     const input = schema.parse(req.body);
     const payment = await prisma.payment.create({ data: { deviceId: req.params.id, ...input } });
     res.status(201).json(payment);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete('/:id/payments/:paymentId', async (req, res, next) => {
+  try {
+    await prisma.payment.delete({ where: { id: req.params.paymentId } });
+    res.status(204).end();
   } catch (e) {
     next(e);
   }

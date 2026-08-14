@@ -167,7 +167,7 @@
   .mini-list{max-height:260px; overflow-y:auto;}
 
   /* Login screen */
-  #loginScreen{display:none; min-height:100vh; align-items:center; justify-content:center; padding:24px;}
+  #loginScreen{display:flex; min-height:100vh; align-items:center; justify-content:center; padding:24px;}
   .login-card{max-width:340px; width:100%; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:28px;}
   .login-brand{display:flex; align-items:center; gap:10px; margin-bottom:22px;}
   .login-brand .brand-mark{width:34px; height:34px; border-radius:9px; background:var(--ink); display:flex; align-items:center; justify-content:center;}
@@ -175,7 +175,7 @@
   .login-brand-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:18px;}
   .login-hint{font-size:11.5px; color:var(--ink-soft); margin-top:14px; line-height:1.5;}
   .login-error{color:var(--red); font-size:12.5px; margin-top:8px; display:none;}
-  #app{display:flex;}
+  #app{display:none;}
   .user-badge{margin-top:14px; padding-top:14px; border-top:1px solid #333; font-size:12px; color:var(--paper);}
   .user-badge .u-name{font-weight:600;}
   .user-badge .u-role{color:#8B8D99; font-size:11px; margin-top:2px;}
@@ -645,7 +645,7 @@
           <div class="field"><label>Kullanıcı Adı</label><input id="e-username" placeholder="mehmet.demir" autocomplete="off"></div>
           <div class="field"><label>Şifre</label><input id="e-password" type="text" placeholder="şifre belirleyin" autocomplete="off"></div>
           <div class="field"><label>Yetki Seviyesi</label>
-            <select id="e-permission"><option value="admin">Yönetici</option><option value="restricted">Kısıtlı</option></select>
+            <select id="e-permission"><option value="ADMIN">Yönetici</option><option value="RESTRICTED">Kısıtlı</option></select>
           </div>
         </div>
         <button class="primary" onclick="addEmployee()">Personel Ekle</button>
@@ -758,15 +758,22 @@
 <div id="printForm" class="form-preview"></div>
 
 <script>
+const API_BASE = 'https://backend-production-a04d.up.railway.app/api';
+
 const STATUS_LABELS = {
-  diagnosing:'İnceleniyor', diagnosis_done:'Arıza Tespiti Bitti', approved:'Fiyat Onaylandı - Onarılıyor',
-  testing:'Test Ediliyor', delivered:'Teslim Edildi', returned:'İade Edildi'
+  RECEIVED:'Alındı', DIAGNOSING:'İnceleniyor', DIAGNOSIS_DONE:'Arıza Tespiti Bitti',
+  AWAITING_PARTS:'Parça Bekleniyor', APPROVED:'Fiyat Onaylandı - Onarılıyor', IN_REPAIR:'Tamir Ediliyor',
+  TESTING:'Test Ediliyor', READY:'Teslime Hazır', DELIVERED:'Teslim Edildi',
+  RETURNED:'İade Edildi', CANCELLED:'İptal Edildi'
 };
 const STATUS_COLORS = {
-  diagnosing:['#2F5EFF','#E9EEFF'], diagnosis_done:['#E8A33D','#FBF0DD'], approved:['#2F5EFF','#E9EEFF'],
-  testing:['#2F5EFF','#E9EEFF'], delivered:['#2E9E6D','#E4F3EC'], returned:['#C1442A','#FBEAE6']
+  RECEIVED:['#5A5C66','#EEEDE7'], DIAGNOSING:['#2F5EFF','#E9EEFF'], DIAGNOSIS_DONE:['#E8A33D','#FBF0DD'],
+  AWAITING_PARTS:['#E8A33D','#FBF0DD'], APPROVED:['#2F5EFF','#E9EEFF'], IN_REPAIR:['#2F5EFF','#E9EEFF'],
+  TESTING:['#2F5EFF','#E9EEFF'], READY:['#2E9E6D','#E4F3EC'], DELIVERED:['#2E9E6D','#E4F3EC'],
+  RETURNED:['#C1442A','#FBEAE6'], CANCELLED:['#C1442A','#FBEAE6']
 };
 
+let authToken = null;
 let devices = [];
 let stock = [];
 let suppliers = [];
@@ -800,15 +807,40 @@ const DEFAULT_COMPANY_INFO = {
 let companyInfo = JSON.parse(JSON.stringify(DEFAULT_COMPANY_INFO));
 let companyLogo = null; // dataURL veya null (null ise varsayılan logo.png kullanılır)
 
+window.addEventListener('unhandledrejection', (e)=>{
+  if(e.reason instanceof Error) toast(e.reason.message);
+});
+
+async function apiFetch(path, options = {}){
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? {Authorization: `Bearer ${authToken}`} : {}),
+      ...(options.headers || {})
+    }
+  });
+  if(res.status === 401){ doLogout(); throw new Error('Oturum süresi doldu'); }
+  if(!res.ok){
+    let msg = 'İşlem başarısız';
+    try{ msg = (await res.json()).error || msg; }catch(e){}
+    throw new Error(msg);
+  }
+  if(res.status === 204) return null;
+  return res.json();
+}
+
 async function loadAll(){
-  devices = await getList('devices');
-  stock = await getList('stock');
-  suppliers = await getList('suppliers');
-  appointments = await getList('appointments');
-  employees = await getList('employees');
-  dealers = await getList('dealers');
-  customers = await getList('customers');
-  expenses = await getList('expenses');
+  [devices, stock, suppliers, appointments, employees, dealers, customers, expenses] = await Promise.all([
+    apiFetch('/devices'),
+    apiFetch('/stock'),
+    apiFetch('/suppliers'),
+    apiFetch('/appointments'),
+    apiFetch('/employees'),
+    apiFetch('/dealers'),
+    apiFetch('/customers'),
+    apiFetch('/reports/cashbox').then(r => r.expenses),
+  ]);
   await loadExchangeRate();
   await loadLabelDesign();
   await loadCompanyDesign();
@@ -816,27 +848,11 @@ async function loadAll(){
   setDefaultReceivedTime();
   setDefaultApptTime();
 }
-async function getList(key){
-  try{
-    const r = await window.storage.get(key, true);
-    return r ? JSON.parse(r.value) : [];
-  }catch(e){ return []; }
-}
-async function saveList(key, list){
-  try{
-    await window.storage.set(key, JSON.stringify(list), true);
-  }catch(e){ toast('Kaydetme hatası'); }
-}
 
 function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 1800);
-}
-
-function genCode(){
-  const n = 300 + devices.length;
-  return `TKN-2026-${String(n).padStart(4,'0')}`;
 }
 
 function revealField(key){
@@ -852,14 +868,14 @@ function customerSuggest(field){
   const box = document.getElementById('f-'+field+'-suggest');
   let matches = [];
   if(field==='name' && nameVal.length>=2){
-    matches = customers.filter(c=>c.name.toLowerCase().includes(nameVal));
+    matches = customers.filter(c=>c.fullName.toLowerCase().includes(nameVal));
   } else if(field==='phone' && phoneVal.length>=3){
     matches = customers.filter(c=>normPhone(c.phone).includes(phoneVal));
   }
   if(!matches.length){ box.classList.remove('show'); box.innerHTML=''; return; }
   box.innerHTML = matches.slice(0,6).map(c=>`
     <div class="suggest-item" onclick='pickCustomer(${JSON.stringify(c.id)})'>
-      <div class="s-name">${c.name}</div><div class="s-sub">${c.phone}</div>
+      <div class="s-name">${c.fullName}</div><div class="s-sub">${c.phone}</div>
     </div>`).join('');
   box.classList.add('show');
 }
@@ -877,7 +893,7 @@ function onDealerPick(){
 function pickCustomer(id){
   const c = customers.find(x=>x.id===id);
   if(!c) return;
-  document.getElementById('f-name').value = c.name;
+  document.getElementById('f-name').value = c.fullName;
   document.getElementById('f-phone').value = c.phone;
   if(c.backupPhone){
     document.getElementById('wrap-backup-phone').style.display = 'block';
@@ -886,19 +902,16 @@ function pickCustomer(id){
   }
   document.getElementById('f-name-suggest').classList.remove('show');
   document.getElementById('f-phone-suggest').classList.remove('show');
-  toast(`Kayıtlı müşteri bulundu: ${c.name}`);
+  toast(`Kayıtlı müşteri bulundu: ${c.fullName}`);
 }
 
 async function upsertCustomer(name, phone, backupPhone){
-  let c = customers.find(x=> normPhone(x.phone) === normPhone(phone) && phone);
-  if(!c){
-    c = {id:'cus_'+Date.now(), name, phone, backupPhone: backupPhone||'', created_at:new Date().toISOString()};
-    customers.unshift(c);
-  } else {
-    c.name = name || c.name;
-    if(backupPhone) c.backupPhone = backupPhone;
-  }
-  await saveList('customers', customers);
+  const c = await apiFetch('/customers', {
+    method: 'POST',
+    body: JSON.stringify({ fullName: name, phone, backupPhone: backupPhone || undefined })
+  });
+  const idx = customers.findIndex(x=>x.id===c.id);
+  if(idx>=0) customers[idx] = c; else customers.unshift(c);
   return c.id;
 }
 
@@ -918,7 +931,7 @@ function renderCustomers(){
   if(!tbody) return;
   tbody.innerHTML = customers.length ? customers.map(c=>{
     const count = devices.filter(d=>d.customerId===c.id).length;
-    return `<tr><td>${c.name}</td><td>${c.phone}</td><td>${c.backupPhone||'—'}</td><td>${count}</td>
+    return `<tr><td>${c.fullName}</td><td>${c.phone}</td><td>${c.backupPhone||'—'}</td><td>${count}</td>
     <td><button class="ghost" onclick="removeItem('customers','${c.id}')">Sil</button></td></tr>`;
   }).join('') : `<tr><td colspan="5" class="empty">Henüz müşteri kaydı yok</td></tr>`;
 }
@@ -934,7 +947,7 @@ function csvEscape(val){
 function exportCustomers(){
   if(!customers.length){ toast('Aktarılacak müşteri kaydı yok'); return; }
   const header = ['Ad Soyad','Telefon','Yedek Telefon'];
-  const rows = customers.map(c => [c.name, c.phone, c.backupPhone||''].map(csvEscape).join(','));
+  const rows = customers.map(c => [c.fullName, c.phone, c.backupPhone||''].map(csvEscape).join(','));
   const csv = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
@@ -1009,12 +1022,12 @@ function exportDevices(){
   const rows = devices.map(d=>{
     const parts = d.parts || [];
     const total = parts.reduce((s,p)=>s+lineGross(p),0);
-    const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
-    const empName = d.assignedTo ? (employees.find(e=>e.id===d.assignedTo)?.name || '') : '';
-    const dealerName = d.dealerId ? (dealers.find(dl=>dl.id===d.dealerId)?.name || '') : '';
+    const paid = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+    const empName = d.assignedEmployee ? d.assignedEmployee.name : '';
+    const dealerName = d.dealer ? d.dealer.name : '';
     return [
-      d.code, new Date(d.created_at).toLocaleString('tr-TR'), d.model, d.imei||'',
-      d.customer, d.phone||'', d.backupPhone||'', d.devicePass||'', d.issue||'',
+      d.trackingCode, new Date(d.createdAt).toLocaleString('tr-TR'), d.model, d.imeiSerial||'',
+      d.customer.fullName, d.customer.phone||'', d.backupPhone||'', d.devicePassword||'', d.issueDescription||'',
       STATUS_LABELS[d.status]||d.status, empName, dealerName,
       total.toFixed(2), paid.toFixed(2)
     ].map(csvEscape).join(',');
@@ -1064,21 +1077,19 @@ async function importDevices(event){
     const imei = imeiIdx>-1 ? (cols[imeiIdx]||'').trim() : '';
     const devicePass = passIdx>-1 ? (cols[passIdx]||'').trim() : '';
     const issue = issueIdx>-1 ? (cols[issueIdx]||'').trim() : '';
+    if(!phone && !imei) continue;
 
-    const customerId = await upsertCustomer(name, phone, backupPhone);
-    const receivedAt = new Date().toISOString();
-    devices.unshift({
-      id: 'd_' + Date.now() + '_' + i,
-      code: genCode(),
-      customerId, dealerId: null,
-      customer: name, phone, model, imei, issue, backupPhone, devicePass,
-      status: 'diagnosing',
-      history: [{status:'diagnosing', note:'CSV içe aktarımıyla oluşturuldu', at: receivedAt}],
-      created_at: receivedAt
+    const device = await apiFetch('/devices', {
+      method: 'POST',
+      body: JSON.stringify({
+        customerName: name, customerPhone: phone || 'belirtilmedi', backupPhone: backupPhone || undefined,
+        model, imeiSerial: imei || undefined, devicePassword: devicePass || undefined,
+        issueDescription: issue || 'CSV içe aktarımıyla oluşturuldu', deviceOff: !imei
+      })
     });
+    devices.unshift(device);
     added++;
   }
-  await saveList('devices', devices);
   event.target.value = '';
   toast(`${added} cihaz içe aktarıldı`);
   renderAll();
@@ -1092,7 +1103,7 @@ function dealerSuggest(){
   if(!matches.length){ box.classList.remove('show'); box.innerHTML=''; return; }
   box.innerHTML = matches.slice(0,6).map(d=>`
     <div class="suggest-item" onclick='pickDealer(${JSON.stringify(d.id)})'>
-      <div class="s-name">${d.name}</div><div class="s-sub">${d.phone||'—'} · Bakiye ₺${d.balance.toFixed(2)}</div>
+      <div class="s-name">${d.name}</div><div class="s-sub">${d.phone||'—'} · Bakiye ₺${(parseFloat(d.balance)||0).toFixed(2)}</div>
     </div>`).join('');
   box.classList.add('show');
 }
@@ -1172,39 +1183,33 @@ async function createBulkDevices(){
   const receivedAtRaw = document.getElementById('bulk-received-at').value;
   const receivedAt = receivedAtRaw ? new Date(receivedAtRaw).toISOString() : new Date().toISOString();
 
-  const rows = Array.from(document.querySelectorAll('#bulk-rows tr'));
-  let created = 0;
-  for(const row of rows){
+  const rowEls = Array.from(document.querySelectorAll('#bulk-rows tr'));
+  const rows = [];
+  for(const row of rowEls){
     const model = row.querySelector('.bulk-model').value.trim();
     const imei = row.querySelector('.bulk-imei').value.trim();
     const issue = row.querySelector('.bulk-issue').value.trim();
     const devicePass = row.querySelector('.bulk-pass').value.trim();
-    const deviceWasOff = row.querySelector('.bulk-off').checked;
+    const deviceOff = row.querySelector('.bulk-off').checked;
     if(!model) continue;
-    if(!imei && !deviceWasOff){
+    if(!imei && !deviceOff){
       toast(`"${model}" satırında IMEI/Seri No eksik — girin ya da "cihaz kapalı" işaretleyin`);
       return;
     }
-
-    devices.unshift({
-      id: 'd_' + Date.now() + '_' + created,
-      code: genCode(),
-      customerId: null, dealerId: dealer.id,
-      customer: dealer.name, phone: dealer.phone||'', model, imei, issue, backupPhone:'', devicePass, deviceWasOff,
-      status: 'diagnosing',
-      history: [{status:'diagnosing', note: deviceWasOff ? `Bayi toplu kaydıyla oluşturuldu (${dealer.name}) — cihaz kapalı/açılmıyor, IMEI teslimde girilecek` : `Bayi toplu kaydıyla oluşturuldu (${dealer.name})`, at: receivedAt}],
-      created_at: receivedAt
-    });
-    created++;
+    rows.push({ model, imeiSerial: imei || undefined, issueDescription: issue || 'Bayi toplu kaydıyla oluşturuldu', devicePassword: devicePass || undefined, deviceOff });
   }
 
-  if(!created){ toast('En az bir satıra model girin'); return; }
+  if(!rows.length){ toast('En az bir satıra model girin'); return; }
 
-  await saveList('devices', devices);
+  const created = await apiFetch('/devices/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ dealerId, receivedAt, rows })
+  });
+  devices = [...created, ...devices];
   document.getElementById('bulk-rows').innerHTML = '';
   addBulkRow(); addBulkRow();
   document.getElementById('bulk-dealer').value = '';
-  toast(`${dealer.name} için ${created} cihaz kaydı oluşturuldu`);
+  toast(`${dealer.name} için ${created.length} cihaz kaydı oluşturuldu`);
   renderAll();
   switchView('devices');
 }
@@ -1219,23 +1224,20 @@ async function createDevice(){
   const devicePass = document.getElementById('f-device-pass').value.trim();
   const receivedAtRaw = document.getElementById('f-received-at').value;
   const dealerId = document.getElementById('f-dealer').value || null;
-  const deviceWasOff = document.getElementById('f-device-off').checked;
-  if(!name || !model){ toast('Müşteri adı ve model zorunlu'); return; }
-  if(!imei && !deviceWasOff){ toast('IMEI / Seri No zorunlu — cihaz açılmıyorsa kutucuğu işaretleyin'); return; }
+  const deviceOff = document.getElementById('f-device-off').checked;
+  if(!name || !phone || !model){ toast('Müşteri adı, telefon ve model zorunlu'); return; }
+  if(!imei && !deviceOff){ toast('IMEI / Seri No zorunlu — cihaz açılmıyorsa kutucuğu işaretleyin'); return; }
   const receivedAt = receivedAtRaw ? new Date(receivedAtRaw).toISOString() : new Date().toISOString();
-  const customerId = await upsertCustomer(name, phone, backupPhone);
 
-  const device = {
-    id: 'd_' + Date.now(),
-    code: genCode(),
-    customerId, dealerId,
-    customer: name, phone, model, imei, issue, backupPhone, devicePass, deviceWasOff,
-    status: 'diagnosing',
-    history: [{status:'diagnosing', note: deviceWasOff ? 'Cihaz kaydı alındı (cihaz kapalı/açılmıyor — IMEI teslimde girilecek), inceleme başladı' : 'Cihaz kaydı alındı, inceleme başladı', at: receivedAt}],
-    created_at: receivedAt
-  };
+  const device = await apiFetch('/devices', {
+    method: 'POST',
+    body: JSON.stringify({
+      customerName: name, customerPhone: phone, backupPhone: backupPhone || undefined,
+      dealerId, model, imeiSerial: imei || undefined, devicePassword: devicePass || undefined,
+      deviceOff, issueDescription: issue || 'Belirtilmedi', receivedAt
+    })
+  });
   devices.unshift(device);
-  await saveList('devices', devices);
   ['f-name','f-phone','f-model','f-imei','f-issue','f-backup-phone','f-device-pass'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-dealer').value = '';
   document.getElementById('f-device-off').checked = false;
@@ -1245,7 +1247,7 @@ async function createDevice(){
     document.getElementById('btn-'+key).style.display = 'inline-block';
   });
   setDefaultReceivedTime();
-  toast(`Kayıt oluşturuldu — takip kodu: ${device.code}`);
+  toast(`Kayıt oluşturuldu — takip kodu: ${device.trackingCode}`);
   renderAll();
   openDevice(device.id);
 }
@@ -1265,11 +1267,11 @@ function suggestWarranty(name){
 }
 function lineGross(p){
   const price = parseFloat(p.price) || 0;
-  return p.vat === 'haric' ? price * 1.2 : price;
+  return p.vatMode === 'HARIC' ? price * 1.2 : price;
 }
 function lineNet(p){
   const price = parseFloat(p.price) || 0;
-  return p.vat === 'haric' ? price : price / 1.2;
+  return p.vatMode === 'HARIC' ? price : price / 1.2;
 }
 
 function openDevice(id){
@@ -1291,8 +1293,8 @@ function onStockPick(){
   const item = stock.find(s=>s.id===stockId);
   if(!item) return;
   document.getElementById('ln-name').value = item.name;
-  document.getElementById('ln-price').value = item.cost;
-  document.getElementById('ln-cost').value = item.cost;
+  document.getElementById('ln-price').value = item.unitCostTry;
+  document.getElementById('ln-cost').value = item.unitCostTry;
   document.getElementById('ln-warranty').value = suggestWarranty(item.name);
 }
 
@@ -1302,17 +1304,20 @@ async function addLine(){
   const name = document.getElementById('ln-name').value.trim();
   const price = parseFloat(document.getElementById('ln-price').value);
   const cost = parseFloat(document.getElementById('ln-cost').value) || 0;
-  const vat = document.getElementById('ln-vat').value;
-  const warranty = parseInt(document.getElementById('ln-warranty').value);
+  const vatMode = document.getElementById('ln-vat').value;
+  const warrantyMonths = parseInt(document.getElementById('ln-warranty').value) || 0;
   if(!name || isNaN(price)){ toast('Parça/işlem adı ve fiyat girin'); return; }
 
+  const part = await apiFetch(`/devices/${d.id}/parts`, {
+    method: 'POST',
+    body: JSON.stringify({ stockItemId: stockId || undefined, name, price, cost, vatMode, warrantyMonths })
+  });
   if(!d.parts) d.parts = [];
-  d.parts.push({name, price, cost, vat, warranty, source: stockId ? 'stok' : 'manuel', stockId: stockId || null});
-  await saveList('devices', devices);
+  d.parts.push(part);
 
   if(stockId){
     const item = stock.find(s=>s.id===stockId);
-    if(item && item.qty > 0){ item.qty -= 1; await saveList('stock', stock); }
+    if(item) item.quantity -= 1;
   }
   ['ln-name','ln-price','ln-cost'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ln-stock').value = '';
@@ -1320,10 +1325,10 @@ async function addLine(){
   renderDeviceDetail();
 }
 
-async function removePart(idx){
+async function removePart(partId){
   const d = devices.find(x=>x.id===currentDeviceId);
-  d.parts.splice(idx, 1);
-  await saveList('devices', devices);
+  await apiFetch(`/devices/${d.id}/parts/${partId}`, { method: 'DELETE' });
+  d.parts = d.parts.filter(p=>p.id!==partId);
   renderDeviceDetail();
 }
 
@@ -1332,9 +1337,9 @@ async function addNote(){
   const textEl = document.getElementById('note-text');
   const text = textEl.value.trim();
   if(!text) return;
-  if(!d.notes) d.notes = [];
-  d.notes.push({text, at: new Date().toISOString()});
-  await saveList('devices', devices);
+  const entry = await apiFetch(`/devices/${d.id}/notes`, { method: 'POST', body: JSON.stringify({ note: text }) });
+  if(!d.statusHistory) d.statusHistory = [];
+  d.statusHistory.unshift(entry);
   textEl.value = '';
   renderDeviceDetail();
 }
@@ -1353,29 +1358,29 @@ function renderDeviceDetail(){
     <div class="detail-head">
       <div>
         <div class="detail-title">${d.model}</div>
-        <div class="detail-code">${d.code}</div>
+        <div class="detail-code">${d.trackingCode}</div>
       </div>
       ${pill(d.status)}
     </div>
 
     <div class="card">
       <div class="detail-meta">
-        <div><span>Müşteri</span>${d.customer}</div>
-        <div><span>Telefon</span>${d.phone || '—'}</div>
+        <div><span>Müşteri</span>${d.customer.fullName}</div>
+        <div><span>Telefon</span>${d.customer.phone || '—'}</div>
         <div><span>Yedek Telefon</span>${d.backupPhone || '—'}</div>
-        <div><span>Cihaz Şifresi</span>${d.devicePass || '—'}</div>
-        <div><span>IMEI / Seri No</span>${d.imei || '—'}</div>
-        <div><span>Arıza</span>${d.issue || '—'}</div>
-        <div><span>Kabul Tarihi</span>${new Date(d.created_at).toLocaleString('tr-TR')}</div>
+        <div><span>Cihaz Şifresi</span>${d.devicePassword || '—'}</div>
+        <div><span>IMEI / Seri No</span>${d.imeiSerial || '—'}</div>
+        <div><span>Arıza</span>${d.issueDescription || '—'}</div>
+        <div><span>Kabul Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
       </div>
     </div>
 
     <div class="card">
       <h3>Durum Geçmişi</h3>
-      ${(d.history||[]).slice().reverse().map(h=>`
+      ${(d.statusHistory||[]).map(h=>`
         <div class="note-item">
           ${pill(h.status)} ${h.note ? '— '+h.note : ''}
-          <div class="note-time">${new Date(h.at).toLocaleString('tr-TR')}</div>
+          <div class="note-time">${new Date(h.changedAt).toLocaleString('tr-TR')}</div>
         </div>`).join('')}
       <div class="form-grid" style="margin-top:12px;">
         <div class="field"><label>Yeni Durum</label>
@@ -1404,7 +1409,7 @@ function renderDeviceDetail(){
         <div class="field"><label>Teslim Şekli</label>
           <select id="st-delivery-method"><option value="Elden Teslim">Elden Teslim</option><option value="Kargo ile Teslim">Kargo ile Teslim</option></select>
         </div>
-        ${!d.imei ? `
+        ${!d.imeiSerial ? `
         <div class="field">
           <label>IMEI / Seri No (Teslim için zorunlu)</label>
           <input id="st-delivery-imei" placeholder="Cihazın IMEI/Seri numarasını girin">
@@ -1456,14 +1461,14 @@ function renderDeviceDetail(){
       <table class="line-table">
         <thead><tr><th>Parça / İşlem</th><th>Kaynak</th><th>KDV</th><th>Garanti</th><th>Fiyat</th><th></th></tr></thead>
         <tbody>
-          ${parts.length ? parts.map((p,i)=>`
+          ${parts.length ? parts.map((p)=>`
             <tr>
               <td>${p.name}</td>
-              <td>${p.source==='stok' ? 'Stok' : 'Manuel'}</td>
-              <td><span class="badge vat">%20 KDV ${p.vat==='haric'?'Hariç':'Dahil'}</span></td>
-              <td><span class="badge ${p.warranty>0?'warranty':'no-warranty'}">${WARRANTY_LABELS[p.warranty]}</span></td>
+              <td>${p.stockItemId ? 'Stok' : 'Manuel'}</td>
+              <td><span class="badge vat">%20 KDV ${p.vatMode==='HARIC'?'Hariç':'Dahil'}</span></td>
+              <td><span class="badge ${p.warrantyMonths>0?'warranty':'no-warranty'}">${WARRANTY_LABELS[p.warrantyMonths]}</span></td>
               <td class="code">₺${lineGross(p).toFixed(2)}</td>
-              <td><button class="ghost" onclick="removePart(${i})">Sil</button></td>
+              <td><button class="ghost" onclick="removePart('${p.id}')">Sil</button></td>
             </tr>`).join('') : `<tr><td colspan="6" class="empty">Henüz parça/işlem eklenmedi</td></tr>`}
         </tbody>
       </table>
@@ -1472,14 +1477,14 @@ function renderDeviceDetail(){
         <div class="field"><label>Stoktan Seç</label>
           <select id="ln-stock" onchange="onStockPick()">
             <option value="">— Manuel giriş —</option>
-            ${stock.map(s=>`<option value="${s.id}">${s.name} (${s.qty} adet)</option>`).join('')}
+            ${stock.map(s=>`<option value="${s.id}">${s.name} (${s.quantity} adet)</option>`).join('')}
           </select>
         </div>
         <div class="field"><label>Parça / İşlem Adı</label><input id="ln-name" placeholder="Ekran değişimi" oninput="onPartNameInput()"></div>
         <div class="field"><label>Satış Fiyatı (₺)</label><input id="ln-price" type="number" placeholder="1200"></div>
         <div class="field"><label>Maliyet (₺)</label><input id="ln-cost" type="number" placeholder="850"></div>
         <div class="field"><label>KDV</label>
-          <select id="ln-vat"><option value="dahil">%20 Dahil</option><option value="haric">%20 Hariç</option></select>
+          <select id="ln-vat"><option value="DAHIL">%20 Dahil</option><option value="HARIC">%20 Hariç</option></select>
         </div>
         <div class="field"><label>Garanti</label>
           <select id="ln-warranty">${WARRANTY_OPTIONS.map(m=>`<option value="${m}">${WARRANTY_LABELS[m]}</option>`).join('')}</select>
@@ -1526,13 +1531,8 @@ function renderDeviceDetail(){
     <div class="card">
       <h3>Personel Devri</h3>
       <div class="detail-meta" style="margin-bottom:10px;">
-        <div><span>Şu An Atanan</span>${d.assignedTo ? (employees.find(e=>e.id===d.assignedTo)?.name || '—') : 'Atanmadı'}</div>
+        <div><span>Şu An Atanan</span>${d.assignedEmployee ? d.assignedEmployee.name : 'Atanmadı'}</div>
       </div>
-      ${(d.assignments||[]).length ? `
-      <div class="dealer-tx">
-        ${d.assignments.slice().reverse().map(a=>`
-          <div class="dealer-tx-line"><span>${a.name}</span><span>${new Date(a.at).toLocaleString('tr-TR')}</span></div>`).join('')}
-      </div>` : ''}
       <div class="form-grid" style="margin-top:12px;">
         <div class="field"><label>Personel Seç</label>
           <select id="assign-employee">
@@ -1546,8 +1546,8 @@ function renderDeviceDetail(){
 
     <div class="card">
       <h3>Ödeme / Tahsilat</h3>
-      ${(d.payments||[]).length ? (d.payments.map((p,i)=>`
-        <div class="pay-row"><span class="pay-method">${p.method}</span><span>₺${p.amount.toFixed(2)} · ${new Date(p.at).toLocaleString('tr-TR')} <button class="ghost" style="padding:3px 8px; margin-left:6px;" onclick="removePayment(${i})">Sil</button></span></div>`).join('')) : `<p class="empty">Henüz tahsilat girilmedi</p>`}
+      ${(d.payments||[]).length ? (d.payments.map((p)=>`
+        <div class="pay-row"><span class="pay-method">${p.method}</span><span>₺${(parseFloat(p.amount)||0).toFixed(2)} · ${new Date(p.paidAt).toLocaleString('tr-TR')} <button class="ghost" style="padding:3px 8px; margin-left:6px;" onclick="removePayment('${p.id}')">Sil</button></span></div>`).join('')) : `<p class="empty">Henüz tahsilat girilmedi</p>`}
       <div class="pay-add">
         <div class="field"><label>Yöntem</label>
           <select id="pay-method"><option>Nakit</option><option>Banka Hesabı</option><option>Kredi Kartı</option><option>Sanal POS</option></select>
@@ -1558,14 +1558,14 @@ function renderDeviceDetail(){
       </div>
       <div class="owed-line">
         Cihaz Toplamı: <b>₺${grossTotal.toFixed(2)}</b> &nbsp;·&nbsp;
-        Tahsil Edilen: <b>₺${(d.payments||[]).reduce((s,p)=>s+p.amount,0).toFixed(2)}</b> &nbsp;·&nbsp;
-        Kalan: <b>₺${(grossTotal - (d.payments||[]).reduce((s,p)=>s+p.amount,0)).toFixed(2)}</b>
+        Tahsil Edilen: <b>₺${(d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0).toFixed(2)}</b> &nbsp;·&nbsp;
+        Kalan: <b>₺${(grossTotal - (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0)).toFixed(2)}</b>
       </div>
     </div>
 
     <div class="card">
       <h3>Cihaz Teslim Formu</h3>
-      ${d.status === 'delivered' ? `
+      ${d.status === 'DELIVERED' ? `
         <div class="form-preview" id="deliveryFormPreview">${buildDeliveryFormHTML(d)}</div>
         <div style="display:flex; gap:8px; margin-top:14px;">
           <button class="primary" style="margin-top:0;" onclick="printDeliveryForm('${d.id}')">Formu Yazdır</button>
@@ -1595,12 +1595,12 @@ function renderDeviceDetail(){
 
   document.getElementById('pay-datetime').value = toLocalInputValue(new Date());
 
-  document.getElementById('lbl-name').value = d.customer;
-  document.getElementById('lbl-phone').value = d.phone || '';
-  document.getElementById('lbl-issue').value = d.issue || '';
-  document.getElementById('lbl-pass').value = d.devicePass || '';
-  document.getElementById('lbl-imei').value = d.imei || '';
-  document.getElementById('lbl-code').value = d.code;
+  document.getElementById('lbl-name').value = d.customer.fullName;
+  document.getElementById('lbl-phone').value = d.customer.phone || '';
+  document.getElementById('lbl-issue').value = d.issueDescription || '';
+  document.getElementById('lbl-pass').value = d.devicePassword || '';
+  document.getElementById('lbl-imei').value = d.imeiSerial || '';
+  document.getElementById('lbl-code').value = d.trackingCode;
   updateLabelPreview();
 }
 
@@ -1648,27 +1648,27 @@ function setPrintPage(size, margin){
 function buildDeliveryFormHTML(d){
   const parts = d.parts || [];
   const total = parts.reduce((s,p)=>s+lineGross(p),0);
-  const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+  const paid = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
   const remaining = total - paid;
-  const deliveredEntry = (d.history||[]).slice().reverse().find(h=>h.status==='delivered');
-  const deliveredAt = deliveredEntry ? new Date(deliveredEntry.at).toLocaleString('tr-TR') : '—';
+  const deliveredEntry = (d.statusHistory||[]).find(h=>h.status==='DELIVERED');
+  const deliveredAt = deliveredEntry ? new Date(deliveredEntry.changedAt).toLocaleString('tr-TR') : '—';
 
   return `
     ${buildCompanyHeaderHTML()}
     <h4>Cihaz Teslim Formu</h4>
-    <div class="fp-sub">Kayıt No: ${d.code} · Teslim Tarihi: ${deliveredAt}</div>
+    <div class="fp-sub">Kayıt No: ${d.trackingCode} · Teslim Tarihi: ${deliveredAt}</div>
     <div class="detail-meta">
-      <div><span>Müşteri</span>${d.customer}</div>
-      <div><span>Telefon</span>${d.phone || '—'}</div>
+      <div><span>Müşteri</span>${d.customer.fullName}</div>
+      <div><span>Telefon</span>${d.customer.phone || '—'}</div>
       <div><span>Cihaz</span>${d.model}</div>
-      <div><span>IMEI / Seri No</span>${d.imei || '—'}</div>
+      <div><span>IMEI / Seri No</span>${d.imeiSerial || '—'}</div>
     </div>
-    <div style="margin-top:8px;"><span style="color:var(--ink-soft); font-size:11.5px;">Arıza</span><br>${d.issue || '—'}</div>
+    <div style="margin-top:8px;"><span style="color:var(--ink-soft); font-size:11.5px;">Arıza</span><br>${d.issueDescription || '—'}</div>
     <table class="line-table">
       <thead><tr><th>Yapılan İşlem</th><th>Garanti</th><th>Fiyat</th></tr></thead>
       <tbody>
         ${parts.length ? parts.map(p=>`
-          <tr><td>${p.name}</td><td>${WARRANTY_LABELS[p.warranty]}</td><td>₺${lineGross(p).toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Kayıtlı işlem yok</td></tr>`}
+          <tr><td>${p.name}</td><td>${WARRANTY_LABELS[p.warrantyMonths]}</td><td>₺${lineGross(p).toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Kayıtlı işlem yok</td></tr>`}
       </tbody>
     </table>
     <div class="fp-total">Toplam: ₺${total.toFixed(2)} &nbsp;·&nbsp; Ödenen: ₺${paid.toFixed(2)} &nbsp;·&nbsp; Kalan: ₺${remaining.toFixed(2)}</div>
@@ -1699,21 +1699,21 @@ function sendDeliveryFormWhatsApp(id){
   if(!d) return;
   const parts = d.parts || [];
   const total = parts.reduce((s,p)=>s+lineGross(p),0);
-  const paid = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+  const paid = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
   const remaining = total - paid;
-  const deliveredEntry = (d.history||[]).slice().reverse().find(h=>h.status==='delivered');
-  const deliveredAt = deliveredEntry ? new Date(deliveredEntry.at).toLocaleString('tr-TR') : '—';
+  const deliveredEntry = (d.statusHistory||[]).find(h=>h.status==='DELIVERED');
+  const deliveredAt = deliveredEntry ? new Date(deliveredEntry.changedAt).toLocaleString('tr-TR') : '—';
 
   const lines = [
     `Teknonand — Cihaz Teslim Formu`,
-    `Kayıt No: ${d.code}`,
-    `Müşteri: ${d.customer}`,
+    `Kayıt No: ${d.trackingCode}`,
+    `Müşteri: ${d.customer.fullName}`,
     `Cihaz: ${d.model}`,
     `Teslim Tarihi: ${deliveredAt}`,
     `Teslim Şekli: ${d.deliveryMethod || 'Elden Teslim'}`,
     ``,
     `Yapılan İşlemler:`,
-    ...(parts.length ? parts.map(p=>`- ${p.name}: ₺${lineGross(p).toFixed(2)} (Garanti: ${WARRANTY_LABELS[p.warranty]})`) : ['- Kayıtlı işlem yok']),
+    ...(parts.length ? parts.map(p=>`- ${p.name}: ₺${lineGross(p).toFixed(2)} (Garanti: ${WARRANTY_LABELS[p.warrantyMonths]})`) : ['- Kayıtlı işlem yok']),
     ``,
     `Toplam: ₺${total.toFixed(2)}`,
     `Ödenen: ₺${paid.toFixed(2)}`,
@@ -1722,7 +1722,7 @@ function sendDeliveryFormWhatsApp(id){
     `Bizi tercih ettiğiniz için teşekkür ederiz!`
   ];
   const text = encodeURIComponent(lines.join('\n'));
-  const number = toWhatsAppNumber(d.phone);
+  const number = toWhatsAppNumber(d.customer.phone);
   window.open(`https://wa.me/${number}?text=${text}`, '_blank');
 }
 
@@ -1731,8 +1731,8 @@ function sendDiagnosisApprovalWhatsApp(id){
   if(!d) return;
   const lines = [
     `Teknonand — Arıza Tespiti ve Fiyat Onayı`,
-    `Kayıt No: ${d.code}`,
-    `Sayın ${d.customer},`,
+    `Kayıt No: ${d.trackingCode}`,
+    `Sayın ${d.customer.fullName},`,
     `Cihazınız (${d.model}) için yapılan inceleme sonucunda tespit edilen arıza:`,
     d.diagnosisText || '—',
     ``,
@@ -1741,7 +1741,7 @@ function sendDiagnosisApprovalWhatsApp(id){
     `Bu fiyat ve işlemi onaylıyorsanız lütfen bu mesaja "ONAYLIYORUM" yazarak dönüş yapabilir misiniz? Onayınızı aldıktan sonra cihazınızın onarımına başlayacağız.`
   ];
   const text = encodeURIComponent(lines.join('\n'));
-  const number = toWhatsAppNumber(d.phone);
+  const number = toWhatsAppNumber(d.customer.phone);
   window.open(`https://wa.me/${number}?text=${text}`, '_blank');
 }
 
@@ -1752,8 +1752,8 @@ function sendNetPriceWhatsApp(id){
   const total = parts.reduce((s,p)=>s+lineGross(p),0);
   const lines = [
     `Teknonand — Net Fiyat Bilgisi`,
-    `Kayıt No: ${d.code}`,
-    `Sayın ${d.customer},`,
+    `Kayıt No: ${d.trackingCode}`,
+    `Sayın ${d.customer.fullName},`,
     `Cihazınız (${d.model}) için yapılan işlemler ve net tutar aşağıdadır:`,
     ``,
     ...(parts.length ? parts.map(p=>`- ${p.name}: ₺${lineGross(p).toFixed(2)}`) : ['- Kayıtlı işlem yok']),
@@ -1763,19 +1763,19 @@ function sendNetPriceWhatsApp(id){
     `Cihazınız test aşamasını tamamladığında teslimat için sizinle iletişime geçeceğiz.`
   ];
   const text = encodeURIComponent(lines.join('\n'));
-  const number = toWhatsAppNumber(d.phone);
+  const number = toWhatsAppNumber(d.customer.phone);
   window.open(`https://wa.me/${number}?text=${text}`, '_blank');
 }
 
 function printDeviceLabel(id){
   const d = devices.find(x=>x.id===id);
   if(!d) return;
-  document.getElementById('pl-name').textContent = d.customer || '';
-  document.getElementById('pl-phone').textContent = d.phone ? '· ' + d.phone : '';
-  document.getElementById('pl-issue').textContent = d.issue ? 'Arıza: ' + d.issue : '';
-  document.getElementById('pl-pass').textContent = d.devicePass ? 'Şifre: ' + d.devicePass : '';
-  document.getElementById('pl-imei').textContent = d.imei ? 'IMEI: ' + d.imei : '';
-  document.getElementById('pl-code').textContent = d.code;
+  document.getElementById('pl-name').textContent = d.customer.fullName || '';
+  document.getElementById('pl-phone').textContent = d.customer.phone ? '· ' + d.customer.phone : '';
+  document.getElementById('pl-issue').textContent = d.issueDescription ? 'Arıza: ' + d.issueDescription : '';
+  document.getElementById('pl-pass').textContent = d.devicePassword ? 'Şifre: ' + d.devicePassword : '';
+  document.getElementById('pl-imei').textContent = d.imeiSerial ? 'IMEI: ' + d.imeiSerial : '';
+  document.getElementById('pl-code').textContent = d.trackingCode;
   applyLabelSettings('pl');
   const printBox = document.getElementById('printLabel');
   printBox.style.width = labelSettings.widthCm + 'cm';
@@ -1799,9 +1799,9 @@ function printLabel(){
 
 function onStatusFieldChange(){
   const status = document.getElementById('st-status').value;
-  document.getElementById('st-diagnosis-fields').style.display = status === 'diagnosis_done' ? 'block' : 'none';
-  document.getElementById('st-return-fields').style.display = status === 'returned' ? 'block' : 'none';
-  document.getElementById('st-delivery-fields').style.display = status === 'delivered' ? 'block' : 'none';
+  document.getElementById('st-diagnosis-fields').style.display = status === 'DIAGNOSIS_DONE' ? 'block' : 'none';
+  document.getElementById('st-return-fields').style.display = status === 'RETURNED' ? 'block' : 'none';
+  document.getElementById('st-delivery-fields').style.display = status === 'DELIVERED' ? 'block' : 'none';
 }
 
 let tempImages = {diagnosis:[], return:[], delivery:[]};
@@ -1858,45 +1858,48 @@ async function addStatusEntry(){
   const status = document.getElementById('st-status').value;
   const whenRaw = document.getElementById('st-datetime').value;
   let note = document.getElementById('st-note').value.trim();
-  const at = whenRaw ? new Date(whenRaw).toISOString() : new Date().toISOString();
+  const changedAt = whenRaw ? new Date(whenRaw).toISOString() : new Date().toISOString();
+  const payload = { status, note: note || undefined, changedAt };
+  let newImeiSerial = null;
 
-  if(status === 'diagnosis_done'){
+  if(status === 'DIAGNOSIS_DONE'){
     const diagnosisText = document.getElementById('st-diagnosis-text').value.trim();
     const estimatedPrice = parseFloat(document.getElementById('st-estimated-price').value) || 0;
-    d.diagnosisText = diagnosisText;
-    d.estimatedPrice = estimatedPrice;
-    d.diagnosisImages = tempImages.diagnosis.slice(0,4);
-    note = note || `Arıza tespiti: ${diagnosisText} — Tahmini fiyat: ₺${estimatedPrice}`;
+    payload.diagnosisText = diagnosisText;
+    payload.estimatedPrice = estimatedPrice;
+    payload.diagnosisImages = tempImages.diagnosis.slice(0,4);
+    payload.note = note || `Arıza tespiti: ${diagnosisText} — Tahmini fiyat: ₺${estimatedPrice}`;
   }
-  if(status === 'returned'){
+  if(status === 'RETURNED'){
     const returnReason = document.getElementById('st-return-reason').value.trim();
-    d.returnReason = returnReason;
-    d.returnImages = tempImages.return.slice(0,4);
-    note = note || `İade sebebi: ${returnReason}`;
+    payload.returnReason = returnReason;
+    payload.returnImages = tempImages.return.slice(0,4);
+    payload.note = note || `İade sebebi: ${returnReason}`;
   }
-  if(status === 'delivered'){
-    if(!d.imei){
+  if(status === 'DELIVERED'){
+    if(!d.imeiSerial){
       const imeiInput = document.getElementById('st-delivery-imei');
       const enteredImei = imeiInput ? imeiInput.value.trim() : '';
       if(!enteredImei){
         toast('Teslim etmeden önce IMEI / Seri No girilmelidir');
         return;
       }
-      d.imei = enteredImei;
+      newImeiSerial = enteredImei;
     }
     const deliveryMethod = document.getElementById('st-delivery-method').value;
     const deliveryNote = document.getElementById('st-delivery-note').value.trim();
-    d.deliveryMethod = deliveryMethod;
-    d.deliveryNote = deliveryNote;
-    d.deliveryImages = tempImages.delivery.slice(0,4);
-    note = note || deliveryMethod;
+    payload.deliveryMethod = deliveryMethod;
+    payload.deliveryNote = deliveryNote;
+    payload.deliveryImages = tempImages.delivery.slice(0,4);
+    payload.note = note || deliveryMethod;
+    if(newImeiSerial) payload.imeiSerial = newImeiSerial;
   }
 
-  d.status = status;
-  if(!d.history) d.history = [];
-  d.history.push({status, note, at});
-  await saveList('devices', devices);
-  toast(status==='delivered' ? `${d.code} teslim edildi — teslim formu hazır` : `${d.code} → ${STATUS_LABELS[status]} (WhatsApp bildirimi tetiklenir)`);
+  const updated = await apiFetch(`/devices/${d.id}/status`, { method: 'PATCH', body: JSON.stringify(payload) });
+  Object.assign(d, updated);
+  const entry = await apiFetch(`/devices/${d.id}`);
+  d.statusHistory = entry.statusHistory;
+  toast(status==='DELIVERED' ? `${d.trackingCode} teslim edildi — teslim formu hazır` : `${d.trackingCode} → ${STATUS_LABELS[status]} (WhatsApp bildirimi tetiklenir)`);
   renderDeviceDetail();
 }
 
@@ -1905,11 +1908,10 @@ async function assignDevice(){
   const empId = document.getElementById('assign-employee').value;
   if(!empId){ toast('Personel seçin'); return; }
   const emp = employees.find(e=>e.id===empId);
-  d.assignedTo = empId;
-  if(!d.assignments) d.assignments = [];
-  d.assignments.push({employeeId: empId, name: emp.name, at: new Date().toISOString()});
-  await saveList('devices', devices);
-  toast(`${d.code} → ${emp.name}'a devredildi`);
+  await apiFetch(`/devices/${d.id}/assign`, { method: 'PATCH', body: JSON.stringify({ employeeId: empId }) });
+  d.assignedEmployeeId = empId;
+  d.assignedEmployee = emp;
+  toast(`${d.trackingCode} → ${emp.name}'a devredildi`);
   renderDeviceDetail();
 }
 
@@ -1917,35 +1919,39 @@ async function addPayment(){
   const d = devices.find(x=>x.id===currentDeviceId);
   const method = document.getElementById('pay-method').value;
   const amount = parseFloat(document.getElementById('pay-amount').value);
-  const whenRaw = document.getElementById('pay-datetime').value;
   if(isNaN(amount) || amount<=0){ toast('Geçerli bir tutar girin'); return; }
-  const at = whenRaw ? new Date(whenRaw).toISOString() : new Date().toISOString();
+  const payment = await apiFetch(`/devices/${d.id}/payments`, {
+    method: 'POST',
+    body: JSON.stringify({ method, amount })
+  });
   if(!d.payments) d.payments = [];
-  d.payments.push({method, amount, at});
-  await saveList('devices', devices);
+  d.payments.push(payment);
   document.getElementById('pay-amount').value = '';
   toast(`₺${amount.toFixed(2)} ${method} tahsilatı kaydedildi`);
   renderDeviceDetail();
 }
 
-async function removePayment(idx){
+async function removePayment(paymentId){
   const d = devices.find(x=>x.id===currentDeviceId);
-  d.payments.splice(idx, 1);
-  await saveList('devices', devices);
+  await apiFetch(`/devices/${d.id}/payments/${paymentId}`, { method: 'DELETE' });
+  d.payments = d.payments.filter(p=>p.id!==paymentId);
   toast('Tahsilat silindi');
   renderDeviceDetail();
 }
 
 async function addEmployee(){
   const name = document.getElementById('e-name').value.trim();
-  const role = document.getElementById('e-role').value.trim();
+  const role = document.getElementById('e-role').value.trim() || 'Personel';
   const username = document.getElementById('e-username').value.trim().toLowerCase();
   const password = document.getElementById('e-password').value;
   const permission = document.getElementById('e-permission').value;
   if(!name || !username || !password){ toast('Ad soyad, kullanıcı adı ve şifre gerekli'); return; }
   if(employees.some(e=>e.username===username)){ toast('Bu kullanıcı adı zaten kullanılıyor'); return; }
-  employees.unshift({id:'emp_'+Date.now(), name, role, username, password, permission});
-  await saveList('employees', employees);
+  const emp = await apiFetch('/employees', {
+    method: 'POST',
+    body: JSON.stringify({ name, role, username, password, permission })
+  });
+  employees.unshift(emp);
   ['e-name','e-role','e-username','e-password'].forEach(id=>document.getElementById(id).value='');
   toast('Personel eklendi');
   renderEmployees();
@@ -1956,8 +1962,7 @@ async function resetEmployeePassword(id){
   if(!emp) return;
   const newPass = prompt(`${emp.name} için yeni şifre girin:`);
   if(!newPass) return;
-  emp.password = newPass;
-  await saveList('employees', employees);
+  await apiFetch(`/employees/${id}`, { method: 'PATCH', body: JSON.stringify({ password: newPass }) });
   toast('Şifre güncellendi');
 }
 
@@ -1966,50 +1971,72 @@ function renderEmployees(){
   if(!tbody) return;
   tbody.innerHTML = employees.length ? employees.map(e=>`
     <tr><td>${e.name}</td><td class="code">${e.username||'—'}</td><td>${e.role||'—'}</td>
-    <td>${e.permission==='restricted' ? '<span class="pill" style="color:var(--amber); background:#FBF0DD;">Kısıtlı</span>' : '<span class="pill" style="color:var(--green); background:#E4F3EC;">Yönetici</span>'}</td>
+    <td>${e.permission==='RESTRICTED' ? '<span class="pill" style="color:var(--amber); background:#FBF0DD;">Kısıtlı</span>' : '<span class="pill" style="color:var(--green); background:#E4F3EC;">Yönetici</span>'}</td>
     <td><button class="ghost" onclick="resetEmployeePassword('${e.id}')">Şifre Değiştir</button> <button class="ghost" onclick="removeItem('employees','${e.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz personel eklenmedi</td></tr>`;
 }
 
-function doLogin(){
+async function doLogin(){
   const username = document.getElementById('login-username').value.trim().toLowerCase();
   const password = document.getElementById('login-password').value;
   const errorEl = document.getElementById('loginError');
-
-  if(username === 'yonetici' && password === 'teknonand'){
-    startSession(null, 'İşletme Sahibi', 'admin', 'Yönetici');
-    return;
+  try{
+    const res = await fetch(`${API_BASE}/auth/employee-login`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ username, password })
+    });
+    if(!res.ok){ errorEl.style.display = 'block'; return; }
+    const data = await res.json();
+    authToken = data.token;
+    localStorage.setItem('teknonand_admin_token', authToken);
+    localStorage.setItem('teknonand_admin_user', JSON.stringify(data.user));
+    errorEl.style.display = 'none';
+    await startSession(data.user);
+  }catch(e){
+    errorEl.textContent = 'Bağlantı hatası, lütfen tekrar deneyin.';
+    errorEl.style.display = 'block';
   }
-  const emp = employees.find(e=> (e.username||'').toLowerCase() === username && e.password === password);
-  if(emp){
-    startSession(emp.id, emp.name, emp.permission, emp.role || (emp.permission==='restricted'?'Kısıtlı':'Yönetici'));
-    return;
-  }
-  errorEl.style.display = 'block';
 }
 
-function startSession(userId, name, permission, roleLabel){
-  currentUserId = userId;
-  currentUserName = name;
-  currentUserPermission = permission;
-  document.body.classList.toggle('restricted-user', permission==='restricted');
+async function startSession(user){
+  currentUserId = user.id;
+  currentUserName = user.name;
+  currentUserPermission = user.permission;
+  document.body.classList.toggle('restricted-user', user.permission==='RESTRICTED');
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('userBadge').innerHTML = `
-    <div class="u-name">${name}</div>
-    <div class="u-role">${permission==='restricted'?'Kısıtlı Yetki':'Yönetici'} · ${roleLabel}</div>
+    <div class="u-name">${user.name}</div>
+    <div class="u-role">${user.permission==='RESTRICTED'?'Kısıtlı Yetki':'Yönetici'} · ${user.role||''}</div>
     <button onclick="doLogout()">Çıkış Yap</button>
   `;
   document.getElementById('login-username').value = '';
   document.getElementById('login-password').value = '';
   document.getElementById('loginError').style.display = 'none';
+  await loadAll();
   switchView('dashboard');
 }
 
 function doLogout(){
   currentUserId = null; currentUserName = null; currentUserPermission = null;
+  authToken = null;
+  localStorage.removeItem('teknonand_admin_token');
   document.body.classList.remove('restricted-user');
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
+}
+
+async function tryResumeSession(){
+  const saved = localStorage.getItem('teknonand_admin_token');
+  const savedUser = JSON.parse(localStorage.getItem('teknonand_admin_user') || 'null');
+  if(!saved || !savedUser) return;
+  authToken = saved;
+  try{
+    await apiFetch('/employees'); // token geçerliliğini doğrula
+    await startSession(savedUser);
+  }catch(e){
+    doLogout();
+  }
 }
 
 async function addDealer(){
@@ -2025,25 +2052,30 @@ async function addDealer(){
     openDealer(existing.id);
     return;
   }
-  if(username && dealers.some(d=>d.username===username)){ toast('Bu kullanıcı adı zaten kullanılıyor'); return; }
-  dealers.unshift({id:'dl_'+Date.now(), name, phone, username, password, balance:0, transactions:[]});
-  await saveList('dealers', dealers);
+  if(!username || !password){ toast('Bayi portalı için kullanıcı adı ve şifre gerekli'); return; }
+  const dealer = await apiFetch('/dealers', {
+    method: 'POST',
+    body: JSON.stringify({ name, phone: phone || undefined, username, password })
+  });
+  dealers.unshift(dealer);
   ['dl-name','dl-phone','dl-username','dl-password'].forEach(id=>document.getElementById(id).value='');
   toast('Bayi eklendi');
   renderDealers();
 }
 
 async function addDealerTx(id){
-  const dealer = dealers.find(x=>x.id===id);
   const amount = parseFloat(document.getElementById('dtx-amount-'+id).value);
   const type = document.getElementById('dtx-type-'+id).value;
   if(isNaN(amount) || amount<=0){ toast('Geçerli bir tutar girin'); return; }
-  if(!dealer.transactions) dealer.transactions = [];
-  dealer.transactions.push({type, amount, at:new Date().toISOString()});
-  dealer.balance += (type === 'veresiye' ? amount : -amount);
-  await saveList('dealers', dealers);
-  toast(type==='veresiye' ? 'Veresiye satış eklendi' : 'Tahsilat kaydedildi');
+  const dealer = await apiFetch(`/dealers/${id}/transactions`, {
+    method: 'POST',
+    body: JSON.stringify({ type, amount })
+  });
+  const idx = dealers.findIndex(d=>d.id===id);
+  if(idx>=0) dealers[idx] = { ...dealers[idx], balance: dealer.balance };
+  toast(type==='VERESIYE_SATIS' ? 'Veresiye satış eklendi' : 'Tahsilat kaydedildi');
   renderDealers();
+  if(currentDealerId===id) renderDealerDetail();
 }
 
 function renderDealers(){
@@ -2056,7 +2088,7 @@ function renderDealers(){
           <div class="dealer-name">${dl.name}</div>
           <div class="dealer-phone">${dl.phone || '—'}</div>
         </div>
-        <div class="dealer-balance ${dl.balance>0?'owes':'clear'}">₺${dl.balance.toFixed(2)}</div>
+        <div class="dealer-balance ${parseFloat(dl.balance)>0?'owes':'clear'}">₺${(parseFloat(dl.balance)||0).toFixed(2)}</div>
       </div>
     </div>`).join('') : `<p class="empty">Henüz bayi eklenmedi</p>`;
 
@@ -2098,7 +2130,7 @@ function renderDealerDeviceList(){
   let list = devices.filter(d=>d.dealerId===currentDealerId);
   if(query){
     list = list.filter(d=>{
-      if(dealerSearchMode==='imei') return (d.imei||'').toLowerCase().includes(query);
+      if(dealerSearchMode==='imei') return (d.imeiSerial||'').toLowerCase().includes(query);
       if(dealerSearchMode==='model') return (d.model||'').toLowerCase().includes(query);
       return true;
     });
@@ -2107,7 +2139,7 @@ function renderDealerDeviceList(){
     const total = (d.parts||[]).reduce((s,p)=>s+lineGross(p),0);
     return `
     <tr class="row-click" onclick="openDevice('${d.id}')">
-      <td class="code">${d.code}</td><td>${d.model}</td><td>${d.customer}</td><td>${pill(d.status)}</td>
+      <td class="code">${d.trackingCode}</td><td>${d.model}</td><td>${d.customer.fullName}</td><td>${pill(d.status)}</td>
       <td class="code">₺${total.toFixed(2)}</td>
     </tr>`;
   }).join('') : `<tr><td colspan="5" class="empty">${query?'Eşleşen cihaz bulunamadı':'Bu bayiye bağlı cihaz yok'}</td></tr>`;
@@ -2123,21 +2155,21 @@ function generateDealerReport(){
   const from = new Date(fromRaw);
   const to = new Date(toRaw); to.setHours(23,59,59,999);
 
-  const list = devices.filter(d=> d.dealerId===currentDealerId && new Date(d.created_at) >= from && new Date(d.created_at) <= to);
+  const list = devices.filter(d=> d.dealerId===currentDealerId && new Date(d.createdAt) >= from && new Date(d.createdAt) <= to);
   let total = 0;
   const rows = list.map(d=>{
     const parts = d.parts || [];
     const partNames = parts.map(p=>p.name).join(', ') || '—';
     const price = parts.reduce((s,p)=>s+lineGross(p),0);
     total += price;
-    const deliveredEntry = (d.history||[]).find(h=>h.status==='delivered');
+    const deliveredEntry = (d.statusHistory||[]).find(h=>h.status==='DELIVERED');
     return `<tr>
-      <td>${new Date(d.created_at).toLocaleDateString('tr-TR')}</td>
+      <td>${new Date(d.createdAt).toLocaleDateString('tr-TR')}</td>
       <td>${d.model}</td>
-      <td>${d.issue||'—'}</td>
+      <td>${d.issueDescription||'—'}</td>
       <td>${partNames}</td>
       <td class="code">₺${price.toFixed(2)}</td>
-      <td>${deliveredEntry ? new Date(deliveredEntry.at).toLocaleDateString('tr-TR') : '—'}</td>
+      <td>${deliveredEntry ? new Date(deliveredEntry.changedAt).toLocaleDateString('tr-TR') : '—'}</td>
     </tr>`;
   }).join('');
 
@@ -2182,7 +2214,8 @@ function renderDealerDetail(){
   const box = document.getElementById('dealerDetailContent');
   if(!dl){ box.innerHTML = '<p class="empty">Bayi bulunamadı</p>'; return; }
   const txs = dl.transactions || [];
-  const cashIn = txs.filter(t=>t.type==='tahsilat').reduce((s,t)=>s+t.amount,0);
+  const balance = parseFloat(dl.balance) || 0;
+  const cashIn = txs.filter(t=>t.type==='TAHSILAT').reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 
   box.innerHTML = `
     <div class="detail-head">
@@ -2193,7 +2226,7 @@ function renderDealerDetail(){
     </div>
 
     <div class="stat-grid">
-      <div class="stat"><div class="num" style="color:${dl.balance>0?'var(--red)':'var(--green)'}">₺${dl.balance.toFixed(2)}</div><div class="lbl">Veresiye Bakiyesi</div></div>
+      <div class="stat"><div class="num" style="color:${balance>0?'var(--red)':'var(--green)'}">₺${balance.toFixed(2)}</div><div class="lbl">Veresiye Bakiyesi</div></div>
       <div class="stat"><div class="num">₺${cashIn.toFixed(2)}</div><div class="lbl">Kasaya Giren (Bu Bayiden)</div></div>
       <div class="stat"><div class="num">${devices.filter(d=>d.dealerId===dl.id).length}</div><div class="lbl">Bağlı Cihaz</div></div>
     </div>
@@ -2212,14 +2245,14 @@ function renderDealerDetail(){
     <div class="card">
       <h3>Veresiye / Tahsilat Hareketi Ekle</h3>
       ${txs.length ? `<div class="dealer-tx mini-list">${txs.slice().reverse().map(t=>`
-        <div class="dealer-tx-line"><span>${t.type==='veresiye'?'Veresiye Satış':'Tahsilat'}</span><span>₺${t.amount.toFixed(2)} · ${new Date(t.at).toLocaleDateString('tr-TR')}</span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
+        <div class="dealer-tx-line"><span>${t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat'}</span><span>₺${(parseFloat(t.amount)||0).toFixed(2)} · ${new Date(t.createdAt).toLocaleDateString('tr-TR')}</span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
       <div class="dealer-form" style="margin-top:12px;">
         <div class="field"><label>Tür</label>
-          <select id="dtx-type-${dl.id}"><option value="veresiye">Veresiye Satış</option><option value="tahsilat">Tahsilat</option></select>
+          <select id="dtx-type-${dl.id}"><option value="VERESIYE_SATIS">Veresiye Satış</option><option value="TAHSILAT">Tahsilat</option></select>
         </div>
         <div class="field"><label>Tutar (₺)</label><input id="dtx-amount-${dl.id}" type="number" placeholder="500"></div>
         <div class="field"><label>&nbsp;</label><button class="ghost" onclick="removeItem('dealers','${dl.id}'); switchView('dealers');" style="width:100%;">Bayiyi Sil</button></div>
-        <button class="primary" style="margin-top:0;" onclick="addDealerTx('${dl.id}'); renderDealerDetail();">Ekle</button>
+        <button class="primary" style="margin-top:0;" onclick="addDealerTx('${dl.id}')">Ekle</button>
       </div>
     </div>
 
@@ -2252,8 +2285,7 @@ async function resetDealerPassword(id){
   if(!dl) return;
   const newPass = prompt(`${dl.name} bayi portalı için yeni şifre girin:`);
   if(!newPass) return;
-  dl.password = newPass;
-  await saveList('dealers', dealers);
+  await apiFetch(`/dealers/${id}`, { method: 'PATCH', body: JSON.stringify({ password: newPass }) });
   toast('Şifre güncellendi');
 }
 
@@ -2265,10 +2297,10 @@ function sendDealerBalanceWhatsApp(id){
     `Teknonand — Bayi Hesap Bildirimi`,
     `Sayın ${dl.name},`,
     ``,
-    `Güncel Veresiye Bakiyeniz: ₺${dl.balance.toFixed(2)}`,
+    `Güncel Veresiye Bakiyeniz: ₺${(parseFloat(dl.balance)||0).toFixed(2)}`,
     ``,
     `Son Hareketler:`,
-    ...(txs.length ? txs.map(t=>`- ${t.type==='veresiye'?'Veresiye Satış':'Tahsilat'}: ₺${t.amount.toFixed(2)} (${new Date(t.at).toLocaleDateString('tr-TR')})`) : ['- Hareket yok']),
+    ...(txs.length ? txs.map(t=>`- ${t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat'}: ₺${(parseFloat(t.amount)||0).toFixed(2)} (${new Date(t.createdAt).toLocaleDateString('tr-TR')})`) : ['- Hareket yok']),
     ``,
     `Bilgilerinize sunarız.`
   ];
@@ -2280,10 +2312,10 @@ function sendDealerBalanceWhatsApp(id){
 function allPayments(){
   const list = [];
   devices.forEach(d=>{
-    (d.payments||[]).forEach(p=>list.push({at:p.at, source:`${d.code} · ${d.customer}`, method:p.method, amount:p.amount}));
+    (d.payments||[]).forEach(p=>list.push({at:p.paidAt, source:`${d.trackingCode} · ${d.customer.fullName}`, method:p.method, amount:parseFloat(p.amount)||0}));
   });
   dealers.forEach(dl=>{
-    (dl.transactions||[]).filter(t=>t.type==='tahsilat').forEach(t=>list.push({at:t.at, source:`Bayi: ${dl.name}`, method:'Bayi Tahsilatı', amount:t.amount}));
+    (dl.transactions||[]).filter(t=>t.type==='TAHSILAT').forEach(t=>list.push({at:t.createdAt, source:`Bayi: ${dl.name}`, method:'Bayi Tahsilatı', amount:parseFloat(t.amount)||0}));
   });
   return list.sort((a,b)=> new Date(b.at) - new Date(a.at));
 }
@@ -2295,17 +2327,20 @@ function onExpenseCategoryChange(){
 
 async function addExpense(){
   const category = document.getElementById('ex-category').value;
-  const supplierId = document.getElementById('ex-supplier').value || null;
+  const supplierId = document.getElementById('ex-supplier').value || undefined;
   const amount = parseFloat(document.getElementById('ex-amount').value);
   const method = document.getElementById('ex-method').value;
   const description = document.getElementById('ex-desc').value.trim();
   if(isNaN(amount) || amount<=0){ toast('Geçerli bir tutar girin'); return; }
-  const supplier = supplierId ? suppliers.find(s=>s.id===supplierId) : null;
-  expenses.unshift({
-    id:'ex_'+Date.now(), category, supplierId, supplierName: supplier?supplier.name:null,
-    amount, method, description, at:new Date().toISOString()
+  const expense = await apiFetch('/reports/cashbox/expense', {
+    method: 'POST',
+    body: JSON.stringify({ category, supplierId, amount, method, description: description || undefined })
   });
-  await saveList('expenses', expenses);
+  expenses.unshift(expense);
+  if(supplierId){
+    const s = suppliers.find(x=>x.id===supplierId);
+    if(s) s.currentBalance = (parseFloat(s.currentBalance)||0) - amount;
+  }
   document.getElementById('ex-amount').value=''; document.getElementById('ex-desc').value='';
   toast('Gider kaydedildi');
   renderCashbox();
@@ -2330,7 +2365,7 @@ function renderCashbox(){
   const byMethod = {};
   all.forEach(p=>{ byMethod[p.method] = (byMethod[p.method]||0) + p.amount; });
 
-  const totalExpense = expenses.reduce((s,e)=>s+e.amount,0);
+  const totalExpense = expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
   const net = income - totalExpense;
 
   grid.innerHTML = `
@@ -2347,8 +2382,8 @@ function renderCashbox(){
     <tr><td>${new Date(p.at).toLocaleString('tr-TR')}</td><td>${p.source}</td><td>${p.method}</td><td class="code">₺${p.amount.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz tahsilat yok</td></tr>`;
 
   exTbody.innerHTML = expenses.length ? expenses.map(e=>`
-    <tr><td>${new Date(e.at).toLocaleString('tr-TR')}</td><td>${e.category}${e.supplierName?` · ${e.supplierName}`:''}</td>
-    <td>${e.description||'—'}</td><td>${e.method}</td><td class="code">₺${e.amount.toFixed(2)}</td>
+    <tr><td>${new Date(e.createdAt).toLocaleString('tr-TR')}</td><td>${e.category}${e.supplier?` · ${e.supplier.name}`:''}</td>
+    <td>${e.description||'—'}</td><td>${e.method}</td><td class="code">₺${(parseFloat(e.amount)||0).toFixed(2)}</td>
     <td><button class="ghost" onclick="removeItem('expenses','${e.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="6" class="empty">Henüz gider kaydı yok</td></tr>`;
 
   renderExpenseSupplierSelect();
@@ -2365,14 +2400,13 @@ function renderProfit(){
   const deviceRows = [];
 
   devices.forEach(d=>{
-    const revenue = (d.payments||[]).reduce((s,p)=>s+p.amount,0);
+    const revenue = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
     const cost = (d.parts||[]).reduce((s,p)=>s+(parseFloat(p.cost)||0),0);
     totalRevenue += revenue; totalCost += cost;
-    if(revenue>0 || cost>0) deviceRows.push({code:d.code, revenue, cost, profit:revenue-cost});
+    if(revenue>0 || cost>0) deviceRows.push({code:d.trackingCode, revenue, cost, profit:revenue-cost});
 
-    if(d.assignedTo){
-      const emp = employees.find(e=>e.id===d.assignedTo);
-      const key = emp ? emp.name : 'Bilinmiyor';
+    if(d.assignedEmployee){
+      const key = d.assignedEmployee.name;
       if(!empStats[key]) empStats[key] = {count:0, revenue:0};
       empStats[key].count += 1;
       empStats[key].revenue += revenue;
@@ -2396,14 +2430,17 @@ function renderProfit(){
 
 async function addStock(){
   const name = document.getElementById('s-name').value.trim();
-  const qty = parseInt(document.getElementById('s-qty').value) || 0;
-  const min = parseInt(document.getElementById('s-min').value) || 0;
+  const quantity = parseInt(document.getElementById('s-qty').value) || 0;
+  const minThreshold = parseInt(document.getElementById('s-min').value) || 0;
   const costTry = parseFloat(document.getElementById('s-cost-try').value) || 0;
   const costUsd = parseFloat(document.getElementById('s-cost-usd').value) || 0;
   if(!name){ toast('Parça adı gerekli'); return; }
-  const cost = costTry > 0 ? costTry : (costUsd * exchangeRate);
-  stock.unshift({id:'s_'+Date.now(), name, qty, min, cost, costUsd, fxRate: exchangeRate});
-  await saveList('stock', stock);
+  const unitCostTry = costTry > 0 ? costTry : (costUsd * exchangeRate);
+  const item = await apiFetch('/stock', {
+    method: 'POST',
+    body: JSON.stringify({ name, quantity, minThreshold, unitCostTry, unitCostUsd: costUsd || undefined })
+  });
+  stock.unshift(item);
   ['s-name','s-qty','s-min','s-cost-try','s-cost-usd'].forEach(id=>document.getElementById(id).value='');
   toast('Parça eklendi');
   renderAll();
@@ -2420,9 +2457,9 @@ function syncCostFromUsd(){
 
 async function loadExchangeRate(){
   try{
-    const r = await window.storage.get('exchangeRate', true);
-    if(r){ const data = JSON.parse(r.value); exchangeRate = data.rate; }
-  }catch(e){ /* no saved rate yet, keep default */ }
+    const data = await apiFetch('/settings/exchangeRate');
+    if(data && data.rate) exchangeRate = data.rate;
+  }catch(e){ /* henüz kaydedilmiş kur yok, varsayılan kalır */ }
   const fxInput = document.getElementById('fx-rate');
   if(fxInput) fxInput.value = exchangeRate;
 }
@@ -2432,15 +2469,15 @@ async function saveExchangeRate(){
   if(isNaN(val) || val<=0){ toast('Geçerli bir kur girin'); return; }
   exchangeRate = val;
   try{
-    await window.storage.set('exchangeRate', JSON.stringify({rate: val, updatedAt: new Date().toISOString()}), true);
+    await apiFetch('/settings/exchangeRate', { method: 'PUT', body: JSON.stringify({ rate: val, updatedAt: new Date().toISOString() }) });
     toast(`Kur güncellendi: ₺${val}`);
   }catch(e){ toast('Kur kaydedilemedi'); }
 }
 
 async function loadLabelDesign(){
   try{
-    const r = await window.storage.get('labelSettings', true);
-    if(r) labelSettings = JSON.parse(r.value);
+    const data = await apiFetch('/settings/labelDesign');
+    if(data) labelSettings = data;
   }catch(e){ /* saved design yok, varsayılan kullanılır */ }
   populateLabelDesignForm();
 }
@@ -2477,14 +2514,14 @@ function renderDesignPreview(){
 }
 
 async function saveLabelDesign(){
-  await saveList('labelSettings', labelSettings);
+  await apiFetch('/settings/labelDesign', { method: 'PUT', body: JSON.stringify(labelSettings) });
   toast('Etiket tasarımı kaydedildi');
 }
 
 async function resetLabelDesign(){
   labelSettings = JSON.parse(JSON.stringify(DEFAULT_LABEL_SETTINGS));
   populateLabelDesignForm();
-  await saveList('labelSettings', labelSettings);
+  await apiFetch('/settings/labelDesign', { method: 'PUT', body: JSON.stringify(labelSettings) });
   toast('Etiket tasarımı varsayılana sıfırlandı');
 }
 
@@ -2500,12 +2537,12 @@ function applyLabelSettings(prefix){
 
 async function loadCompanyDesign(){
   try{
-    const r = await window.storage.get('companyInfo', true);
-    if(r) companyInfo = JSON.parse(r.value);
+    const data = await apiFetch('/settings/companyInfo');
+    if(data) companyInfo = data;
   }catch(e){}
   try{
-    const r2 = await window.storage.get('companyLogo', true);
-    if(r2) companyLogo = r2.value;
+    const logo = await apiFetch('/settings/companyLogo');
+    if(logo) companyLogo = logo;
   }catch(e){}
   populateDocDesignForm();
 }
@@ -2579,10 +2616,9 @@ async function saveDocDesign(){
     email: document.getElementById('doc-company-email').value.trim(),
     tax: document.getElementById('doc-company-tax').value.trim()
   };
-  await saveList('companyInfo', companyInfo);
+  await apiFetch('/settings/companyInfo', { method: 'PUT', body: JSON.stringify(companyInfo) });
   try{
-    if(companyLogo) await window.storage.set('companyLogo', companyLogo, true);
-    else await window.storage.delete('companyLogo', true);
+    await apiFetch('/settings/companyLogo', { method: 'PUT', body: JSON.stringify(companyLogo || null) });
   }catch(e){}
   toast('Belge bilgileri kaydedildi');
 }
@@ -2591,8 +2627,11 @@ async function addSupplier(){
   const name = document.getElementById('sup-name').value.trim();
   const phone = document.getElementById('sup-phone').value.trim();
   if(!name){ toast('Toptancı adı gerekli'); return; }
-  suppliers.unshift({id:'sup_'+Date.now(), name, phone, balance:0});
-  await saveList('suppliers', suppliers);
+  const supplier = await apiFetch('/suppliers', {
+    method: 'POST',
+    body: JSON.stringify({ name, phone: phone || undefined })
+  });
+  suppliers.unshift(supplier);
   document.getElementById('sup-name').value=''; document.getElementById('sup-phone').value='';
   toast('Toptancı eklendi');
   renderAll();
@@ -2605,31 +2644,21 @@ async function createAppointment(){
   const service = document.getElementById('a-service').value.trim();
   if(!name || !phone || !whenRaw){ toast('Ad, telefon ve tarih/saat zorunlu'); return; }
   const when = new Date(whenRaw);
-  const whenStr = when.toLocaleString('tr-TR', {dateStyle:'long', timeStyle:'short'});
 
-  const customerMsg = `Sayın ${name}, ${whenStr} tarihinde Teknonand'da randevunuz oluşturuldu.${service ? ' Hizmet: '+service+'.' : ''} Bekliyoruz!`;
-  const shopMsg = `Yeni randevu: ${name} (${phone}) — ${whenStr}.${service ? ' Not: '+service : ''}`;
-
-  const appt = {
-    id: 'a_' + Date.now(),
-    customerName: name, phone, datetime: when.toISOString(), service,
-    created_at: new Date().toISOString(),
-    notifications: [
-      {to:'Müşteri', text: customerMsg},
-      {to:'İşletme (Siz)', text: shopMsg}
-    ]
-  };
+  const appt = await apiFetch('/appointments/panel', {
+    method: 'POST',
+    body: JSON.stringify({ customerName: name, phone, datetime: when.toISOString(), service: service || undefined })
+  });
   appointments.push(appt);
-  await saveList('appointments', appointments);
   ['a-name','a-phone','a-service'].forEach(id=>document.getElementById(id).value='');
   setDefaultApptTime();
-  toast('Randevu oluşturuldu — WhatsApp bildirimleri gönderildi (simülasyon)');
+  toast('Randevu oluşturuldu');
   renderAppointments();
 }
 
 async function deleteAppointment(id){
+  await apiFetch(`/appointments/${id}`, { method: 'DELETE' });
   appointments = appointments.filter(a=>a.id!==id);
-  await saveList('appointments', appointments);
   renderAppointments();
 }
 
@@ -2647,7 +2676,7 @@ function renderAppointments(){
     <div class="appt-item">
       <div class="appt-top">
         <div>
-          <div class="appt-name">${a.customerName} <span style="color:var(--ink-soft); font-weight:400;">· ${a.phone}</span> ${a.source==='website' ? '<span class="badge vat" style="margin-left:4px;">Web Sitesi</span>' : ''} ${upcoming ? '<span class="badge warranty" style="margin-left:4px;">Yaklaşıyor</span>' : ''}</div>
+          <div class="appt-name">${a.customerName} <span style="color:var(--ink-soft); font-weight:400;">· ${a.phone}</span> ${a.source==='WEBSITE' ? '<span class="badge vat" style="margin-left:4px;">Web Sitesi</span>' : ''} ${upcoming ? '<span class="badge warranty" style="margin-left:4px;">Yaklaşıyor</span>' : ''}</div>
           <div class="appt-when">${when.toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})} ${past?'(geçti)':''}</div>
           ${a.service ? `<div class="appt-service">${a.service}</div>` : ''}
         </div>
@@ -2656,9 +2685,6 @@ function renderAppointments(){
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
         <button class="ghost" onclick="sendAppointmentConfirmationWhatsApp('${a.id}')">WhatsApp ile Onay Gönder</button>
         <button class="ghost" onclick="sendAppointmentReminderWhatsApp('${a.id}')">Hatırlatma Gönder</button>
-      </div>
-      <div class="wa-preview">
-        ${a.notifications.map(n=>`<div class="wa-bubble"><span class="wa-to">${n.to} — WhatsApp</span>${n.text}</div>`).join('')}
       </div>
     </div>`;
   }).join('') : `<p class="empty">Henüz randevu yok</p>`;
@@ -2738,8 +2764,8 @@ async function deleteSelectedDevices(){
   if(!selectedDeviceIds.size) return;
   const count = selectedDeviceIds.size;
   if(!confirm(`${count} cihaz kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return;
+  await Promise.all(Array.from(selectedDeviceIds).map(id => apiFetch(`/devices/${id}`, { method: 'DELETE' })));
   devices = devices.filter(d => !selectedDeviceIds.has(d.id));
-  await saveList('devices', devices);
   selectedDeviceIds.clear();
   toast(`${count} cihaz kaydı silindi`);
   renderAll();
@@ -2760,9 +2786,9 @@ function renderDeviceTable(){
   let list = devices;
   if(query){
     list = devices.filter(d=>{
-      if(deviceSearchMode==='imei') return (d.imei||'').toLowerCase().includes(query);
-      if(deviceSearchMode==='phone') return normPhone(d.phone).includes(normPhone(query)) || normPhone(d.backupPhone).includes(normPhone(query));
-      if(deviceSearchMode==='name') return (d.customer||'').toLowerCase().includes(query);
+      if(deviceSearchMode==='imei') return (d.imeiSerial||'').toLowerCase().includes(query);
+      if(deviceSearchMode==='phone') return normPhone(d.customer.phone).includes(normPhone(query)) || normPhone(d.backupPhone).includes(normPhone(query));
+      if(deviceSearchMode==='name') return (d.customer.fullName||'').toLowerCase().includes(query);
       if(deviceSearchMode==='model') return (d.model||'').toLowerCase().includes(query);
       return true;
     });
@@ -2774,12 +2800,12 @@ function renderDeviceTable(){
     return `
     <tr class="row-click" onclick="openDevice('${d.id}')">
       <td onclick="event.stopPropagation()"><input type="checkbox" class="device-row-check" data-id="${d.id}" ${selectedDeviceIds.has(d.id)?'checked':''} onchange="toggleDeviceSelect('${d.id}', this.checked)"></td>
-      <td class="code">${d.code}</td>
-      <td>${new Date(d.created_at).toLocaleDateString('tr-TR')}<br><span style="color:var(--ink-soft); font-size:11px;">${new Date(d.created_at).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}</span></td>
-      <td>${d.model}${d.devicePass?`<br><span style="color:var(--ink-soft); font-size:11px;">Şifre: ${d.devicePass}</span>`:''}</td>
-      <td>${d.issue||'—'}</td>
-      <td>${d.customer}<br><span style="color:var(--ink-soft); font-size:11.5px;">${d.phone||''}</span>${d.backupPhone?`<br><span style="color:var(--ink-soft); font-size:11px;">Yedek: ${d.backupPhone}</span>`:''}</td>
-      <td>${d.assignedTo ? (employees.find(e=>e.id===d.assignedTo)?.name || '—') : '<span style="color:var(--ink-soft);">Atanmadı</span>'}</td>
+      <td class="code">${d.trackingCode}</td>
+      <td>${new Date(d.createdAt).toLocaleDateString('tr-TR')}<br><span style="color:var(--ink-soft); font-size:11px;">${new Date(d.createdAt).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}</span></td>
+      <td>${d.model}${d.devicePassword?`<br><span style="color:var(--ink-soft); font-size:11px;">Şifre: ${d.devicePassword}</span>`:''}</td>
+      <td>${d.issueDescription||'—'}</td>
+      <td>${d.customer.fullName}<br><span style="color:var(--ink-soft); font-size:11.5px;">${d.customer.phone||''}</span>${d.backupPhone?`<br><span style="color:var(--ink-soft); font-size:11px;">Yedek: ${d.backupPhone}</span>`:''}</td>
+      <td>${d.assignedEmployee ? d.assignedEmployee.name : '<span style="color:var(--ink-soft);">Atanmadı</span>'}</td>
       <td onclick="event.stopPropagation()">${pill(d.status)}</td>
       <td>${parts.length} kalem · ₺${total.toFixed(0)}</td>
       <td onclick="event.stopPropagation()"><button class="ghost" onclick="printDeviceLabel('${d.id}')">Etiket Bas</button></td>
@@ -2797,9 +2823,9 @@ function renderDeviceTable(){
 
 function renderAll(){
   // Dashboard stats
-  const activeCount = devices.filter(d=>d.status!=='delivered').length;
-  const testingCount = devices.filter(d=>d.status==='testing').length;
-  const lowStock = stock.filter(s=>s.qty <= s.min).length;
+  const activeCount = devices.filter(d=>d.status!=='DELIVERED').length;
+  const testingCount = devices.filter(d=>d.status==='TESTING').length;
+  const lowStock = stock.filter(s=>s.quantity <= s.minThreshold).length;
   document.getElementById('statGrid').innerHTML = `
     <div class="stat"><div class="num">${devices.length}</div><div class="lbl">Toplam Kayıt</div></div>
     <div class="stat"><div class="num">${activeCount}</div><div class="lbl">Aktif Serviste</div></div>
@@ -2808,7 +2834,7 @@ function renderAll(){
   `;
   const recent = devices.slice(0,5);
   document.getElementById('recentDevices').innerHTML = recent.length ? recent.map(d=>`
-    <tr><td class="code">${d.code}</td><td>${d.model}</td><td>${d.customer}</td>
+    <tr><td class="code">${d.trackingCode}</td><td>${d.model}</td><td>${d.customer.fullName}</td>
     <td>${pill(d.status)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz kayıt yok</td></tr>`;
 
   // Devices table
@@ -2817,13 +2843,13 @@ function renderAll(){
   // Stock table
   document.getElementById('stockTable').innerHTML = stock.length ? stock.map(s=>`
     <tr><td>${s.name}</td>
-    <td style="color:${s.qty<=s.min?'var(--red)':'var(--ink)'}">${s.qty}</td>
-    <td>${s.min}</td><td>₺${s.cost.toFixed(2)}${s.costUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${s.costUsd.toFixed(2)})</span>`:''}</td>
+    <td style="color:${s.quantity<=s.minThreshold?'var(--red)':'var(--ink)'}">${s.quantity}</td>
+    <td>${s.minThreshold}</td><td>₺${(parseFloat(s.unitCostTry)||0).toFixed(2)}${s.unitCostUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(s.unitCostUsd).toFixed(2)})</span>`:''}</td>
     <td><button class="ghost admin-only" onclick="removeItem('stock','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz parça eklenmedi</td></tr>`;
 
   // Suppliers table
   document.getElementById('supplierTable').innerHTML = suppliers.length ? suppliers.map(s=>`
-    <tr><td>${s.name}</td><td>${s.phone||'—'}</td><td>₺${s.balance}</td>
+    <tr><td>${s.name}</td><td>${s.phone||'—'}</td><td>₺${(parseFloat(s.currentBalance)||0).toFixed(2)}</td>
     <td><button class="ghost" onclick="removeItem('suppliers','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz toptancı eklenmedi</td></tr>`;
 
   renderAppointments();
@@ -2834,13 +2860,27 @@ function renderAll(){
   renderCustomers();
 }
 
+const REMOVE_ITEM_PATHS = {
+  stock: id => `/stock/${id}`,
+  suppliers: id => `/suppliers/${id}`,
+  employees: id => `/employees/${id}`,
+  dealers: id => `/dealers/${id}`,
+  customers: id => `/customers/${id}`,
+  expenses: id => `/reports/cashbox/expense/${id}`,
+};
+
 async function removeItem(type, id){
-  if(type==='stock'){ stock = stock.filter(x=>x.id!==id); await saveList('stock', stock); }
-  if(type==='suppliers'){ suppliers = suppliers.filter(x=>x.id!==id); await saveList('suppliers', suppliers); }
-  if(type==='employees'){ employees = employees.filter(x=>x.id!==id); await saveList('employees', employees); }
-  if(type==='dealers'){ dealers = dealers.filter(x=>x.id!==id); await saveList('dealers', dealers); }
-  if(type==='customers'){ customers = customers.filter(x=>x.id!==id); await saveList('customers', customers); }
-  if(type==='expenses'){ expenses = expenses.filter(x=>x.id!==id); await saveList('expenses', expenses); }
+  const pathFn = REMOVE_ITEM_PATHS[type];
+  if(!pathFn) return;
+  try{
+    await apiFetch(pathFn(id), { method: 'DELETE' });
+  }catch(e){ toast(e.message || 'Silinemedi'); return; }
+  if(type==='stock') stock = stock.filter(x=>x.id!==id);
+  if(type==='suppliers') suppliers = suppliers.filter(x=>x.id!==id);
+  if(type==='employees') employees = employees.filter(x=>x.id!==id);
+  if(type==='dealers') dealers = dealers.filter(x=>x.id!==id);
+  if(type==='customers') customers = customers.filter(x=>x.id!==id);
+  if(type==='expenses') expenses = expenses.filter(x=>x.id!==id);
   renderAll();
 }
 
@@ -2867,11 +2907,7 @@ document.querySelectorAll('nav button').forEach(b=>{
   b.addEventListener('click', ()=>switchView(b.dataset.view));
 });
 
-loadAll();
-document.getElementById('userBadge').innerHTML = `
-  <div class="u-name">Yönetici</div>
-  <div class="u-role">Tam Yetki</div>
-`;
+tryResumeSession();
 </script>
 </body>
 </html>

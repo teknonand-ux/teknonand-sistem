@@ -52,4 +52,13 @@ router.post('/panel', requireAuth, requireEmployee, async (req, res, next) => {
   }
 });
 
+router.delete('/:id', requireAuth, requireEmployee, async (req, res, next) => {
+  try {
+    await prisma.appointment.delete({ where: { id: req.params.id } });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
 module.exports = router;

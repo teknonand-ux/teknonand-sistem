@@ -54,6 +54,19 @@ router.post('/:id/transactions', requireAuth, requireEmployee, async (req, res, 
   }
 });
 
+router.patch('/:id', requireAuth, requireEmployee, async (req, res, next) => {
+  try {
+    const { password } = z.object({ password: z.string().min(4) }).parse(req.body);
+    const dealer = await prisma.dealer.update({
+      where: { id: req.params.id },
+      data: { passwordHash: await hashPassword(password) },
+    });
+    res.json(dealer);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.delete('/:id', requireAuth, requireEmployee, requireAdmin, async (req, res, next) => {
   try {
     await prisma.dealer.delete({ where: { id: req.params.id } });

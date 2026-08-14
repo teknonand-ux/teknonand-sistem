@@ -41,7 +41,7 @@ router.post('/cashbox/expense', async (req, res, next) => {
     });
     const data = schema.parse(req.body);
     const expense = await prisma.$transaction(async (tx) => {
-      const created = await tx.expense.create({ data });
+      const created = await tx.expense.create({ data, include: { supplier: true } });
       if (data.category === 'Toptancı Ödemesi' && data.supplierId) {
         await tx.supplier.update({ where: { id: data.supplierId }, data: { currentBalance: { decrement: data.amount } } });
         await tx.supplierTransaction.create({
@@ -56,6 +56,15 @@ router.post('/cashbox/expense', async (req, res, next) => {
   }
 });
 
+router.delete('/cashbox/expense/:id', async (req, res, next) => {
+  try {
+    await prisma.expense.delete({ where: { id: req.params.id } });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
 // GET /api/reports/profit — personel bazında tahsilat + cihaz bazında kâr
 router.get('/profit', async (req, res, next) => {
   try {
@@ -65,7 +74,7 @@ router.get('/profit', async (req, res, next) => {
 
     const deviceProfit = devices.map((d) => {
       const income = d.payments.reduce((s, p) => s + Number(p.amount), 0);
-      const partsCost = d.parts.reduce((s, p) => s + Number(p.price), 0);
+      const partsCost = d.parts.reduce((s, p) => s + Number(p.cost), 0);
       return { code: d.trackingCode, model: d.model, income, partsCost, profit: income - partsCost, employee: d.assignedEmployee?.name ?? '—' };
     });
 
