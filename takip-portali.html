@@ -79,6 +79,14 @@
   .parts-mini .p-line{display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #EEEDE7;}
   .parts-mini .p-line:last-child{border-bottom:none;}
 
+  .gallery-block{margin-top:14px;}
+  .gallery-title{font-size:11.5px; font-weight:600; color:var(--ink-soft); margin-bottom:8px;}
+  .img-gallery{display:flex; gap:8px; flex-wrap:wrap;}
+  .img-gallery img{width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--line); cursor:pointer;}
+  .lightbox{display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:100; align-items:center; justify-content:center; padding:24px;}
+  .lightbox.show{display:flex;}
+  .lightbox img{max-width:100%; max-height:100%; border-radius:8px;}
+
   footer{margin-top:20px; font-size:11.5px; color:#A6A69C; text-align:center;}
 
   @media (max-width:480px){
@@ -114,6 +122,7 @@
 
   <footer>Sorularınız için bize WhatsApp üzerinden ulaşabilirsiniz.</footer>
 </div>
+<div class="lightbox" id="lightbox" onclick="closeLightbox()"><img src=""></div>
 
 <script>
 const API_BASE = 'https://backend-production-a04d.up.railway.app/api';
@@ -133,6 +142,25 @@ const STEP_ALIAS = { AWAITING_PARTS: 'APPROVED', IN_REPAIR: 'APPROVED' };
 const TERMINAL_LABELS = { RETURNED: 'İade Edildi', CANCELLED: 'İptal Edildi' };
 
 let currentDevice = null;
+
+function imgGallery(images, title){
+  if(!images || !images.length) return '';
+  return `
+    <div class="gallery-block">
+      <div class="gallery-title">${title}</div>
+      <div class="img-gallery">
+        ${images.map(src=>`<img src="${src}" onclick="openLightbox('${src}')">`).join('')}
+      </div>
+    </div>`;
+}
+function openLightbox(src){
+  const box = document.getElementById('lightbox');
+  box.querySelector('img').src = src;
+  box.classList.add('show');
+}
+function closeLightbox(){
+  document.getElementById('lightbox').classList.remove('show');
+}
 
 function lineGross(p){
   const price = parseFloat(p.price) || 0;
@@ -218,6 +246,10 @@ function render(d){
       </div>`;
   }
 
+  const diagnosisGallery = imgGallery(d.diagnosisImages, 'Arıza Tespiti Görselleri');
+  const returnGallery = d.status === 'RETURNED' ? imgGallery(d.returnImages, 'İade Görselleri') : '';
+  const deliveryGallery = d.status === 'DELIVERED' ? imgGallery(d.deliveryImages, 'Teslim Görselleri') : '';
+
   document.getElementById('resultCard').innerHTML = `
     <div class="device-head">
       <div>
@@ -232,7 +264,10 @@ function render(d){
       ${stepsHtml}
     </div>
     ${approveHtml}
+    ${diagnosisGallery}
     ${partsHtml}
+    ${returnGallery}
+    ${deliveryGallery}
     <div class="meta">
       <div><b>${new Date(d.receivedAt || d.createdAt).toLocaleDateString('tr-TR')}</b>Kabul Tarihi</div>
       ${total>0 ? `<div><b>₺${total.toFixed(2)}</b>Toplam Tutar</div>` : ''}
