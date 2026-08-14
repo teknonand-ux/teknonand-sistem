@@ -20,7 +20,8 @@ const reportRoutes = require('./routes/reports');
 const app = express();
 
 const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
-app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true }));
+const allowAllOrigins = allowedOrigins.length === 0 || allowedOrigins.includes('*');
+app.use(cors({ origin: allowAllOrigins ? true : allowedOrigins }));
 app.use(express.json({ limit: '2mb' }));
 
 // Genel oran sınırlama — herkese açık uçlar (randevu, takip) kötüye kullanıma karşı ayrıca sınırlanır
