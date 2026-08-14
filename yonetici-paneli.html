@@ -297,7 +297,7 @@
       <button data-view="appointments">Randevular</button>
       <button data-view="stock">Stok</button>
       <button data-view="suppliers">Toptancı</button>
-      <button data-view="employees">Personel</button>
+      <button data-view="employees" class="admin-only">Personel</button>
       <button data-view="dealers">Bayiler</button>
       <button data-view="label-design" class="admin-only">Etiket Tasarımı</button>
       <button data-view="doc-design" class="admin-only">Belge Tasarımı</button>
@@ -2892,7 +2892,7 @@ function pill(status){
 }
 
 function switchView(name){
-  if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit' || name==='label-design' || name==='doc-design')){
+  if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit' || name==='label-design' || name==='doc-design' || name==='employees')){
     toast('Bu sayfayı görüntüleme yetkiniz yok');
     return;
   }
