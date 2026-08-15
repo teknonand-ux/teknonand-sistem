@@ -151,14 +151,14 @@ router.post('/me/devices/:id/request-return', requireAuth, requireDealer, async 
     const updated = await prisma.device.update({
       where: { id: device.id },
       data: {
-        status: 'RETURNED',
+        status: 'RETURN_REQUESTED',
         returnReason: note || 'Bayi onarımı onaylamayıp cihazın iadesini istedi',
       },
     });
     await prisma.deviceStatusHistory.create({
       data: {
         deviceId: device.id,
-        status: 'RETURNED',
+        status: 'RETURN_REQUESTED',
         note: note ? `Bayi tarafından iade istendi — Not: ${note}` : 'Bayi tarafından iade istendi',
       },
     });

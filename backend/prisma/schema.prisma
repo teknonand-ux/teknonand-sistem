@@ -101,6 +101,7 @@ enum DeviceStatus {
   TESTING // test ediliyor
   READY // teslime hazır
   DELIVERED // teslim edildi
+  RETURN_REQUESTED // müşteri/bayi iade istedi — henüz fiilen iade edilmedi
   RETURNED // iade edildi
   CANCELLED // iptal
 }

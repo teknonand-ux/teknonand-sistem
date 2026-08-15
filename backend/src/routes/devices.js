@@ -217,7 +217,7 @@ router.patch('/:id/status', async (req, res, next) => {
     const schema = z.object({
       status: z.enum([
         'RECEIVED', 'DIAGNOSING', 'DIAGNOSIS_DONE', 'AWAITING_PARTS', 'APPROVED',
-        'IN_REPAIR', 'TESTING', 'READY', 'DELIVERED', 'RETURNED', 'CANCELLED',
+        'IN_REPAIR', 'TESTING', 'READY', 'DELIVERED', 'RETURN_REQUESTED', 'RETURNED', 'CANCELLED',
       ]),
       note: z.string().optional(),
       changedAt: z.string().datetime().optional(),

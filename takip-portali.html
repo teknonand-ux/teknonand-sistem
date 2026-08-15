@@ -144,7 +144,7 @@ const STATUS_STEPS = [
   {key:'DELIVERED', label:'Teslim Edildi'}
 ];
 const STEP_ALIAS = { AWAITING_PARTS: 'APPROVED', IN_REPAIR: 'APPROVED' };
-const TERMINAL_LABELS = { RETURNED: 'İade Edildi', CANCELLED: 'İptal Edildi' };
+const TERMINAL_LABELS = { RETURN_REQUESTED: 'İade İsteniyor', RETURNED: 'İade Edildi', CANCELLED: 'İptal Edildi' };
 
 function esc(str){
   if(str === null || str === undefined) return '';
@@ -221,8 +221,9 @@ function render(d){
   const pct = currentIndex >= 0 ? (currentIndex / (STATUS_STEPS.length - 1)) * 100 : 0;
   const currentStepLabel = TERMINAL_LABELS[d.status] || (STATUS_STEPS[currentIndex] ? STATUS_STEPS[currentIndex].label : d.status);
   const isTerminalException = d.status === 'RETURNED' || d.status === 'CANCELLED';
-  const pillColor = d.status === 'DELIVERED' ? 'var(--green)' : d.status === 'DIAGNOSIS_DONE' ? 'var(--amber)' : isTerminalException ? 'var(--red)' : 'var(--accent)';
-  const pillBg = d.status === 'DELIVERED' ? '#E4F3EC' : d.status === 'DIAGNOSIS_DONE' ? '#FBF0DD' : isTerminalException ? '#FBEAE6' : '#E9EEFF';
+  const isReturnRequested = d.status === 'RETURN_REQUESTED';
+  const pillColor = d.status === 'DELIVERED' ? 'var(--green)' : (d.status === 'DIAGNOSIS_DONE' || isReturnRequested) ? 'var(--amber)' : isTerminalException ? 'var(--red)' : 'var(--accent)';
+  const pillBg = d.status === 'DELIVERED' ? '#E4F3EC' : (d.status === 'DIAGNOSIS_DONE' || isReturnRequested) ? '#FBF0DD' : isTerminalException ? '#FBEAE6' : '#E9EEFF';
 
   let stepsHtml = '';
   STATUS_STEPS.forEach((s, i) => {
