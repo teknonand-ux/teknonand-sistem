@@ -705,6 +705,9 @@
         </div>
         <button class="primary" onclick="addDealer()">Bayi Ekle</button>
       </div>
+      <div class="card" style="margin-bottom:12px;">
+        <input id="dealer-list-search" placeholder="Bayi adıyla ara..." oninput="renderDealers()">
+      </div>
       <div id="dealerList"></div>
     </div>
 
@@ -2513,7 +2516,11 @@ async function addDealerTx(id){
 function renderDealers(){
   const box = document.getElementById('dealerList');
   if(!box) return;
-  box.innerHTML = dealers.length ? dealers.map(dl=>`
+  const searchEl = document.getElementById('dealer-list-search');
+  const query = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  const list = query ? dealers.filter(dl=>(dl.name||'').toLowerCase().includes(query)) : dealers;
+
+  box.innerHTML = list.length ? list.map(dl=>`
     <div class="dealer-card row-click" onclick="openDealer('${dl.id}')">
       <div class="dealer-top">
         <div>
@@ -2522,7 +2529,7 @@ function renderDealers(){
         </div>
         <div class="dealer-balance ${parseFloat(dl.balance)>0?'owes':'clear'}">₺${(parseFloat(dl.balance)||0).toFixed(2)}</div>
       </div>
-    </div>`).join('') : `<p class="empty">Henüz bayi eklenmedi</p>`;
+    </div>`).join('') : `<p class="empty">${query ? 'Eşleşen bayi bulunamadı' : 'Henüz bayi eklenmedi'}</p>`;
 
   // Cihaz Kabul formundaki bayi seçim listelerini güncelle
   const sel = document.getElementById('f-dealer');
