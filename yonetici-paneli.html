@@ -1232,46 +1232,84 @@ async function importDevices(event){
 
   const delimiter = detectCsvDelimiter(lines[0]);
   const header = parseCsvLine(lines[0], delimiter).map(h=>h.trim().toLowerCase());
-  const modelIdx = header.indexOf('model');
-  const nameIdx = header.indexOf('müşteri');
+  // "Müşteri Adı Soyadı" / "Ürün" — güncel dışa aktarım formatı; "Müşteri" / "Model" — eski format, geriye dönük uyumluluk için hâlâ tanınır.
+  const nameIdx = header.indexOf('müşteri adı soyadı') > -1 ? header.indexOf('müşteri adı soyadı') : header.indexOf('müşteri');
+  const modelIdx = header.indexOf('ürün') > -1 ? header.indexOf('ürün') : header.indexOf('model');
+  const dateIdx = header.indexOf('kayıt tarihi');
+  const totalIdx = header.indexOf('tutar');
+  const costIdx = header.indexOf('maliyet');
   const phoneIdx = header.indexOf('telefon');
   const backupIdx = header.indexOf('yedek telefon');
   const imeiIdx = header.indexOf('imei / seri no');
   const passIdx = header.indexOf('cihaz şifresi');
   const issueIdx = header.indexOf('arıza');
   if(modelIdx === -1 || nameIdx === -1){
-    toast('CSV başlıkları tanınmadı — "Model" ve "Müşteri" sütunları gerekli');
+    toast('CSV başlıkları tanınmadı — "Müşteri Adı Soyadı" ve "Ürün" sütunları gerekli');
     event.target.value = '';
     return;
   }
 
-  let added = 0;
+  let added = 0, skipped = 0;
   for(let i=1; i<lines.length; i++){
     const cols = parseCsvLine(lines[i], delimiter);
     const model = (cols[modelIdx]||'').trim();
     const name = (cols[nameIdx]||'').trim();
-    if(!model || !name) continue;
+    if(!model || !name){ skipped++; continue; }
     const phone = phoneIdx>-1 ? (cols[phoneIdx]||'').trim() : '';
     const backupPhone = backupIdx>-1 ? (cols[backupIdx]||'').trim() : '';
-    const imei = imeiIdx>-1 ? (cols[imeiIdx]||'').trim() : '';
+    const imei = imeiIdx>-1 ? cleanImeiCell(cols[imeiIdx]) : '';
     const devicePass = passIdx>-1 ? (cols[passIdx]||'').trim() : '';
     const issue = issueIdx>-1 ? (cols[issueIdx]||'').trim() : '';
-    if(!phone && !imei) continue;
+    const total = totalIdx>-1 ? parseFloat((cols[totalIdx]||'').replace(',','.')) || 0 : 0;
+    const cost = costIdx>-1 ? parseFloat((cols[costIdx]||'').replace(',','.')) || 0 : 0;
+    const receivedDate = dateIdx>-1 ? parseTRDateTime(cols[dateIdx]) : null;
 
     const device = await apiFetch('/devices', {
       method: 'POST',
       body: JSON.stringify({
         customerName: name, customerPhone: phone || 'belirtilmedi', backupPhone: backupPhone || undefined,
         model, imeiSerial: imei || undefined, devicePassword: devicePass || undefined,
-        issueDescription: issue || 'CSV içe aktarımıyla oluşturuldu', deviceOff: !imei
+        issueDescription: issue || 'CSV içe aktarımıyla oluşturuldu', deviceOff: !imei,
+        receivedAt: receivedDate ? receivedDate.toISOString() : undefined
       })
     });
+
+    if(total > 0){
+      const part = await apiFetch(`/devices/${device.id}/parts`, {
+        method: 'POST',
+        body: JSON.stringify({ name: issue || 'Onarım', price: total, cost: cost || 0 })
+      });
+      device.parts = [part];
+    }
+
     devices.unshift(device);
     added++;
   }
   event.target.value = '';
-  toast(`${added} cihaz içe aktarıldı`);
+  toast(`${added} cihaz içe aktarıldı${skipped ? `, ${skipped} satır eksik bilgi nedeniyle atlandı` : ''}`);
   renderAll();
+}
+
+// "Kayıt Tarihi" sütunu "21.03.2022 12:14" (gg.aa.yyyy ss:dd) formatında beklenir
+// (bkz. formatDateTR) — tanınmazsa tarih boş bırakılır, sunucu şimdiki zamanı kullanır.
+function parseTRDateTime(str){
+  if(!str) return null;
+  const m = String(str).trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if(m){
+    const [, dd, mm, yyyy, hh='0', min='0'] = m;
+    const d = new Date(Number(yyyy), Number(mm)-1, Number(dd), Number(hh), Number(min));
+    if(!isNaN(d.getTime())) return d;
+  }
+  const fallback = new Date(str);
+  return isNaN(fallback.getTime()) ? null : fallback;
+}
+
+// Dışa aktarımda IMEI, Excel'in bilimsel gösterime çevirmemesi için ="..." formül-metin
+// biçiminde yazılıyor (bkz. exportDevices) — dosya Excel'den geçmeden yüklenirse bu
+// sarmalayıcıyı temizleyip düz numarayı almamız gerekir.
+function cleanImeiCell(val){
+  const m = String(val||'').trim().match(/^="?([0-9]+)"?$/);
+  return m ? m[1] : String(val||'').trim();
 }
 
 function dealerSuggest(){
