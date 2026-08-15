@@ -1985,6 +1985,24 @@ function renderDeviceDetail(){
     </div>
 
     <div class="card">
+      <h3>Fatura (PDF)</h3>
+      ${d.invoicePdf ? `
+        <div class="detail-meta" style="margin-bottom:10px;">
+          <div><span>Fatura</span>Yüklendi${d.invoiceUploadedAt ? ` — ${new Date(d.invoiceUploadedAt).toLocaleString('tr-TR')}` : ''}</div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <a class="ghost" style="text-decoration:none; display:inline-flex; align-items:center;" href="${d.invoicePdf}" target="_blank" download="Fatura-${esc(d.trackingCode)}.pdf">Faturayı Görüntüle / İndir</a>
+          <button class="ghost" onclick="sendInvoiceWhatsApp('${d.id}')">WhatsApp ile Bildir</button>
+          <button class="ghost" style="color:var(--red); border-color:var(--red);" onclick="removeInvoice('${d.id}')">Kaldır</button>
+        </div>
+        <p class="login-hint" style="margin-top:8px; margin-bottom:0;">WhatsApp üzerinden PDF otomatik eklenemez — buton, müşteriye faturasını takip sayfasından indirebileceğini bildiren bir mesaj hazırlar. Dosyayı doğrudan iletmek isterseniz "İndir" ile kaydedip WhatsApp'tan elle ekleyebilirsiniz.</p>
+      ` : `
+        <p class="login-hint" style="margin-top:0;">Müşteri ödemesini aldıktan sonra faturayı PDF olarak buradan yükleyin.</p>
+        <input type="file" id="invoice-pdf-input" accept="application/pdf" onchange="uploadInvoicePdf('${d.id}', event)">
+      `}
+    </div>
+
+    <div class="card">
       <h3>Cihaz Teslim Formu</h3>
       ${d.status === 'DELIVERED' ? `
         <div class="form-preview" id="deliveryFormPreview">${buildDeliveryFormHTML(d)}</div>
@@ -2729,6 +2747,55 @@ function sendDealerCredentialsWhatsApp(){
   ];
   const text = encodeURIComponent(lines.join('\n'));
   const number = dl.phone ? toWhatsAppNumber(dl.phone) : '';
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
+async function uploadInvoicePdf(id, event){
+  const file = event.target.files[0];
+  if(!file) return;
+  if(file.type !== 'application/pdf'){ toast('Sadece PDF dosyası yükleyebilirsiniz'); event.target.value=''; return; }
+  if(file.size > 5*1024*1024){ toast('Dosya en fazla 5MB olabilir'); event.target.value=''; return; }
+  const dataUrl = await new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  try{
+    const updated = await apiFetch(`/devices/${id}/invoice`, { method:'POST', body: JSON.stringify({ invoicePdf: dataUrl }) });
+    const idx = devices.findIndex(x=>x.id===id);
+    if(idx>=0) devices[idx] = { ...devices[idx], ...updated };
+    toast('Fatura yüklendi');
+    renderDeviceDetail();
+  }catch(e){ toast(e.message || 'Fatura yüklenemedi'); event.target.value=''; }
+}
+
+async function removeInvoice(id){
+  if(!confirm('Faturayı kaldırmak istediğinizden emin misiniz?')) return;
+  try{
+    const updated = await apiFetch(`/devices/${id}/invoice`, { method:'DELETE' });
+    const idx = devices.findIndex(x=>x.id===id);
+    if(idx>=0) devices[idx] = { ...devices[idx], ...updated };
+    renderDeviceDetail();
+  }catch(e){ toast(e.message || 'Kaldırılamadı'); }
+}
+
+function sendInvoiceWhatsApp(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d || !d.customer.phone) return;
+  const lines = [
+    `Teknonand — Fatura Bilgilendirmesi`,
+    `Sayın ${d.customer.fullName},`,
+    `${d.model} (${d.trackingCode}) cihazınıza ait faturanız hazırdır.`,
+    `Aşağıdaki takip sayfasından, takip kodunuz ve telefon numaranızın son 4 hanesiyle giriş yaparak faturanızı görüntüleyip indirebilirsiniz:`,
+    TRACK_PORTAL_URL,
+    ``,
+    `Takip Kodu: ${d.trackingCode}`,
+    ``,
+    `Teşekkür ederiz.`
+  ];
+  const text = encodeURIComponent(lines.join('\n'));
+  const number = toWhatsAppNumber(d.customer.phone);
   window.open(`https://wa.me/${number}?text=${text}`, '_blank');
 }
 

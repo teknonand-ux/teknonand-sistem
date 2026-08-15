@@ -76,6 +76,9 @@
   .approve-box textarea{width:100%; font-family:'Inter',sans-serif; font-size:12.5px; border:1.5px solid var(--line); border-radius:8px; padding:9px 11px; margin-top:10px; background:var(--card); color:var(--ink); resize:vertical;}
   .approve-box button{width:100%; margin-top:10px;}
   .approved-note{color:var(--green); font-weight:600; font-size:13px; margin-top:6px;}
+  .invoice-box{background:#E9EEFF; border:1px solid #C9D4FF; border-radius:12px; padding:14px 16px; margin-top:6px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+  .invoice-box .invoice-title{font-weight:600; font-size:13px; color:var(--ink);}
+  .invoice-box a{background:var(--accent); color:#fff; padding:8px 14px; border-radius:8px; font-size:12.5px; font-weight:600; text-decoration:none; white-space:nowrap;}
   .diag-item{padding:8px 0; border-top:1px solid #EFD8A6;}
   .diag-item:first-of-type{border-top:none;}
   .item-state{font-size:12px; font-weight:600; display:inline-block;}
@@ -316,6 +319,11 @@ function render(d){
       ${stepsHtml}
     </div>
     ${approveHtml}
+    ${d.invoicePdf ? `
+      <div class="invoice-box">
+        <div class="invoice-title">🧾 Faturanız Hazır</div>
+        <a href="${d.invoicePdf}" target="_blank" download="Fatura-${esc(d.trackingCode)}.pdf">Faturayı İndir</a>
+      </div>` : ''}
     ${diagnosisGallery}
     ${partsHtml}
     ${returnGallery}

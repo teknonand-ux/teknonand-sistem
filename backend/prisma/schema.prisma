@@ -143,6 +143,9 @@ model Device {
   deliveryNote   String?
   deliveryImages Json    @default("[]")
 
+  invoicePdf       String?   // fatura, base64 data URL (data:application/pdf;base64,...)
+  invoiceUploadedAt DateTime?
+
   receivedAt DateTime @default(now())
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

@@ -14,6 +14,13 @@ const dataUrlImage = z
   .max(4_000_000)
   .regex(/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+=*$/, 'Geçersiz görsel formatı');
 
+// Fatura PDF'i — yalnızca base64 data URL kabul eder (aynı XSS/istismar gerekçesiyle
+// görsel alanlarında olduğu gibi), en fazla ~5MB.
+const dataUrlPdf = z
+  .string()
+  .max(7_000_000)
+  .regex(/^data:application\/pdf;base64,[A-Za-z0-9+/]+=*$/, 'Geçersiz PDF formatı');
+
 // Bayiye ait, teslim edilmiş bir cihazın parça/işlem tutarını bayinin veresiye
 // hesabına ekler (bir cihaz için yalnızca bir kez) — hem durum DELIVERED'a
 // geçtiğinde hem de zaten DELIVERED olan bir cihaz sonradan bir bayiye
@@ -304,6 +311,36 @@ router.post('/:id/notes', async (req, res, next) => {
       include: { changedByEmployee: true },
     });
     res.status(201).json(entry);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/devices/:id/invoice — ödeme sonrası fatura PDF'i ekler/değiştirir
+router.post('/:id/invoice', async (req, res, next) => {
+  try {
+    const { invoicePdf } = z.object({ invoicePdf: dataUrlPdf }).parse(req.body);
+    const device = await prisma.device.update({
+      where: { id: req.params.id },
+      data: { invoicePdf, invoiceUploadedAt: new Date() },
+    });
+    await prisma.deviceStatusHistory.create({
+      data: { deviceId: device.id, status: device.status, note: 'Fatura (PDF) yüklendi', changedByEmployeeId: req.user.sub },
+    });
+    res.json(device);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// DELETE /api/devices/:id/invoice — yüklenen fatura PDF'ini kaldırır
+router.delete('/:id/invoice', async (req, res, next) => {
+  try {
+    const device = await prisma.device.update({
+      where: { id: req.params.id },
+      data: { invoicePdf: null, invoiceUploadedAt: null },
+    });
+    res.json(device);
   } catch (e) {
     next(e);
   }

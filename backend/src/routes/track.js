@@ -26,6 +26,8 @@ const PUBLIC_DEVICE_SELECT = {
   diagnosisImages: true,
   diagnosisItems: { select: { id: true, description: true, price: true, approved: true } },
   customerApproved: true,
+  invoicePdf: true,
+  invoiceUploadedAt: true,
   returnImages: true,
   deliveryImages: true,
   deliveryMethod: true,
