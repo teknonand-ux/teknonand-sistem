@@ -1106,29 +1106,28 @@ async function importCustomers(event){
   renderCustomers();
 }
 
+function formatDateTR(dateStr){
+  const d = new Date(dateStr);
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const hh = String(d.getHours()).padStart(2,'0');
+  const min = String(d.getMinutes()).padStart(2,'0');
+  return `${dd}.${mm}.${d.getFullYear()} ${hh}:${min}`;
+}
+
 function exportDevices(){
   if(!devices.length){ toast('Aktarılacak cihaz kaydı yok'); return; }
-  const maxParts = devices.reduce((m,d)=>Math.max(m, (d.parts||[]).length), 0);
-  const partColumns = [];
-  for(let i=1; i<=maxParts; i++) partColumns.push(`İşlem ${i}`, `Tutar ${i}`);
-
-  const header = ['Kod','Kayıt Tarihi','Model','IMEI / Seri No','Müşteri','Telefon','Yedek Telefon','Cihaz Şifresi','Arıza','Durum','Personel','Bayi', ...partColumns, 'Toplam Tutar','Ödenen'];
+  const header = ['Müşteri Adı Soyadı','Kayıt Tarihi','Tutar','Maliyet','Telefon','Arıza','Ürün','IMEI / Seri No'];
   const rows = devices.map(d=>{
     const parts = d.parts || [];
     const total = parts.reduce((s,p)=>s+lineGross(p),0);
-    const paid = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
-    const empName = d.assignedEmployee ? d.assignedEmployee.name : '';
-    const dealerName = d.dealer ? d.dealer.name : '';
-    const partCells = [];
-    for(let i=0; i<maxParts; i++){
-      const p = parts[i];
-      partCells.push(p ? p.name : '', p ? lineGross(p).toFixed(2) : '');
-    }
+    const cost = parts.reduce((s,p)=>s+(parseFloat(p.cost)||0),0);
+    // IMEI 15 haneli oldugu icin Excel'de otomatik olarak bilimsel gosterime
+    // (3,55E+14 gibi) donusturuluyor -- formul-metin numarasi ile bunu engelliyoruz.
+    const imeiCell = d.imeiSerial ? `="${d.imeiSerial}"` : '';
     return [
-      d.trackingCode, new Date(d.createdAt).toLocaleString('tr-TR'), d.model, d.imeiSerial||'',
-      d.customer.fullName, d.customer.phone||'', d.backupPhone||'', d.devicePassword||'', d.issueDescription||'',
-      STATUS_LABELS[d.status]||d.status, empName, dealerName, ...partCells,
-      total.toFixed(2), paid.toFixed(2)
+      d.customer.fullName, formatDateTR(d.createdAt), total.toFixed(2), cost.toFixed(2),
+      d.customer.phone||'', d.issueDescription||'', d.model, imeiCell
     ].map(csvEscape).join(',');
   });
   const csv = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
