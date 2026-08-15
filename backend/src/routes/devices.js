@@ -233,9 +233,15 @@ router.patch('/:id/status', async (req, res, next) => {
     });
     const { status, note, changedAt, imeiSerial, ...fields } = schema.parse(req.body);
 
+    // Arıza tespiti yeniden girildiğinde (ör. tanı/fiyat güncellendi) önceki onay artık
+    // geçersizdir — müşteri/bayiden tekrar onay istenmesi için onay bilgilerini sıfırlıyoruz.
+    const resetApproval = status === 'DIAGNOSIS_DONE'
+      ? { customerApproved: false, dealerApproved: false, approvalNote: null, approvedAt: null }
+      : {};
+
     const device = await prisma.device.update({
       where: { id: req.params.id },
-      data: { status, ...fields, ...(imeiSerial ? { imeiSerial } : {}) },
+      data: { status, ...fields, ...resetApproval, ...(imeiSerial ? { imeiSerial } : {}) },
       include: { customer: true },
     });
 
