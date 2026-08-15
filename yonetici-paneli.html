@@ -2542,7 +2542,10 @@ async function startSession(user){
   document.getElementById('login-password').value = '';
   document.getElementById('loginError').style.display = 'none';
   await loadAll();
-  switchView('dashboard');
+  const lastView = localStorage.getItem('teknonand_admin_last_view');
+  if(!lastView || !RESTORABLE_VIEWS.has(lastView) || !switchView(lastView)){
+    switchView('dashboard');
+  }
 }
 
 function doLogout(){
@@ -3532,14 +3535,19 @@ function pill(status){
   return `<span class="pill" style="color:${c}; background:${bg};">${STATUS_LABELS[status]}</span>`;
 }
 
+const RESTORABLE_VIEWS = new Set(Array.from(document.querySelectorAll('nav button')).map(b=>b.dataset.view));
+
 function switchView(name){
   if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit' || name==='label-design' || name==='doc-design' || name==='employees' || name==='whatsapp-templates' || name==='backup')){
     toast('Bu sayfayı görüntüleme yetkiniz yok');
-    return;
+    return false;
   }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+  // Sadece nav'daki üst seviye sayfaları hatırlıyoruz — cihaz/bayi detay sayfaları
+  // ilgili kayıt yeniden seçilmeden anlamlı şekilde geri yüklenemez.
+  if(RESTORABLE_VIEWS.has(name)) localStorage.setItem('teknonand_admin_last_view', name);
   if(name==='new-device') setDefaultReceivedTime();
   if(name==='appointments') setDefaultApptTime();
   if(name==='devices') renderDeviceTable();
@@ -3550,6 +3558,7 @@ function switchView(name){
     showLastBackupInfo('backup-devices-info', 'teknonand_last_backup_devices');
     showLastBackupInfo('backup-cari-info', 'teknonand_last_backup_cari');
   }
+  return true;
 }
 document.querySelectorAll('nav button').forEach(b=>{
   b.addEventListener('click', ()=>switchView(b.dataset.view));
