@@ -1,0 +1,17 @@
+{
+  "name": "Teknonand Yönetici Paneli",
+  "short_name": "Teknonand Panel",
+  "description": "İşletme yönetim paneli — cihazlar, stok, cari hesaplar, kasa",
+  "start_url": "./yonetici-paneli.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F6F5F1",
+  "theme_color": "#17181C",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
