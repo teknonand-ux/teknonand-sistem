@@ -3560,8 +3560,34 @@ function switchView(name){
   }
   return true;
 }
+
+// Sekmeler arası geçişte listelerin güncel kalması için ilgili veriyi arka planda
+// yeniden çeker (görünüm anında değişir, veri bir an sonra tazelenir).
+async function refreshViewData(name){
+  try{
+    if(name==='label-design'){ await loadLabelDesign(); populateLabelDesignForm(); return; }
+    if(name==='doc-design'){ await loadCompanyDesign(); populateDocDesignForm(); return; }
+    if(name==='whatsapp-templates'){ await loadWhatsappTemplates(); populateWhatsappTemplateCards(); return; }
+    if(name==='backup') return;
+    const isAdmin = currentUserPermission === 'ADMIN';
+    [devices, stock, suppliers, appointments, employees, dealers, customers, expenses] = await Promise.all([
+      apiFetch('/devices'),
+      apiFetch('/stock'),
+      apiFetch('/suppliers'),
+      apiFetch('/appointments'),
+      apiFetch('/employees'),
+      apiFetch('/dealers'),
+      apiFetch('/customers'),
+      isAdmin ? apiFetch('/reports/cashbox').then(r => r.expenses) : Promise.resolve([]),
+    ]);
+    renderAll();
+  }catch(e){ /* ağ hatasında mevcut veriyle devam edilir */ }
+}
+
 document.querySelectorAll('nav button').forEach(b=>{
-  b.addEventListener('click', ()=>switchView(b.dataset.view));
+  b.addEventListener('click', ()=>{
+    if(switchView(b.dataset.view)) refreshViewData(b.dataset.view);
+  });
 });
 
 tryResumeSession();
