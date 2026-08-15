@@ -116,12 +116,13 @@
       <p class="subtitle">Cihazlarınızı ve hesabınızı takip edin</p>
       <div class="field"><label>Kullanıcı Adı</label><input id="login-username" placeholder="bayi.adi"></div>
       <div class="field"><label>Şifre</label><input id="login-password" type="password" placeholder="••••••••"></div>
+      <div class="field"><label>Telefon Numarası</label><input id="login-phone" type="tel" placeholder="05xx xxx xx xx"></div>
       <div class="field" style="display:flex; align-items:center; gap:7px;">
         <input type="checkbox" id="login-remember" checked style="width:auto;">
         <label style="margin:0; font-weight:500; color:var(--ink); font-size:13px;" for="login-remember">Beni hatırla</label>
       </div>
       <button class="primary" style="width:100%;" onclick="doLogin()">Giriş Yap</button>
-      <div class="login-error" id="loginError">Kullanıcı adı veya şifre hatalı.</div>
+      <div class="login-error" id="loginError">Kullanıcı adı, şifre veya telefon numarası hatalı.</div>
     </div>
   </div>
 
@@ -231,12 +232,13 @@ async function apiFetch(path, options = {}){
 async function doLogin(){
   const username = document.getElementById('login-username').value.trim().toLowerCase();
   const password = document.getElementById('login-password').value;
+  const phone = document.getElementById('login-phone').value.trim();
   const errorEl = document.getElementById('loginError');
   try{
     const res = await fetch(`${API_BASE}/auth/dealer-login`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, phone })
     });
     if(!res.ok){ errorEl.style.display = 'block'; return; }
     const data = await res.json();
@@ -248,6 +250,7 @@ async function doLogin(){
     document.getElementById('app').style.display = 'block';
     document.getElementById('login-username').value = '';
     document.getElementById('login-password').value = '';
+    document.getElementById('login-phone').value = '';
     await loadAndRenderAll();
   }catch(e){
     errorEl.textContent = 'Bağlantı hatası, lütfen tekrar deneyin.';

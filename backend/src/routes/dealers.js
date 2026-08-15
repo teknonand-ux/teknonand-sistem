@@ -61,11 +61,13 @@ router.post('/:id/transactions', requireAuth, requireEmployee, async (req, res, 
 
 router.patch('/:id', requireAuth, requireEmployee, async (req, res, next) => {
   try {
-    const { password } = z.object({ password: z.string().min(8) }).parse(req.body);
-    const dealer = await prisma.dealer.update({
-      where: { id: req.params.id },
-      data: { passwordHash: await hashPassword(password) },
-    });
+    const { password, phone } = z
+      .object({ password: z.string().min(8).optional(), phone: z.string().min(1).optional() })
+      .parse(req.body);
+    const data = {};
+    if (password) data.passwordHash = await hashPassword(password);
+    if (phone) data.phone = phone;
+    const dealer = await prisma.dealer.update({ where: { id: req.params.id }, data });
     res.json(dealer);
   } catch (e) {
     next(e);

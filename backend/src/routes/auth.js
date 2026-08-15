@@ -28,6 +28,14 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const dealerLoginSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(1),
+  phone: z.string().min(1),
+});
+
+const normalizePhone = (val) => String(val || '').replace(/\D/g, '');
+
 // POST /api/auth/employee-login  (yönetici paneli)
 router.post('/employee-login', loginLimiter, async (req, res, next) => {
   try {
@@ -48,13 +56,20 @@ router.post('/employee-login', loginLimiter, async (req, res, next) => {
 });
 
 // POST /api/auth/dealer-login  (bayi portalı)
+// Kullanıcı adı/şifreye ek olarak bayinin sistemde kayıtlı telefon numarasını da
+// doğruluyoruz — yalnızca kullanıcı adı/şifresini ele geçiren biri, bayinin
+// telefonunu bilmeden giriş yapamaz. Bayinin telefonu kayıtlı değilse (admin
+// panelinden girilmemişse) güvenli tarafta kalıp girişi reddediyoruz.
 router.post('/dealer-login', loginLimiter, async (req, res, next) => {
   try {
-    const { username, password } = loginSchema.parse(req.body);
+    const { username, password, phone } = dealerLoginSchema.parse(req.body);
     const dealer = await prisma.dealer.findUnique({ where: { username: username.toLowerCase() } });
     const passwordOk = await verifyPassword(password, dealer?.passwordHash || DUMMY_HASH);
-    if (!dealer || !passwordOk) {
-      return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
+    const dealerPhoneDigits = normalizePhone(dealer?.phone).slice(-10);
+    const inputPhoneDigits = normalizePhone(phone).slice(-10);
+    const phoneOk = dealerPhoneDigits.length === 10 && dealerPhoneDigits === inputPhoneDigits;
+    if (!dealer || !passwordOk || !phoneOk) {
+      return res.status(401).json({ error: 'Kullanıcı adı, şifre veya telefon numarası hatalı' });
     }
     const token = signToken({ id: dealer.id, type: 'dealer' }, '30d');
     res.json({ token, user: { id: dealer.id, name: dealer.name, balance: dealer.balance } });

@@ -2620,14 +2620,17 @@ function renderDealerDetail(){
       <h3>Bayi Portal Girişi</h3>
       <div class="detail-meta" style="margin-bottom:10px;">
         <div><span>Kullanıcı Adı</span>${esc(dl.username) || '—'}</div>
+        <div><span>Giriş İçin Doğrulama Telefonu</span>${esc(dl.phone) || '—'}</div>
       </div>
+      ${!dl.phone ? `<div class="login-hint" style="color:var(--red); margin-top:0;">⚠️ Telefon numarası girilmemiş — bu bayi telefon doğrulaması olmadan portala giriş yapamaz.</div>` : ''}
       ${pendingDealerCredentials && pendingDealerCredentials.dealerId === dl.id ? `
       <div class="approve-box" style="margin-bottom:10px;">
         Şifre bu ekranda görünür şekilde kalıyor (sayfadan çıkınca kaybolur) — giriş bilgilerini bayiye WhatsApp ile göndermek için:
         <div style="margin-top:8px;"><button class="primary" onclick="sendDealerCredentialsWhatsApp()">Giriş Bilgilerini WhatsApp ile Gönder</button></div>
       </div>` : ''}
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="ghost" onclick="resetDealerPassword('${dl.id}')">Şifre Değiştir</button>
+        <button class="ghost" onclick="updateDealerPhone('${dl.id}')">Doğrulama Telefonunu Güncelle</button>
         <button class="ghost" onclick="sendDealerBalanceWhatsApp('${dl.id}')">WhatsApp ile Bakiye Bildir</button>
       </div>
     </div>
@@ -2678,6 +2681,18 @@ async function resetDealerPassword(id){
   await apiFetch(`/dealers/${id}`, { method: 'PATCH', body: JSON.stringify({ password: newPass }) });
   toast('Şifre güncellendi');
   pendingDealerCredentials = { dealerId: id, username: dl.username, password: newPass };
+  renderDealerDetail();
+}
+
+async function updateDealerPhone(id){
+  const dl = dealers.find(x=>x.id===id);
+  if(!dl) return;
+  const newPhone = prompt(`${dl.name} için giriş doğrulamasında kullanılacak telefon numarasını girin (bayi portalına girişte bu numarayı yazacak):`, dl.phone || '');
+  if(!newPhone) return;
+  const updated = await apiFetch(`/dealers/${id}`, { method: 'PATCH', body: JSON.stringify({ phone: newPhone.trim() }) });
+  const idx = dealers.findIndex(x=>x.id===id);
+  if(idx>=0) dealers[idx] = { ...dealers[idx], ...updated };
+  toast('Doğrulama telefonu güncellendi');
   renderDealerDetail();
 }
 
