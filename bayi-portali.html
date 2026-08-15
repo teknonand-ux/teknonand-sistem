@@ -370,6 +370,7 @@ function renderDevices(){
         ${pill(d.status)}
       </div>
       <div class="device-detail ${isOpen?'open':''}">
+        <div class="d-line"><span>IMEI / Seri No</span>${esc(d.imeiSerial) || '—'}</div>
         <div class="d-line"><span>Arıza</span>${esc(d.issueDescription) || '—'}</div>
         <div class="d-line"><span>Kayıt Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
         ${total>0 ? `<div class="d-line"><span>Tutar</span>₺${total.toFixed(2)}</div>` : ''}
