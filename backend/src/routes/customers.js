@@ -51,6 +51,19 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+// PATCH /api/customers/:id — mevcut müşteri kaydını ID ile günceller (telefon
+// değişse bile POST'taki gibi yeni/farklı bir kayıt oluşturmaz veya başka bir
+// müşteriyle birleşmez — cihaz detayından "Müşteri Bilgilerini Düzenle" için)
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const data = customerSchema.partial().parse(req.body);
+    const customer = await prisma.customer.update({ where: { id: req.params.id }, data });
+    res.json(customer);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.delete('/:id', requireAdmin, async (req, res, next) => {
   try {
     await prisma.customer.delete({ where: { id: req.params.id } });

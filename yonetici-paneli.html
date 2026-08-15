@@ -871,6 +871,7 @@ let customers = [];
 let expenses = [];
 let exchangeRate = 47.89; // Harem Altın USD/TL satış kuru - varsayılan, elle güncellenebilir
 let currentDeviceId = null;
+let customerEditOpen = false;
 let openDealerId = null;
 let currentUserId = null;
 let currentUserName = null;
@@ -1501,8 +1502,35 @@ function lineNet(p){
 
 function openDevice(id){
   currentDeviceId = id;
+  customerEditOpen = false;
   switchView('device-detail');
   renderDeviceDetail();
+}
+
+function toggleCustomerEdit(){
+  customerEditOpen = !customerEditOpen;
+  renderDeviceDetail();
+}
+
+async function saveCustomerEdit(customerId){
+  const fullName = document.getElementById('ce-name').value.trim();
+  const phone = document.getElementById('ce-phone').value.trim();
+  const backupPhone = document.getElementById('ce-backup').value.trim();
+  const email = document.getElementById('ce-email').value.trim();
+  if(!fullName || !phone){ toast('Ad soyad ve telefon gerekli'); return; }
+  const updated = await apiFetch(`/customers/${customerId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ fullName, phone, backupPhone: backupPhone || undefined, email: email || undefined })
+  });
+  // Bu musteriye ait tum cihazlarin bellekteki (devices dizisindeki) musteri
+  // bilgisini de guncelle, sayfa yenilemeden her yerde tutarli gorunsun.
+  devices.forEach(d=>{ if(d.customerId === customerId) d.customer = { ...d.customer, ...updated }; });
+  const ci = customers.findIndex(c=>c.id===customerId);
+  if(ci>=0) customers[ci] = { ...customers[ci], ...updated };
+  customerEditOpen = false;
+  toast('Müşteri bilgileri güncellendi');
+  renderDeviceDetail();
+  renderCustomers();
 }
 
 function onPartNameInput(){
@@ -1589,16 +1617,34 @@ function renderDeviceDetail(){
     </div>
 
     <div class="card">
+      ${customerEditOpen ? `
+      <div class="form-grid">
+        <div class="field"><label>Ad Soyad</label><input id="ce-name" value="${esc(d.customer.fullName)}"></div>
+        <div class="field"><label>Telefon</label><input id="ce-phone" value="${esc(d.customer.phone)}"></div>
+        <div class="field"><label>Yedek Telefon</label><input id="ce-backup" value="${esc(d.customer.backupPhone)}"></div>
+        <div class="field"><label>E-posta</label><input id="ce-email" value="${esc(d.customer.email)}"></div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="primary" style="margin-top:0;" onclick="saveCustomerEdit('${d.customer.id}')">Kaydet</button>
+        <button class="ghost" onclick="toggleCustomerEdit()">Vazgeç</button>
+      </div>
+      ` : `
       <div class="detail-meta">
         <div><span>Müşteri</span>${esc(d.customer.fullName)}</div>
         <div><span>Telefon</span>${esc(d.customer.phone) || '—'}</div>
-        <div><span>Yedek Telefon</span>${esc(d.backupPhone) || '—'}</div>
+        <div><span>Yedek Telefon (Müşteri)</span>${esc(d.customer.backupPhone) || '—'}</div>
+        <div><span>E-posta</span>${esc(d.customer.email) || '—'}</div>
+        <div><span>Yedek Telefon (Bu Kayıt)</span>${esc(d.backupPhone) || '—'}</div>
         <div><span>Cihaz Şifresi</span>${esc(d.devicePassword) || '—'}</div>
         <div><span>IMEI / Seri No</span>${esc(d.imeiSerial) || '—'}</div>
         <div><span>Arıza</span>${esc(d.issueDescription) || '—'}</div>
         <div><span>Kabul Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
       </div>
-      <button class="ghost" style="margin-top:10px;" onclick="sendTrackingLinkWhatsApp('${d.id}')">WhatsApp ile Takip Linki Gönder</button>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="ghost" onclick="toggleCustomerEdit()">Müşteri Bilgilerini Düzenle</button>
+        <button class="ghost" onclick="sendTrackingLinkWhatsApp('${d.id}')">WhatsApp ile Takip Linki Gönder</button>
+      </div>
+      `}
     </div>
 
     <div class="card">
