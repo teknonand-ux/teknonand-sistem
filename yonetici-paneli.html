@@ -1485,9 +1485,10 @@ const WARRANTY_OPTIONS = [0, 1, 3, 6, 12];
 const WARRANTY_LABELS = {0:'Garanti Yok', 1:'1 Ay', 3:'3 Ay', 6:'6 Ay', 12:'1 Yıl'};
 // Yaygın işlemler için önerilen garanti süreleri
 const WARRANTY_SUGGEST = [
-  {kw:['ekran'], months:3},
   {kw:['anakart','kart tamiri','anakart tamiri'], months:6},
-  {kw:['batarya','pil'], months:12}
+  {kw:['batarya','pil'], months:12},
+  {kw:['ekran'], months:3},
+  {kw:['soket','hoparlör','hoparlor','film','titreşim','titresim','yuva','ön cam','on cam','arka cam','kamera camı','kamera cami'], months:3}
 ];
 function suggestWarranty(name){
   const n = name.toLowerCase();
