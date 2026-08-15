@@ -8,7 +8,10 @@ router.use(requireAuth, requireEmployee);
 
 router.get('/', async (req, res, next) => {
   try {
-    const suppliers = await prisma.supplier.findMany({ orderBy: { name: 'asc' } });
+    const suppliers = await prisma.supplier.findMany({
+      orderBy: { name: 'asc' },
+      include: { transactions: { orderBy: { createdAt: 'desc' } } },
+    });
     res.json(suppliers);
   } catch (e) {
     next(e);

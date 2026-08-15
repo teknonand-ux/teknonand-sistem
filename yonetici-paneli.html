@@ -307,6 +307,7 @@
       <button data-view="whatsapp-templates" class="admin-only">WhatsApp Şablonları</button>
       <button data-view="cashbox" class="admin-only">Kasa</button>
       <button data-view="profit" class="admin-only">Kâr / Zarar</button>
+      <button data-view="backup" class="admin-only">Yedekleme</button>
     </nav>
     <div class="user-badge" id="userBadge"></div>
     <div class="shared-note">Not: bu prototipteki veriler bu tarayıcıda/uygulamayı açan herkeste paylaşımlı olarak saklanır (demo amaçlı).</div>
@@ -756,6 +757,44 @@
           <tbody id="deviceProfitTable"></tbody></table>
       </div>
     </div>
+
+    <!-- BACKUP -->
+    <div class="view" id="view-backup">
+      <h1>Yedekleme</h1>
+      <p class="subtitle">Cihaz kayıtlarının ve cari hesapların (bayi/toptancı) manuel yedeğini bilgisayarınıza indirin</p>
+
+      <div class="card">
+        <h3>Cihaz Kayıtları</h3>
+        <p class="login-hint" style="margin-top:0;">Tüm cihazları; müşteri bilgileri, parçalar, ödemeler ve durum geçmişi dahil eksiksiz olarak indirir.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="primary" onclick="backupDevicesJSON()">Tam Yedek İndir (JSON)</button>
+          <button class="ghost" onclick="exportDevices()">Basit Liste İndir (CSV)</button>
+        </div>
+        <div class="login-hint" id="backup-devices-info"></div>
+      </div>
+
+      <div class="card">
+        <h3>Cari Hesaplar (Bayiler ve Toptancılar)</h3>
+        <p class="login-hint" style="margin-top:0;">Bayi ve toptancı bakiyelerini, veresiye/tahsilat ve alım/ödeme hareketlerinin tamamıyla birlikte indirir.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="primary" onclick="backupCariHesaplarJSON()">Tam Yedek İndir (JSON)</button>
+          <button class="ghost" onclick="backupCariHesaplarCSV()">Hareket Listesi İndir (CSV)</button>
+        </div>
+        <div class="login-hint" id="backup-cari-info"></div>
+      </div>
+
+      <div class="card">
+        <h3>Bilgi</h3>
+        <p class="login-hint" style="margin-top:0;">
+          Yedek dosyaları doğrudan tarayıcınıza iner (sunucuya kaydedilmez) — indirdikten sonra
+          bilgisayarınızda, bulut depolamada (Google Drive, OneDrive vb.) veya e-posta ile kendinize
+          göndererek güvenli bir yerde saklamanızı öneririz. JSON dosyaları tüm alanları eksiksiz
+          içerir; CSV dosyaları Excel'de açmak için daha uygundur ama bazı detayları (parça/ödeme
+          listesi gibi) tek satıra sığdıramaz. Bu sayfa yalnızca indirme yapar — bir yedeği geri
+          yüklemek (restore) için yönetici desteği gerekir.
+        </p>
+      </div>
+    </div>
   </main>
 </div>
 <div class="toast" id="toast"></div>
@@ -1086,6 +1125,75 @@ function exportDevices(){
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   toast(`${devices.length} cihaz dışa aktarıldı`);
+}
+
+function downloadBlob(filename, content, mime){
+  const blob = new Blob([content], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadJSON(filename, dataObj){
+  downloadBlob(filename, JSON.stringify(dataObj, null, 2), 'application/json;charset=utf-8;');
+}
+
+function markBackupDone(infoElId, key, summary){
+  const now = new Date();
+  localStorage.setItem(key, now.toISOString());
+  const el = document.getElementById(infoElId);
+  if(el) el.textContent = `${summary} — son yedek: ${now.toLocaleString('tr-TR')}`;
+}
+
+function showLastBackupInfo(infoElId, key){
+  const el = document.getElementById(infoElId);
+  const saved = localStorage.getItem(key);
+  if(el && saved) el.textContent = `Son yedek: ${new Date(saved).toLocaleString('tr-TR')}`;
+}
+
+function backupDevicesJSON(){
+  if(!devices.length){ toast('Yedeklenecek cihaz kaydı yok'); return; }
+  downloadJSON(`cihaz-kayitlari-yedek-${new Date().toISOString().slice(0,10)}.json`, devices);
+  markBackupDone('backup-devices-info', 'teknonand_last_backup_devices', `${devices.length} cihaz kaydı yedeklendi`);
+  toast(`${devices.length} cihaz kaydı yedeklendi`);
+}
+
+function backupCariHesaplarJSON(){
+  if(!dealers.length && !suppliers.length){ toast('Yedeklenecek cari hesap yok'); return; }
+  downloadJSON(`cari-hesaplar-yedek-${new Date().toISOString().slice(0,10)}.json`, { bayiler: dealers, toptancilar: suppliers });
+  markBackupDone('backup-cari-info', 'teknonand_last_backup_cari', `${dealers.length} bayi, ${suppliers.length} toptancı yedeklendi`);
+  toast(`${dealers.length} bayi, ${suppliers.length} toptancı yedeklendi`);
+}
+
+function backupCariHesaplarCSV(){
+  const rows = [];
+  dealers.forEach(dl=>{
+    (dl.transactions||[]).forEach(t=>{
+      rows.push([
+        'Bayi', dl.name, dl.phone||'', t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat',
+        (parseFloat(t.amount)||0).toFixed(2), t.description||'', new Date(t.createdAt).toLocaleString('tr-TR')
+      ].map(csvEscape).join(','));
+    });
+  });
+  suppliers.forEach(s=>{
+    (s.transactions||[]).forEach(t=>{
+      rows.push([
+        'Toptancı', s.name, s.phone||'', t.type==='ALIM'?'Alım':'Ödeme',
+        (parseFloat(t.amount)||0).toFixed(2), t.description||'', new Date(t.createdAt).toLocaleString('tr-TR')
+      ].map(csvEscape).join(','));
+    });
+  });
+  if(!rows.length){ toast('Yedeklenecek cari hesap hareketi yok'); return; }
+  const header = ['Tür','Ad','Telefon','İşlem','Tutar','Açıklama','Tarih'];
+  const csv = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
+  downloadBlob(`cari-hesaplar-hareketleri-${new Date().toISOString().slice(0,10)}.csv`, csv, 'text/csv;charset=utf-8;');
+  markBackupDone('backup-cari-info', 'teknonand_last_backup_cari', `${rows.length} hareket yedeklendi`);
+  toast(`${rows.length} hareket dışa aktarıldı`);
 }
 
 async function importDevices(event){
@@ -3127,7 +3235,7 @@ function pill(status){
 }
 
 function switchView(name){
-  if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit' || name==='label-design' || name==='doc-design' || name==='employees' || name==='whatsapp-templates')){
+  if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit' || name==='label-design' || name==='doc-design' || name==='employees' || name==='whatsapp-templates' || name==='backup')){
     toast('Bu sayfayı görüntüleme yetkiniz yok');
     return;
   }
@@ -3140,6 +3248,10 @@ function switchView(name){
   if(name==='label-design') populateLabelDesignForm();
   if(name==='doc-design') populateDocDesignForm();
   if(name==='whatsapp-templates') populateWhatsappTemplateCards();
+  if(name==='backup'){
+    showLastBackupInfo('backup-devices-info', 'teknonand_last_backup_devices');
+    showLastBackupInfo('backup-cari-info', 'teknonand_last_backup_cari');
+  }
 }
 document.querySelectorAll('nav button').forEach(b=>{
   b.addEventListener('click', ()=>switchView(b.dataset.view));
