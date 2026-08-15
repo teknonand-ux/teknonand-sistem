@@ -1028,7 +1028,7 @@ function renderCustomers(){
 
 function csvEscape(val){
   const s = (val==null ? '' : String(val));
-  if(s.includes(',') || s.includes('"') || s.includes('\n')){
+  if(s.includes(',') || s.includes(';') || s.includes('"') || s.includes('\n')){
     return '"' + s.replace(/"/g,'""') + '"';
   }
   return s;
@@ -1037,8 +1037,8 @@ function csvEscape(val){
 function exportCustomers(){
   if(!customers.length){ toast('Aktarılacak müşteri kaydı yok'); return; }
   const header = ['Ad Soyad','Telefon','Yedek Telefon'];
-  const rows = customers.map(c => [c.fullName, c.phone, c.backupPhone||''].map(csvEscape).join(','));
-  const csv = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
+  const rows = customers.map(c => [c.fullName, c.phone, c.backupPhone||''].map(csvEscape).join(';'));
+  const csv = '\uFEFF' + [header.join(';'), ...rows].join('\r\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1051,7 +1051,17 @@ function exportCustomers(){
   toast(`${customers.length} müşteri dışa aktarıldı`);
 }
 
-function parseCsvLine(line){
+// Turkce Excel'in varsayilan CSV ayiricisi virguldeğil noktali virguldur (,
+// ondalik ayirici olarak kullanildigi icin) -- disa aktarimlar artik ; kullaniyor.
+// Kullanicinin elde hazirladigi ya da farkli bir programdan gelen dosyalarla da
+// calisabilmek icin ayiriciyi baslik satirindan otomatik tespit ediyoruz.
+function detectCsvDelimiter(line){
+  const semi = (line.match(/;/g)||[]).length;
+  const comma = (line.match(/,/g)||[]).length;
+  return semi > comma ? ';' : ',';
+}
+
+function parseCsvLine(line, delimiter=','){
   const result = [];
   let cur = '';
   let inQuotes = false;
@@ -1064,7 +1074,7 @@ function parseCsvLine(line){
       } else cur += ch;
     } else {
       if(ch === '"') inQuotes = true;
-      else if(ch === ','){ result.push(cur); cur=''; }
+      else if(ch === delimiter){ result.push(cur); cur=''; }
       else cur += ch;
     }
   }
@@ -1079,7 +1089,8 @@ async function importCustomers(event){
   const lines = text.replace(/^\uFEFF/, '').split(/\r\n|\n/).filter(l => l.trim().length);
   if(lines.length < 2){ toast('Dosyada okunacak satır bulunamadı'); event.target.value=''; return; }
 
-  const header = parseCsvLine(lines[0]).map(h=>h.trim().toLowerCase());
+  const delimiter = detectCsvDelimiter(lines[0]);
+  const header = parseCsvLine(lines[0], delimiter).map(h=>h.trim().toLowerCase());
   const nameIdx = header.indexOf('ad soyad');
   const phoneIdx = header.indexOf('telefon');
   const backupIdx = header.indexOf('yedek telefon');
@@ -1091,7 +1102,7 @@ async function importCustomers(event){
 
   let added = 0, updated = 0;
   for(let i=1; i<lines.length; i++){
-    const cols = parseCsvLine(lines[i]);
+    const cols = parseCsvLine(lines[i], delimiter);
     const name = (cols[nameIdx]||'').trim();
     const phone = (cols[phoneIdx]||'').trim();
     const backupPhone = backupIdx>-1 ? (cols[backupIdx]||'').trim() : '';
@@ -1128,9 +1139,9 @@ function exportDevices(){
     return [
       d.customer.fullName, formatDateTR(d.createdAt), total.toFixed(2), cost.toFixed(2),
       d.customer.phone||'', d.issueDescription||'', d.model, imeiCell
-    ].map(csvEscape).join(',');
+    ].map(csvEscape).join(';');
   });
-  const csv = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
+  const csv = '\uFEFF' + [header.join(';'), ...rows].join('\r\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1193,7 +1204,7 @@ function backupCariHesaplarCSV(){
       rows.push([
         'Bayi', dl.name, dl.phone||'', t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat',
         (parseFloat(t.amount)||0).toFixed(2), t.description||'', new Date(t.createdAt).toLocaleString('tr-TR')
-      ].map(csvEscape).join(','));
+      ].map(csvEscape).join(';'));
     });
   });
   suppliers.forEach(s=>{
@@ -1201,12 +1212,12 @@ function backupCariHesaplarCSV(){
       rows.push([
         'Toptancı', s.name, s.phone||'', t.type==='ALIM'?'Alım':'Ödeme',
         (parseFloat(t.amount)||0).toFixed(2), t.description||'', new Date(t.createdAt).toLocaleString('tr-TR')
-      ].map(csvEscape).join(','));
+      ].map(csvEscape).join(';'));
     });
   });
   if(!rows.length){ toast('Yedeklenecek cari hesap hareketi yok'); return; }
   const header = ['Tür','Ad','Telefon','İşlem','Tutar','Açıklama','Tarih'];
-  const csv = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
+  const csv = '\uFEFF' + [header.join(';'), ...rows].join('\r\n');
   downloadBlob(`cari-hesaplar-hareketleri-${new Date().toISOString().slice(0,10)}.csv`, csv, 'text/csv;charset=utf-8;');
   markBackupDone('backup-cari-info', 'teknonand_last_backup_cari', `${rows.length} hareket yedeklendi`);
   toast(`${rows.length} hareket dışa aktarıldı`);
@@ -1219,7 +1230,8 @@ async function importDevices(event){
   const lines = text.replace(/^\uFEFF/, '').split(/\r\n|\n/).filter(l => l.trim().length);
   if(lines.length < 2){ toast('Dosyada okunacak satır bulunamadı'); event.target.value=''; return; }
 
-  const header = parseCsvLine(lines[0]).map(h=>h.trim().toLowerCase());
+  const delimiter = detectCsvDelimiter(lines[0]);
+  const header = parseCsvLine(lines[0], delimiter).map(h=>h.trim().toLowerCase());
   const modelIdx = header.indexOf('model');
   const nameIdx = header.indexOf('müşteri');
   const phoneIdx = header.indexOf('telefon');
@@ -1235,7 +1247,7 @@ async function importDevices(event){
 
   let added = 0;
   for(let i=1; i<lines.length; i++){
-    const cols = parseCsvLine(lines[i]);
+    const cols = parseCsvLine(lines[i], delimiter);
     const model = (cols[modelIdx]||'').trim();
     const name = (cols[nameIdx]||'').trim();
     if(!model || !name) continue;
