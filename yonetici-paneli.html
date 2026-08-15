@@ -1512,12 +1512,15 @@ function toggleCustomerEdit(){
   renderDeviceDetail();
 }
 
-async function saveCustomerEdit(customerId){
+async function saveCustomerEdit(customerId, deviceId){
   const fullName = document.getElementById('ce-name').value.trim();
   const phone = document.getElementById('ce-phone').value.trim();
   const backupPhone = document.getElementById('ce-backup').value.trim();
   const email = document.getElementById('ce-email').value.trim();
+  const dealerSel = document.getElementById('ce-dealer');
+  const newDealerId = dealerSel ? (dealerSel.value || null) : undefined;
   if(!fullName || !phone){ toast('Ad soyad ve telefon gerekli'); return; }
+
   const updated = await apiFetch(`/customers/${customerId}`, {
     method: 'PATCH',
     body: JSON.stringify({ fullName, phone, backupPhone: backupPhone || undefined, email: email || undefined })
@@ -1527,10 +1530,23 @@ async function saveCustomerEdit(customerId){
   devices.forEach(d=>{ if(d.customerId === customerId) d.customer = { ...d.customer, ...updated }; });
   const ci = customers.findIndex(c=>c.id===customerId);
   if(ci>=0) customers[ci] = { ...customers[ci], ...updated };
+
+  let dealerMsg = '';
+  if(deviceId && newDealerId !== undefined){
+    const device = devices.find(d=>d.id===deviceId);
+    if(device && device.dealerId !== newDealerId){
+      await apiFetch(`/devices/${deviceId}/dealer`, { method: 'PATCH', body: JSON.stringify({ dealerId: newDealerId }) });
+      device.dealerId = newDealerId;
+      device.dealer = newDealerId ? dealers.find(dl=>dl.id===newDealerId) : null;
+      dealerMsg = newDealerId ? ` — ${device.dealer.name} bayisine aktarıldı` : ' — bayi bağlantısı kaldırıldı';
+    }
+  }
+
   customerEditOpen = false;
-  toast('Müşteri bilgileri güncellendi');
+  toast(`Müşteri bilgileri güncellendi${dealerMsg}`);
   renderDeviceDetail();
   renderCustomers();
+  renderDealers();
 }
 
 function onPartNameInput(){
@@ -1623,9 +1639,17 @@ function renderDeviceDetail(){
         <div class="field"><label>Telefon</label><input id="ce-phone" value="${esc(d.customer.phone)}"></div>
         <div class="field"><label>Yedek Telefon</label><input id="ce-backup" value="${esc(d.customer.backupPhone)}"></div>
         <div class="field"><label>E-posta</label><input id="ce-email" value="${esc(d.customer.email)}"></div>
+        <div class="field">
+          <label>Bayi</label>
+          <select id="ce-dealer">
+            <option value="">— Bayi Yok —</option>
+            ${dealers.map(dl=>`<option value="${dl.id}" ${d.dealerId===dl.id?'selected':''}>${esc(dl.name)}</option>`).join('')}
+          </select>
+        </div>
       </div>
+      <div class="login-hint" style="margin-top:0;">Bayi seçimini değiştirirseniz bu cihaz kaydı o bayinin hesabına (Bayiler sayfası ve bayi portalı) taşınır.</div>
       <div style="display:flex; gap:8px;">
-        <button class="primary" style="margin-top:0;" onclick="saveCustomerEdit('${d.customer.id}')">Kaydet</button>
+        <button class="primary" style="margin-top:0;" onclick="saveCustomerEdit('${d.customer.id}','${d.id}')">Kaydet</button>
         <button class="ghost" onclick="toggleCustomerEdit()">Vazgeç</button>
       </div>
       ` : `
@@ -1638,6 +1662,7 @@ function renderDeviceDetail(){
         <div><span>Cihaz Şifresi</span>${esc(d.devicePassword) || '—'}</div>
         <div><span>IMEI / Seri No</span>${esc(d.imeiSerial) || '—'}</div>
         <div><span>Arıza</span>${esc(d.issueDescription) || '—'}</div>
+        <div><span>Bayi</span>${d.dealer ? esc(d.dealer.name) : '—'}</div>
         <div><span>Kabul Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
       </div>
       <div style="display:flex; gap:8px; margin-top:10px;">

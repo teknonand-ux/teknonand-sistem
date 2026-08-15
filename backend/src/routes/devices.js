@@ -282,6 +282,21 @@ router.patch('/:id/assign', async (req, res, next) => {
   }
 });
 
+// PATCH /api/devices/:id/dealer — kaydı başka bir bayinin hesabına aktar (veya bayiden çıkar)
+router.patch('/:id/dealer', async (req, res, next) => {
+  try {
+    const { dealerId } = z.object({ dealerId: z.string().uuid().nullable() }).parse(req.body);
+    const device = await prisma.device.update({
+      where: { id: req.params.id },
+      data: { dealerId },
+      include: { customer: true, dealer: true },
+    });
+    res.json(device);
+  } catch (e) {
+    next(e);
+  }
+});
+
 // POST /api/devices/:id/parts  — parça ekle (stoktan düşer)
 router.post('/:id/parts', async (req, res, next) => {
   try {
