@@ -1108,17 +1108,26 @@ async function importCustomers(event){
 
 function exportDevices(){
   if(!devices.length){ toast('Aktarılacak cihaz kaydı yok'); return; }
-  const header = ['Kod','Kayıt Tarihi','Model','IMEI / Seri No','Müşteri','Telefon','Yedek Telefon','Cihaz Şifresi','Arıza','Durum','Personel','Bayi','Toplam Tutar','Ödenen'];
+  const maxParts = devices.reduce((m,d)=>Math.max(m, (d.parts||[]).length), 0);
+  const partColumns = [];
+  for(let i=1; i<=maxParts; i++) partColumns.push(`İşlem ${i}`, `Tutar ${i}`);
+
+  const header = ['Kod','Kayıt Tarihi','Model','IMEI / Seri No','Müşteri','Telefon','Yedek Telefon','Cihaz Şifresi','Arıza','Durum','Personel','Bayi', ...partColumns, 'Toplam Tutar','Ödenen'];
   const rows = devices.map(d=>{
     const parts = d.parts || [];
     const total = parts.reduce((s,p)=>s+lineGross(p),0);
     const paid = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
     const empName = d.assignedEmployee ? d.assignedEmployee.name : '';
     const dealerName = d.dealer ? d.dealer.name : '';
+    const partCells = [];
+    for(let i=0; i<maxParts; i++){
+      const p = parts[i];
+      partCells.push(p ? p.name : '', p ? lineGross(p).toFixed(2) : '');
+    }
     return [
       d.trackingCode, new Date(d.createdAt).toLocaleString('tr-TR'), d.model, d.imeiSerial||'',
       d.customer.fullName, d.customer.phone||'', d.backupPhone||'', d.devicePassword||'', d.issueDescription||'',
-      STATUS_LABELS[d.status]||d.status, empName, dealerName,
+      STATUS_LABELS[d.status]||d.status, empName, dealerName, ...partCells,
       total.toFixed(2), paid.toFixed(2)
     ].map(csvEscape).join(',');
   });
