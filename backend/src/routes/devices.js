@@ -14,6 +14,33 @@ const dataUrlImage = z
   .max(4_000_000)
   .regex(/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+=*$/, 'Geçersiz görsel formatı');
 
+// Bayiye ait, teslim edilmiş bir cihazın parça/işlem tutarını bayinin veresiye
+// hesabına ekler (bir cihaz için yalnızca bir kez) — hem durum DELIVERED'a
+// geçtiğinde hem de zaten DELIVERED olan bir cihaz sonradan bir bayiye
+// atandığında (ör. Müşteri Bilgilerini Düzenle'den) çağrılır.
+async function creditDealerIfDelivered(device) {
+  if (device.status !== 'DELIVERED' || !device.dealerId) return;
+  const already = await prisma.dealerTransaction.findFirst({
+    where: { deviceId: device.id, type: 'VERESIYE_SATIS' },
+  });
+  if (already) return;
+  const parts = await prisma.devicePart.findMany({ where: { deviceId: device.id } });
+  const total = parts.reduce((s, p) => s + lineGross(p), 0);
+  if (total <= 0) return;
+  await prisma.$transaction([
+    prisma.dealer.update({ where: { id: device.dealerId }, data: { balance: { increment: total } } }),
+    prisma.dealerTransaction.create({
+      data: {
+        dealerId: device.dealerId,
+        deviceId: device.id,
+        type: 'VERESIYE_SATIS',
+        amount: total,
+        description: `${device.trackingCode} — otomatik veresiye`,
+      },
+    }),
+  ]);
+}
+
 function lineGross(part) {
   const price = Number(part.price);
   return part.vatMode === 'HARIC' ? price * 1.2 : price;
@@ -219,31 +246,7 @@ router.patch('/:id/status', async (req, res, next) => {
       },
     });
 
-    // Bayiye ait cihaz teslim edildiğinde, yapılan işlemlerin tutarı otomatik olarak
-    // bayinin veresiye hesabına eklenir (bir cihaz için yalnızca bir kez).
-    if (status === 'DELIVERED' && device.dealerId) {
-      const already = await prisma.dealerTransaction.findFirst({
-        where: { deviceId: device.id, type: 'VERESIYE_SATIS' },
-      });
-      if (!already) {
-        const parts = await prisma.devicePart.findMany({ where: { deviceId: device.id } });
-        const total = parts.reduce((s, p) => s + lineGross(p), 0);
-        if (total > 0) {
-          await prisma.$transaction([
-            prisma.dealer.update({ where: { id: device.dealerId }, data: { balance: { increment: total } } }),
-            prisma.dealerTransaction.create({
-              data: {
-                dealerId: device.dealerId,
-                deviceId: device.id,
-                type: 'VERESIYE_SATIS',
-                amount: total,
-                description: `${device.trackingCode} teslim edildi — otomatik veresiye`,
-              },
-            }),
-          ]);
-        }
-      }
-    }
+    await creditDealerIfDelivered(device);
 
     await sendStatusWhatsapp(device, device.customer, status);
 
@@ -291,6 +294,7 @@ router.patch('/:id/dealer', async (req, res, next) => {
       data: { dealerId },
       include: { customer: true, dealer: true },
     });
+    await creditDealerIfDelivered(device);
     res.json(device);
   } catch (e) {
     next(e);
