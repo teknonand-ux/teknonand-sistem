@@ -79,6 +79,13 @@
   }
   input:focus,select:focus,textarea:focus{border-color:var(--accent);}
   .field{margin-bottom:12px;}
+  .accordion{border:1px solid var(--line); border-radius:10px; margin-bottom:16px; overflow:hidden;}
+  .accordion-header{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; cursor:pointer; user-select:none;}
+  .accordion-header .acc-title{font-weight:600; font-size:13px;}
+  .accordion-arrow{color:var(--ink-soft); font-size:11px; transition:transform .15s;}
+  .accordion.open .accordion-arrow{transform:rotate(180deg);}
+  .accordion-body{display:none; padding:0 14px 14px;}
+  .accordion.open .accordion-body{display:block;}
   button.primary{
     background:var(--ink); color:var(--paper); border:none; border-radius:9px; padding:11px 18px;
     font-weight:600; font-size:13.5px; cursor:pointer; margin-top:6px;
@@ -384,6 +391,20 @@
         <div class="field" style="display:flex; align-items:center; gap:8px; margin-top:-4px;">
           <input type="checkbox" id="f-device-off" onchange="onDeviceOffChange()" style="width:auto;">
           <label style="margin:0; font-weight:500; color:var(--ink); font-size:13px;" for="f-device-off">Cihaz kapalı / açılmıyor — IMEI şu an okunamıyor</label>
+        </div>
+
+        <div class="accordion" id="cargo-accordion">
+          <div class="accordion-header" onclick="toggleAccordion('cargo-accordion')">
+            <span class="acc-title">📦 Kargo ile Gelen Cihaz</span>
+            <span class="accordion-arrow">▾</span>
+          </div>
+          <div class="accordion-body">
+            <div class="field" style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" id="f-is-cargo" style="width:auto;">
+              <label style="margin:0; font-weight:500; color:var(--ink); font-size:13px;" for="f-is-cargo">Bu cihaz kargo ile geldi</label>
+            </div>
+            <div class="field" style="margin-bottom:0;"><label>Kargo Adresi (opsiyonel)</label><textarea id="f-cargo-address" rows="2" placeholder="Gönderen adres bilgisi (varsa)"></textarea></div>
+          </div>
         </div>
 
         <div id="optionalFields" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
@@ -1477,6 +1498,10 @@ async function createBulkDevices(){
   switchView('devices');
 }
 
+function toggleAccordion(id){
+  document.getElementById(id).classList.toggle('open');
+}
+
 async function createDevice(){
   const name = document.getElementById('f-name').value.trim();
   const phone = document.getElementById('f-phone').value.trim();
@@ -1488,6 +1513,8 @@ async function createDevice(){
   const receivedAtRaw = document.getElementById('f-received-at').value;
   const dealerId = document.getElementById('f-dealer').value || null;
   const deviceOff = document.getElementById('f-device-off').checked;
+  const isCargo = document.getElementById('f-is-cargo').checked;
+  const cargoAddress = document.getElementById('f-cargo-address').value.trim();
   if(!name || !phone || !model){ toast('Müşteri adı, telefon ve model zorunlu'); return; }
   if(!imei && !deviceOff){ toast('IMEI / Seri No zorunlu — cihaz açılmıyorsa kutucuğu işaretleyin'); return; }
   const receivedAt = receivedAtRaw ? new Date(receivedAtRaw).toISOString() : new Date().toISOString();
@@ -1497,13 +1524,16 @@ async function createDevice(){
     body: JSON.stringify({
       customerName: name, customerPhone: phone, backupPhone: backupPhone || undefined,
       dealerId, model, imeiSerial: imei || undefined, devicePassword: devicePass || undefined,
-      deviceOff, issueDescription: issue || 'Belirtilmedi', receivedAt
+      deviceOff, isCargo, cargoAddress: cargoAddress || undefined,
+      issueDescription: issue || 'Belirtilmedi', receivedAt
     })
   });
   devices.unshift(device);
-  ['f-name','f-phone','f-model','f-imei','f-issue','f-backup-phone','f-device-pass'].forEach(id=>document.getElementById(id).value='');
+  ['f-name','f-phone','f-model','f-imei','f-issue','f-backup-phone','f-device-pass','f-cargo-address'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-dealer').value = '';
   document.getElementById('f-device-off').checked = false;
+  document.getElementById('f-is-cargo').checked = false;
+  document.getElementById('cargo-accordion').classList.remove('open');
   onDeviceOffChange();
   ['backup-phone','device-pass'].forEach(key=>{
     document.getElementById('wrap-'+key).style.display = 'none';
@@ -1742,6 +1772,7 @@ function renderDeviceDetail(){
         <div><span>Arıza</span>${esc(d.issueDescription) || '—'}</div>
         <div><span>Bayi</span>${d.dealer ? esc(d.dealer.name) : '—'}</div>
         <div><span>Kabul Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
+        ${d.isCargo ? `<div><span>📦 Kargo</span>Kargo ile geldi${d.cargoAddress?` — ${esc(d.cargoAddress)}`:''}</div>` : ''}
       </div>
       <div style="display:flex; gap:8px; margin-top:10px;">
         <button class="ghost" onclick="toggleCustomerEdit()">Müşteri Bilgilerini Düzenle</button>

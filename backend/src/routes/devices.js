@@ -63,6 +63,8 @@ const deviceCreateSchema = z.object({
   imeiSerial: z.string().optional(),
   devicePassword: z.string().optional(),
   deviceOff: z.boolean().optional(),
+  isCargo: z.boolean().optional(),
+  cargoAddress: z.string().optional(),
   issueDescription: z.string().min(1),
   receivedAt: z.string().datetime().optional(),
 });
@@ -142,6 +144,8 @@ async function createOneDevice(input, employeeId) {
       devicePassword: input.devicePassword,
       backupPhone: input.backupPhone,
       deviceOff: !!input.deviceOff,
+      isCargo: !!input.isCargo,
+      cargoAddress: input.cargoAddress || null,
       issueDescription: input.issueDescription,
       receivedAt: input.receivedAt ? new Date(input.receivedAt) : new Date(),
       status: 'RECEIVED',
