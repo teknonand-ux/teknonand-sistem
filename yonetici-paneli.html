@@ -71,6 +71,7 @@
   }
   button.primary:hover{opacity:.88;}
   button.ghost{background:none; border:1px solid var(--line); border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer; color:var(--ink-soft);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
   button.ghost:hover{border-color:var(--accent); color:var(--accent);}
 
   table{width:100%; border-collapse:collapse; font-size:13px;}
@@ -463,6 +464,13 @@
         </div>
         <table><thead><tr><th><input type="checkbox" id="select-all-devices" onchange="toggleAllDevices(this.checked)"></th><th>Kod</th><th>Kayıt Tarihi</th><th>Cihaz</th><th>Arıza</th><th>Müşteri</th><th>Personel</th><th>Durum</th><th>Parçalar / Tutar</th><th></th></tr></thead>
           <tbody id="deviceTable"></tbody></table>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:14px; flex-wrap:wrap; gap:8px;">
+          <span class="login-hint" id="device-page-info" style="margin:0;"></span>
+          <div style="display:flex; gap:6px;">
+            <button class="ghost" id="device-page-prev" onclick="changeDevicePage(-1)">← Önceki</button>
+            <button class="ghost" id="device-page-next" onclick="changeDevicePage(1)">Sonraki →</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3207,11 +3215,25 @@ function setSearchMode(mode){
   renderDeviceTable();
 }
 
+const DEVICE_PAGE_SIZE = 40;
+let deviceCurrentPage = 0;
+let lastDeviceSearchKey = '';
+
+function changeDevicePage(delta){
+  deviceCurrentPage += delta;
+  renderDeviceTable();
+}
+
 function renderDeviceTable(){
   const tbody = document.getElementById('deviceTable');
   if(!tbody) return;
   const searchEl = document.getElementById('device-search');
   const query = searchEl ? searchEl.value.trim().toLowerCase() : '';
+
+  // Arama sorgusu veya modu değiştiyse sayfayı başa al — aksi halde 5. sayfadayken
+  // arama yapınca bos bir sayfa görünebilir.
+  const searchKey = deviceSearchMode + '::' + query;
+  if(searchKey !== lastDeviceSearchKey){ deviceCurrentPage = 0; lastDeviceSearchKey = searchKey; }
 
   let list = devices;
   if(query){
@@ -3224,7 +3246,24 @@ function renderDeviceTable(){
     });
   }
 
-  tbody.innerHTML = list.length ? list.map(d=>{
+  const totalPages = Math.max(1, Math.ceil(list.length / DEVICE_PAGE_SIZE));
+  if(deviceCurrentPage >= totalPages) deviceCurrentPage = totalPages - 1;
+  if(deviceCurrentPage < 0) deviceCurrentPage = 0;
+  const pageStart = deviceCurrentPage * DEVICE_PAGE_SIZE;
+  const pageList = list.slice(pageStart, pageStart + DEVICE_PAGE_SIZE);
+
+  const pageInfo = document.getElementById('device-page-info');
+  if(pageInfo){
+    pageInfo.textContent = list.length
+      ? `${pageStart+1}–${Math.min(pageStart+DEVICE_PAGE_SIZE, list.length)} / ${list.length} kayıt (sayfa ${deviceCurrentPage+1}/${totalPages})`
+      : '';
+  }
+  const prevBtn = document.getElementById('device-page-prev');
+  const nextBtn = document.getElementById('device-page-next');
+  if(prevBtn) prevBtn.disabled = deviceCurrentPage <= 0;
+  if(nextBtn) nextBtn.disabled = deviceCurrentPage >= totalPages - 1;
+
+  tbody.innerHTML = pageList.length ? pageList.map(d=>{
     const parts = d.parts || [];
     const total = parts.reduce((sum,p)=> sum + lineGross(p), 0);
     return `
@@ -3244,7 +3283,7 @@ function renderDeviceTable(){
 
   const selectAllBox = document.getElementById('select-all-devices');
   if(selectAllBox){
-    const visibleIds = list.map(d=>d.id);
+    const visibleIds = pageList.map(d=>d.id);
     selectAllBox.checked = visibleIds.length>0 && visibleIds.every(id=>selectedDeviceIds.has(id));
     selectAllBox.indeterminate = !selectAllBox.checked && visibleIds.some(id=>selectedDeviceIds.has(id));
   }
