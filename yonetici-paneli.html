@@ -227,6 +227,9 @@
   .form-preview table{margin:10px 0;}
   .form-preview .fp-total{text-align:right; font-weight:700; font-size:14px; margin-top:6px;}
   .form-preview .fp-signrow{display:flex; justify-content:space-between; margin-top:26px; font-size:11px; color:var(--ink-soft);}
+  .form-preview .fp-exclusions{margin-top:14px; padding-top:10px; border-top:1px solid var(--line);}
+  .form-preview .fp-exclusions h5{font-size:11.5px; margin:0 0 6px; text-transform:uppercase; letter-spacing:.02em;}
+  .form-preview .fp-exclusions p{font-size:10.5px; line-height:1.5; color:var(--ink-soft); margin:0 0 8px;}
 
   @media print{
     /* Yazdırma sırasında panelin tüm normal içeriğini DOM'dan tamamen kaldırıyoruz (sadece
@@ -1495,6 +1498,46 @@ function suggestWarranty(name){
   const hit = WARRANTY_SUGGEST.find(w => w.kw.some(k => n.includes(k)));
   return hit ? hit.months : 0;
 }
+
+const WARRANTY_EXCLUSIONS = [
+  {
+    id: 'anakart',
+    kw: ['anakart','kart tamiri','anakart tamiri'],
+    title: 'Anakart Onarımı — 6 Ay Garanti Kapsam Dışı Koşullar',
+    text: 'Anakart onarımı 6 (altı) ay garanti kapsamındadır. Cihazın sıvıyla temas etmesi, darbe alması veya düşürülmesi, kasa ya da ekranında deformasyon oluşması, onarım sonrasında tarafımızca takılan garanti etiketinin sökülmesi veya cihazın başka bir yetkisiz serviste açılması/müdahale görmesi durumlarında garanti kapsam dışı kalır.'
+  },
+  {
+    id: 'ekran',
+    kw: ['ekran','ön cam','on cam','arka cam','kamera camı','kamera cami'],
+    title: 'Ekran / Cam Değişimi — 3 Ay Garanti Kapsam Dışı Koşullar',
+    text: 'Ekran ve cam değişimleri 3 (üç) ay garanti kapsamındadır. Ekranın kırılması, camın çatlaması, kasada deformasyon oluşması, cihazın darbe alması veya sıvıyla teması, tarafımızca takılan garanti etiketinin koparılması ya da cihazın başka bir serviste açılması durumlarında garanti kapsam dışı kalır.'
+  },
+  {
+    id: 'batarya',
+    kw: ['batarya','pil'],
+    title: 'Batarya Değişimi — 1 Yıl Garanti Kapsam Dışı Koşullar',
+    text: 'Batarya değişimi 1 (bir) yıl garanti kapsamındadır. Bataryanın 1 yılı aşması, 350 şarj döngüsünün üzerine çıkması, başka bir serviste bataryaya müdahale edilmiş olması, cihazın sıvıyla teması veya tarafımızca takılan garanti etiketinin sökülmesi durumlarında garanti kapsam dışı kalır.'
+  },
+  {
+    id: 'diger',
+    kw: ['soket','film','titreşim','titresim','faceid','face id','sensör','sensor'],
+    kwKamera: true, // "kamera camı" değil, tek başına "kamera" geçen durumları da bu kapsama al
+    title: 'Soket / Film / Kamera / Titreşim / Face ID / Sensör Değişimi — 3 Ay Garanti Kapsam Dışı Koşullar',
+    text: 'Soket, film, kamera, titreşim motoru, Face ID ve sensör değişimleri 3 (üç) ay garanti kapsamındadır. Cihazın sıvıyla teması, darbe alması, başka bir serviste işlem görmesi veya tarafımızca takılan garanti etiketinin sökülmesi durumlarında garanti kapsam dışı kalır.'
+  }
+];
+
+function detectWarrantyExclusions(parts){
+  const matchedIds = new Set();
+  (parts || []).forEach(p => {
+    const n = (p.name || '').toLowerCase();
+    WARRANTY_EXCLUSIONS.forEach(group => {
+      if(group.kw.some(k => n.includes(k))) matchedIds.add(group.id);
+      else if(group.kwKamera && n.includes('kamera') && !n.includes('kamera cam')) matchedIds.add(group.id);
+    });
+  });
+  return WARRANTY_EXCLUSIONS.filter(g => matchedIds.has(g.id));
+}
 function lineGross(p){
   const price = parseFloat(p.price) || 0;
   return p.vatMode === 'HARIC' ? price * 1.2 : price;
@@ -1971,6 +2014,7 @@ function buildDeliveryFormHTML(d){
   const remaining = total - paid;
   const deliveredEntry = (d.statusHistory||[]).find(h=>h.status==='DELIVERED');
   const deliveredAt = deliveredEntry ? new Date(deliveredEntry.changedAt).toLocaleString('tr-TR') : '—';
+  const exclusions = detectWarrantyExclusions(parts);
 
   return `
     ${buildCompanyHeaderHTML()}
@@ -1991,6 +2035,11 @@ function buildDeliveryFormHTML(d){
       </tbody>
     </table>
     <div class="fp-total">Toplam: ₺${total.toFixed(2)} &nbsp;·&nbsp; Ödenen: ₺${paid.toFixed(2)} &nbsp;·&nbsp; Kalan: ₺${remaining.toFixed(2)}</div>
+    ${exclusions.length ? `
+      <div class="fp-exclusions">
+        <h5>Garanti Kapsam Dışı Koşullar</h5>
+        ${exclusions.map(g => `<p><strong>${esc(g.title)}:</strong> ${esc(g.text)}</p>`).join('')}
+      </div>` : ''}
     <div class="fp-signrow"><span>Teslim Eden (Teknonand)</span><span>Teslim Alan (Müşteri)</span></div>
   `;
 }
