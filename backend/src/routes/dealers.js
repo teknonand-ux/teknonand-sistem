@@ -141,4 +141,31 @@ router.post('/me/devices/:id/approve', requireAuth, requireDealer, async (req, r
   }
 });
 
+// POST /api/dealers/me/devices/:id/request-return — bayi onarımı reddedip cihazın iadesini ister
+router.post('/me/devices/:id/request-return', requireAuth, requireDealer, async (req, res, next) => {
+  try {
+    const { note } = z.object({ note: z.string().optional() }).parse(req.body);
+    const device = await prisma.device.findFirst({ where: { id: req.params.id, dealerId: req.user.sub } });
+    if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
+
+    const updated = await prisma.device.update({
+      where: { id: device.id },
+      data: {
+        status: 'RETURNED',
+        returnReason: note || 'Bayi onarımı onaylamayıp cihazın iadesini istedi',
+      },
+    });
+    await prisma.deviceStatusHistory.create({
+      data: {
+        deviceId: device.id,
+        status: 'RETURNED',
+        note: note ? `Bayi tarafından iade istendi — Not: ${note}` : 'Bayi tarafından iade istendi',
+      },
+    });
+    res.json(updated);
+  } catch (e) {
+    next(e);
+  }
+});
+
 module.exports = router;

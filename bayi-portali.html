@@ -381,7 +381,10 @@ function renderDevices(){
           <div class="approve-box" onclick="event.stopPropagation()">
             Bu cihaz için tespit edilen arıza ve tahmini fiyatı onaylıyor musunuz?
             <textarea id="approveNote-${d.id}" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)"></textarea>
-            <div style="margin-top:8px;"><button class="primary" onclick="approveDevice('${d.id}')">Onaylıyorum</button></div>
+            <div style="margin-top:8px; display:flex; gap:8px;">
+              <button class="primary" onclick="approveDevice('${d.id}')">Onaylıyorum</button>
+              <button class="ghost" style="border-color:var(--red); color:var(--red);" onclick="requestReturnDevice('${d.id}')">İade İstiyorum</button>
+            </div>
           </div>` : ''}
         ${d.dealerApproved ? `<div class="d-line" style="color:var(--green); font-weight:600;">✓ Fiyat onaylandı</div>` : ''}
         ${d.status === 'RETURNED' ? imgGallery(d.returnImages, 'İade Görselleri') : ''}
@@ -401,6 +404,23 @@ async function approveDevice(id){
   const note = noteEl ? noteEl.value.trim() : '';
   try{
     const res = await apiFetch(`/dealers/me/devices/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ note: note || undefined })
+    });
+    if(!res.ok) return;
+    const updated = await res.json();
+    const idx = devices.findIndex(x=>x.id===id);
+    if(idx>=0) devices[idx] = { ...devices[idx], ...updated };
+    renderDevices();
+  }catch(e){ /* apiFetch zaten 401'de oturumu kapatır */ }
+}
+
+async function requestReturnDevice(id){
+  if(!confirm('Cihazın iadesini istediğinizden emin misiniz? Onay vermezseniz onarım yapılmayacak.')) return;
+  const noteEl = document.getElementById('approveNote-'+id);
+  const note = noteEl ? noteEl.value.trim() : '';
+  try{
+    const res = await apiFetch(`/dealers/me/devices/${id}/request-return`, {
       method: 'POST',
       body: JSON.stringify({ note: note || undefined })
     });

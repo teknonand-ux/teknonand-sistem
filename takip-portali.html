@@ -42,6 +42,8 @@
     padding:0 20px; cursor:pointer; transition:opacity .15s;
   }
   button:hover{opacity:.85;}
+  .again-btn{background:none; border:1.5px solid var(--line); color:var(--red);}
+  .again-btn:hover{border-color:var(--red); opacity:1; background:#FBEAE6;}
   .error{display:none; color:#C1442A; font-size:13px; margin-top:10px;}
 
   .result{display:none;}
@@ -256,6 +258,7 @@ function render(d){
         <div class="a-line"><span>Tahmini Fiyat:</span> ₺${d.estimatedPrice || 0}</div>
         <textarea id="approveNote" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)"></textarea>
         <button onclick="approveDiagnosis()">Onaylıyorum</button>
+        <button class="again-btn" onclick="requestReturn()">İade İstiyorum</button>
       </div>`;
   } else if(d.customerApproved){
     approveHtml = `<div class="approved-note">✓ Fiyatı onayladınız, cihazınız onarılıyor</div>`;
@@ -299,12 +302,15 @@ function render(d){
   `;
 }
 
+function setApproveBoxDisabled(disabled){
+  document.querySelectorAll('.approve-box button').forEach(b=>b.disabled = disabled);
+}
+
 async function approveDiagnosis(){
   if(!currentDevice) return;
   const noteEl = document.getElementById('approveNote');
   const note = noteEl ? noteEl.value.trim() : '';
-  const btn = document.querySelector('.approve-box button');
-  if(btn) btn.disabled = true;
+  setApproveBoxDisabled(true);
   try{
     const res = await fetch(`${API_BASE}/track/${encodeURIComponent(currentDevice.trackingCode)}/approve`, {
       method: 'POST',
@@ -316,7 +322,30 @@ async function approveDiagnosis(){
       render(currentDevice);
     }
   }catch(e){
-    if(btn) btn.disabled = false;
+  }finally{
+    setApproveBoxDisabled(false);
+  }
+}
+
+async function requestReturn(){
+  if(!currentDevice) return;
+  if(!confirm('Cihazın iadesini istediğinizden emin misiniz? Onay vermezseniz onarım yapılmayacak.')) return;
+  const noteEl = document.getElementById('approveNote');
+  const note = noteEl ? noteEl.value.trim() : '';
+  setApproveBoxDisabled(true);
+  try{
+    const res = await fetch(`${API_BASE}/track/${encodeURIComponent(currentDevice.trackingCode)}/request-return`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ note: note || undefined, phone: lastPhoneSuffix })
+    });
+    if(res.ok){
+      currentDevice = await res.json();
+      render(currentDevice);
+    }
+  }catch(e){
+  }finally{
+    setApproveBoxDisabled(false);
   }
 }
 </script>

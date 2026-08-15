@@ -114,4 +114,39 @@ router.post('/:code/approve', async (req, res, next) => {
   }
 });
 
+// POST /api/track/:code/request-return — müşteri onarımı reddedip cihazın iadesini ister
+router.post('/:code/request-return', async (req, res, next) => {
+  try {
+    const { note, phone } = z
+      .object({ note: z.string().max(500).optional(), phone: phoneSuffixSchema })
+      .parse(req.body);
+    const code = req.params.code.toUpperCase();
+    const notFoundOrMismatch = () =>
+      res.status(404).json({ error: 'Bu koda ait bir kayıt bulunamadı veya telefon numarası eşleşmiyor' });
+
+    const deviceId = await findDeviceByCodeAndPhone(code, phone);
+    if (!deviceId) return notFoundOrMismatch();
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+
+    const updated = await prisma.device.update({
+      where: { id: device.id },
+      data: {
+        status: 'RETURNED',
+        returnReason: note || 'Müşteri onarımı onaylamayıp cihazın iadesini istedi',
+      },
+      select: PUBLIC_DEVICE_SELECT,
+    });
+    await prisma.deviceStatusHistory.create({
+      data: {
+        deviceId: device.id,
+        status: 'RETURNED',
+        note: note ? `Müşteri iade istedi — Not: ${note}` : 'Müşteri iade istedi',
+      },
+    });
+    res.json(updated);
+  } catch (e) {
+    next(e);
+  }
+});
+
 module.exports = router;
