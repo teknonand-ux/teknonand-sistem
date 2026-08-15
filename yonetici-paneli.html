@@ -43,6 +43,20 @@
 
   /* Main */
   main{flex:1; padding:32px 36px; max-width:1400px;}
+  .global-search-wrap{position:relative; margin-bottom:18px;}
+  .global-search-wrap input{font-size:14px; padding:11px 14px; border-radius:10px;}
+  .global-search-results{
+    position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:80;
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:360px; overflow-y:auto; display:none;
+  }
+  .global-search-results.show{display:block;}
+  .global-search-results .gs-item{padding:9px 14px; cursor:pointer; border-bottom:1px solid var(--line); font-size:12.5px;}
+  .global-search-results .gs-item:last-child{border-bottom:none;}
+  .global-search-results .gs-item:hover{background:var(--paper);}
+  .global-search-results .gs-code{font-family:'JetBrains Mono',monospace; color:var(--accent); font-size:11px;}
+  .global-search-results .gs-sub{color:var(--ink-soft); font-size:11px;}
+  .global-search-results .gs-empty{padding:12px 14px; color:var(--ink-soft); font-size:12.5px;}
   h1{font-family:'Space Grotesk',sans-serif; font-size:24px; font-weight:700; letter-spacing:-0.02em; margin:0 0 4px;}
   .subtitle{color:var(--ink-soft); font-size:13.5px; margin:0 0 26px;}
   .view{display:none;}
@@ -326,6 +340,11 @@
   </div>
 
   <main>
+    <div class="global-search-wrap">
+      <input id="global-search-input" placeholder="🔍 Takip kodu, isim, telefon, IMEI/Seri No veya model ile hızlı ara..." autocomplete="off"
+        oninput="onGlobalSearchInput()" onkeydown="onGlobalSearchKeydown(event)" onfocus="onGlobalSearchInput()">
+      <div class="global-search-results" id="global-search-results"></div>
+    </div>
     <!-- DASHBOARD -->
     <div class="view active" id="view-dashboard">
       <h1>Panel</h1>
@@ -457,6 +476,12 @@
           <button class="ghost search-mode-btn" data-mode="model" onclick="setSearchMode('model')">Cihaz Modeli ile Bul</button>
         </div>
         <input id="device-search" placeholder="Aramak için yazmaya başlayın..." oninput="renderDeviceTable()">
+        <div class="field" style="max-width:280px; margin:10px 0 0;">
+          <label>Duruma Göre Filtrele</label>
+          <select id="device-status-filter" onchange="renderDeviceTable()">
+            <option value="">Tüm Durumlar</option>
+          </select>
+        </div>
       </div>
       <div class="card">
         <div style="display:flex; gap:8px; margin-bottom:14px; align-items:center;">
@@ -853,6 +878,12 @@ const STATUS_COLORS = {
   TESTING:['#0EA5E9','#E0F4FE'], READY:['#65A30D','#EEF5DC'], DELIVERED:['#2E9E6D','#E4F3EC'],
   RETURN_REQUESTED:['#EA580C','#FDEAD9'], RETURNED:['#C1442A','#FBEAE6'], CANCELLED:['#BE185D','#FCE4EF']
 };
+{
+  const statusFilterEl = document.getElementById('device-status-filter');
+  if(statusFilterEl){
+    statusFilterEl.insertAdjacentHTML('beforeend', Object.keys(STATUS_LABELS).map(s=>`<option value="${s}">${STATUS_LABELS[s]}</option>`).join(''));
+  }
+}
 
 // Kullanıcı tarafından girilen (veya randevu/takip formu gibi herkese açık uçlardan gelen)
 // her metni innerHTML içine basmadan önce buradan geçirin — aksi halde saklı XSS'e açık olur.
@@ -3406,21 +3437,26 @@ function renderDeviceTable(){
   if(!tbody) return;
   const searchEl = document.getElementById('device-search');
   const query = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  const statusFilterEl = document.getElementById('device-status-filter');
+  const statusFilter = statusFilterEl ? statusFilterEl.value : '';
 
-  // Arama sorgusu veya modu değiştiyse sayfayı başa al — aksi halde 5. sayfadayken
-  // arama yapınca bos bir sayfa görünebilir.
-  const searchKey = deviceSearchMode + '::' + query;
+  // Arama sorgusu, arama modu veya durum filtresi değiştiyse sayfayı başa al — aksi
+  // halde 5. sayfadayken filtre değiştirince bos bir sayfa görünebilir.
+  const searchKey = deviceSearchMode + '::' + query + '::' + statusFilter;
   if(searchKey !== lastDeviceSearchKey){ deviceCurrentPage = 0; lastDeviceSearchKey = searchKey; }
 
   let list = devices;
   if(query){
-    list = devices.filter(d=>{
+    list = list.filter(d=>{
       if(deviceSearchMode==='imei') return (d.imeiSerial||'').toLowerCase().includes(query);
       if(deviceSearchMode==='phone') return normPhone(d.customer.phone).includes(normPhone(query)) || normPhone(d.backupPhone).includes(normPhone(query));
       if(deviceSearchMode==='name') return (d.customer.fullName||'').toLowerCase().includes(query);
       if(deviceSearchMode==='model') return (d.model||'').toLowerCase().includes(query);
       return true;
     });
+  }
+  if(statusFilter){
+    list = list.filter(d => d.status === statusFilter);
   }
 
   const totalPages = Math.max(1, Math.ceil(list.length / DEVICE_PAGE_SIZE));
@@ -3456,7 +3492,7 @@ function renderDeviceTable(){
       <td>${parts.length} kalem · ₺${total.toFixed(0)}</td>
       <td onclick="event.stopPropagation()"><button class="ghost" onclick="printDeviceLabel('${d.id}')">Etiket Bas</button></td>
     </tr>`;
-  }).join('') : (query ? `<tr><td colspan="10" class="empty">Eşleşen kayıt bulunamadı</td></tr>` : `<tr><td colspan="10" class="empty">Henüz cihaz kaydı yok — "Cihaz Kabul"tan ekleyin</td></tr>`);
+  }).join('') : ((query || statusFilter) ? `<tr><td colspan="10" class="empty">Eşleşen kayıt bulunamadı</td></tr>` : `<tr><td colspan="10" class="empty">Henüz cihaz kaydı yok — "Cihaz Kabul"tan ekleyin</td></tr>`);
 
   const selectAllBox = document.getElementById('select-all-devices');
   if(selectAllBox){
@@ -3534,6 +3570,52 @@ function pill(status){
   const [c,bg] = STATUS_COLORS[status];
   return `<span class="pill" style="color:${c}; background:${bg};">${STATUS_LABELS[status]}</span>`;
 }
+
+function onGlobalSearchInput(){
+  const input = document.getElementById('global-search-input');
+  const box = document.getElementById('global-search-results');
+  const query = input.value.trim().toLowerCase();
+  if(!query){ box.classList.remove('show'); box.innerHTML=''; return; }
+  const nq = normPhone(query);
+  const matches = devices.filter(d=>
+    (d.trackingCode||'').toLowerCase().includes(query) ||
+    (d.customer.fullName||'').toLowerCase().includes(query) ||
+    (d.model||'').toLowerCase().includes(query) ||
+    (d.imeiSerial||'').toLowerCase().includes(query) ||
+    (nq && normPhone(d.customer.phone).includes(nq)) ||
+    (nq && normPhone(d.backupPhone).includes(nq))
+  ).slice(0, 8);
+  box.innerHTML = matches.length ? matches.map(d=>`
+    <div class="gs-item" onclick="openGlobalSearchResult('${d.id}')">
+      <span class="gs-code">${esc(d.trackingCode)}</span> — ${esc(d.model)} ${pill(d.status)}
+      <div class="gs-sub">${esc(d.customer.fullName)} · ${esc(d.customer.phone)||'—'}${d.imeiSerial?` · IMEI: ${esc(d.imeiSerial)}`:''}</div>
+    </div>
+  `).join('') : `<div class="gs-empty">Eşleşen cihaz bulunamadı</div>`;
+  box.classList.add('show');
+}
+
+function onGlobalSearchKeydown(e){
+  if(e.key === 'Escape'){
+    document.getElementById('global-search-results').classList.remove('show');
+    document.getElementById('global-search-input').blur();
+  }
+  if(e.key === 'Enter'){
+    const first = document.querySelector('#global-search-results .gs-item');
+    if(first) first.click();
+  }
+}
+
+function openGlobalSearchResult(id){
+  document.getElementById('global-search-results').classList.remove('show');
+  document.getElementById('global-search-input').value = '';
+  openDevice(id);
+}
+
+document.addEventListener('click', (e)=>{
+  const wrap = document.querySelector('.global-search-wrap');
+  const box = document.getElementById('global-search-results');
+  if(wrap && box && !wrap.contains(e.target)) box.classList.remove('show');
+});
 
 const RESTORABLE_VIEWS = new Set(Array.from(document.querySelectorAll('nav button')).map(b=>b.dataset.view));
 
