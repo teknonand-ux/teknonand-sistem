@@ -10,15 +10,71 @@ const router = express.Router();
 const publicLimiter = rateLimit({ windowMs: 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
 router.use(publicLimiter);
 
-// GET /api/track/:code — herkese açık (takip-portali.html)
+// Takip kodları sıralı/tahmin edilebilir (TKN-YYYY-0300, 0301, ...), bu yüzden bu uç
+// herkese açık ve kimlik doğrulamasız. Prisma'nın varsayılan (select'siz) davranışı TÜM
+// alanları döndürür — cihaz şifresi, yedek telefon, IMEI, iç notlar gibi hassas alanları
+// da içerir. Bunu önlemek için takip portalının gerçekten ihtiyaç duyduğu alanlarla
+// sınırlı bir allowlist kullanıyoruz.
+const PUBLIC_DEVICE_SELECT = {
+  id: true,
+  trackingCode: true,
+  brand: true,
+  model: true,
+  status: true,
+  diagnosisText: true,
+  estimatedPrice: true,
+  diagnosisImages: true,
+  customerApproved: true,
+  returnImages: true,
+  deliveryImages: true,
+  deliveryMethod: true,
+  receivedAt: true,
+  createdAt: true,
+  customer: { select: { fullName: true } },
+  parts: { select: { id: true, name: true, price: true, vatMode: true, warrantyMonths: true } },
+  payments: { select: { id: true, amount: true, paidAt: true } },
+};
+
+// Takip kodları sıralı olduğu için tek başına yeterli bir "sır" değil — bu yüzden takip
+// kodunun yanında müşteri telefonunun son 4 hanesini de doğruluyoruz. Kod var ama telefon
+// yanlışsa da "bulunamadı" ile aynı 404'ü döndürüyoruz (notFoundOrMismatch), aksi halde
+// yanıt "kod var ama telefon yanlış" / "kod hiç yok" diye ayrışır ve bu da tek başına kod
+// enumerasyonuna izin verir.
+const phoneSuffixSchema = z
+  .string()
+  .regex(/^\d{4}$/, 'Telefon numaranızın son 4 hanesini girin');
+
+function phoneEndsWithSuffix(phone, suffix) {
+  if (!phone) return false;
+  const digits = phone.replace(/\D/g, '');
+  return digits.length >= 4 && digits.endsWith(suffix);
+}
+
+async function findDeviceByCodeAndPhone(code, phoneSuffix) {
+  const device = await prisma.device.findUnique({
+    where: { trackingCode: code },
+    select: { id: true, backupPhone: true, customer: { select: { phone: true, backupPhone: true } } },
+  });
+  if (!device) return null;
+  const matches =
+    phoneEndsWithSuffix(device.customer.phone, phoneSuffix) ||
+    phoneEndsWithSuffix(device.customer.backupPhone, phoneSuffix) ||
+    phoneEndsWithSuffix(device.backupPhone, phoneSuffix);
+  return matches ? device.id : null;
+}
+
+// GET /api/track/:code?phone=1234 — herkese açık (takip-portali.html)
 router.get('/:code', async (req, res, next) => {
   try {
+    const phoneSuffix = phoneSuffixSchema.parse(req.query.phone);
     const code = req.params.code.toUpperCase();
-    const device = await prisma.device.findUnique({
-      where: { trackingCode: code },
-      include: { customer: { select: { fullName: true } }, parts: true, payments: true },
-    });
-    if (!device) return res.status(404).json({ error: 'Bu koda ait bir kayıt bulunamadı' });
+    const notFoundOrMismatch = () =>
+      res.status(404).json({ error: 'Bu koda ait bir kayıt bulunamadı veya telefon numarası eşleşmiyor' });
+
+    const deviceId = await findDeviceByCodeAndPhone(code, phoneSuffix);
+    if (!deviceId) return notFoundOrMismatch();
+
+    const device = await prisma.device.findUnique({ where: { id: deviceId }, select: PUBLIC_DEVICE_SELECT });
     res.json(device);
   } catch (e) {
     next(e);
@@ -28,14 +84,21 @@ router.get('/:code', async (req, res, next) => {
 // POST /api/track/:code/approve — müşteri fiyat onayı
 router.post('/:code/approve', async (req, res, next) => {
   try {
-    const { note } = z.object({ note: z.string().optional() }).parse(req.body);
+    const { note, phone } = z
+      .object({ note: z.string().max(500).optional(), phone: phoneSuffixSchema })
+      .parse(req.body);
     const code = req.params.code.toUpperCase();
-    const device = await prisma.device.findUnique({ where: { trackingCode: code }, include: { customer: true } });
-    if (!device) return res.status(404).json({ error: 'Bu koda ait bir kayıt bulunamadı' });
+    const notFoundOrMismatch = () =>
+      res.status(404).json({ error: 'Bu koda ait bir kayıt bulunamadı veya telefon numarası eşleşmiyor' });
+
+    const deviceId = await findDeviceByCodeAndPhone(code, phone);
+    if (!deviceId) return notFoundOrMismatch();
+    const device = await prisma.device.findUnique({ where: { id: deviceId }, include: { customer: true } });
 
     const updated = await prisma.device.update({
       where: { id: device.id },
       data: { customerApproved: true, status: 'APPROVED', approvalNote: note, approvedAt: new Date() },
+      select: PUBLIC_DEVICE_SELECT,
     });
     await prisma.deviceStatusHistory.create({
       data: {

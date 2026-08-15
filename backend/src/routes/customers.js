@@ -1,7 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
-const { requireAuth, requireEmployee } = require('../middleware/auth');
+const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(requireAuth, requireEmployee);
@@ -51,7 +51,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requireAdmin, async (req, res, next) => {
   try {
     await prisma.customer.delete({ where: { id: req.params.id } });
     res.status(204).end();

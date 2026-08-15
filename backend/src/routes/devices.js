@@ -7,6 +7,13 @@ const { sendStatusWhatsapp } = require('../services/whatsapp');
 const router = express.Router();
 router.use(requireAuth, requireEmployee);
 
+// Görsel alanları yalnızca base64 data URL kabul eder — serbest metin izin verilirse
+// bu değerler daha sonra <img src="..."> olarak basılan sayfalarda saklı XSS'e yol açabilir.
+const dataUrlImage = z
+  .string()
+  .max(4_000_000)
+  .regex(/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+=*$/, 'Geçersiz görsel formatı');
+
 function lineGross(part) {
   const price = Number(part.price);
   return part.vatMode === 'HARIC' ? price * 1.2 : price;
@@ -189,12 +196,12 @@ router.patch('/:id/status', async (req, res, next) => {
       changedAt: z.string().datetime().optional(),
       diagnosisText: z.string().optional(),
       estimatedPrice: z.number().optional(),
-      diagnosisImages: z.array(z.string()).max(4).optional(),
+      diagnosisImages: z.array(dataUrlImage).max(4).optional(),
       returnReason: z.string().optional(),
-      returnImages: z.array(z.string()).max(4).optional(),
+      returnImages: z.array(dataUrlImage).max(4).optional(),
       deliveryMethod: z.string().optional(),
       deliveryNote: z.string().optional(),
-      deliveryImages: z.array(z.string()).max(4).optional(),
+      deliveryImages: z.array(dataUrlImage).max(4).optional(),
       imeiSerial: z.string().optional(), // cihaz kapalı kabul edilmişse teslimde girilir
     });
     const { status, note, changedAt, imeiSerial, ...fields } = schema.parse(req.body);

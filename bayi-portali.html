@@ -175,6 +175,16 @@ const STATUS_COLORS = {
   RETURNED:['#C1442A','#FBEAE6'], CANCELLED:['#C1442A','#FBEAE6']
 };
 
+function esc(str){
+  if(str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 let authToken = null;
 let currentDealer = null;
 let devices = [];
@@ -192,7 +202,7 @@ function imgGallery(images, title){
     <div class="gallery-block" onclick="event.stopPropagation()">
       <div class="gallery-title">${title}</div>
       <div class="img-gallery">
-        ${images.map(src=>`<img src="${src}" onclick="openLightbox('${src}')">`).join('')}
+        ${images.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}
       </div>
     </div>`;
 }
@@ -351,16 +361,16 @@ function renderDevices(){
     <div class="device-item" onclick="toggleDevice('${d.id}')">
       <div class="device-top">
         <div>
-          <div class="device-model">${d.model}</div>
-          <div class="device-code">${d.trackingCode}</div>
+          <div class="device-model">${esc(d.model)}</div>
+          <div class="device-code">${esc(d.trackingCode)}</div>
         </div>
         ${pill(d.status)}
       </div>
       <div class="device-detail ${isOpen?'open':''}">
-        <div class="d-line"><span>Arıza</span>${d.issueDescription || '—'}</div>
+        <div class="d-line"><span>Arıza</span>${esc(d.issueDescription) || '—'}</div>
         <div class="d-line"><span>Kayıt Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
         ${total>0 ? `<div class="d-line"><span>Tutar</span>₺${total.toFixed(2)}</div>` : ''}
-        ${d.diagnosisText ? `<div class="d-line"><span>Arıza Tespiti</span>${d.diagnosisText}</div>` : ''}
+        ${d.diagnosisText ? `<div class="d-line"><span>Arıza Tespiti</span>${esc(d.diagnosisText)}</div>` : ''}
         ${d.estimatedPrice ? `<div class="d-line"><span>Tahmini Fiyat</span>₺${d.estimatedPrice}</div>` : ''}
         ${imgGallery(d.diagnosisImages, 'Arıza Tespiti Görselleri')}
         ${needsApproval ? `

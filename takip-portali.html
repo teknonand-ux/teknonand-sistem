@@ -113,9 +113,12 @@
   <div class="card">
     <div class="input-row">
       <input id="codeInput" type="text" placeholder="TKN-2026-0342" maxlength="20" onkeydown="if(event.key==='Enter') lookup()">
+    </div>
+    <div class="input-row" style="margin-top:8px;">
+      <input id="phoneSuffixInput" type="text" inputmode="numeric" pattern="\d*" placeholder="Telefon son 4 hane" maxlength="4" onkeydown="if(event.key==='Enter') lookup()">
       <button onclick="lookup()">Sorgula</button>
     </div>
-    <div class="error" id="errorMsg">Bu koda ait bir kayıt bulunamadı. Kodu kontrol edip tekrar deneyin.</div>
+    <div class="error" id="errorMsg">Bu koda ait bir kayıt bulunamadı ya da telefon numarası eşleşmiyor. Kodu ve telefonun son 4 hanesini kontrol edip tekrar deneyin.</div>
   </div>
 
   <div class="card result" id="resultCard"></div>
@@ -141,6 +144,16 @@ const STATUS_STEPS = [
 const STEP_ALIAS = { AWAITING_PARTS: 'APPROVED', IN_REPAIR: 'APPROVED' };
 const TERMINAL_LABELS = { RETURNED: 'İade Edildi', CANCELLED: 'İptal Edildi' };
 
+function esc(str){
+  if(str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 let currentDevice = null;
 
 function imgGallery(images, title){
@@ -149,7 +162,7 @@ function imgGallery(images, title){
     <div class="gallery-block">
       <div class="gallery-title">${title}</div>
       <div class="img-gallery">
-        ${images.map(src=>`<img src="${src}" onclick="openLightbox('${src}')">`).join('')}
+        ${images.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}
       </div>
     </div>`;
 }
@@ -167,19 +180,28 @@ function lineGross(p){
   return p.vatMode === 'HARIC' ? price * 1.2 : price;
 }
 
+let lastPhoneSuffix = '';
+
 async function lookup(){
   const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  const phoneSuffix = document.getElementById('phoneSuffixInput').value.trim();
   const errorEl = document.getElementById('errorMsg');
   const resultEl = document.getElementById('resultCard');
-  if(!code){ return; }
+  if(!code || !/^\d{4}$/.test(phoneSuffix)){
+    errorEl.textContent = 'Takip kodunu ve telefon numaranızın son 4 hanesini girin.';
+    errorEl.style.display = 'block';
+    resultEl.style.display = 'none';
+    return;
+  }
 
   let device = null;
   try{
-    const res = await fetch(`${API_BASE}/track/${encodeURIComponent(code)}`);
+    const res = await fetch(`${API_BASE}/track/${encodeURIComponent(code)}?phone=${encodeURIComponent(phoneSuffix)}`);
     if(res.ok) device = await res.json();
   }catch(e){ /* ağ hatası aşağıda "bulunamadı" olarak ele alınır */ }
 
   if(!device){
+    errorEl.textContent = 'Bu koda ait bir kayıt bulunamadı ya da telefon numarası eşleşmiyor. Kodu ve telefonun son 4 hanesini kontrol edip tekrar deneyin.';
     errorEl.style.display = 'block';
     resultEl.style.display = 'none';
     return;
@@ -187,6 +209,7 @@ async function lookup(){
   errorEl.style.display = 'none';
   resultEl.style.display = 'block';
   currentDevice = device;
+  lastPhoneSuffix = phoneSuffix;
   render(device);
 }
 
@@ -207,10 +230,10 @@ function render(d){
     if(i < currentIndex){ dotClass += ' done'; icon = '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
     else if(i === currentIndex){
       dotClass += ' current';
-      if(s.key === 'DIAGNOSIS_DONE' && d.diagnosisText) note = `Arıza: ${d.diagnosisText}`;
+      if(s.key === 'DIAGNOSIS_DONE' && d.diagnosisText) note = `Arıza: ${esc(d.diagnosisText)}`;
       if(s.key === 'APPROVED' && d.status === 'AWAITING_PARTS') note = 'Parça bekleniyor';
       if(s.key === 'APPROVED' && d.status === 'IN_REPAIR') note = 'Tamir ediliyor';
-      if(s.key === 'DELIVERED' && d.deliveryMethod) note = d.deliveryMethod;
+      if(s.key === 'DELIVERED' && d.deliveryMethod) note = esc(d.deliveryMethod);
     }
     stepsHtml += `
       <div class="step ${i > currentIndex ? 'pending' : ''}">
@@ -229,7 +252,7 @@ function render(d){
     approveHtml = `
       <div class="approve-box">
         <div class="a-title">Onayınız Bekleniyor</div>
-        <div class="a-line"><span>Tespit Edilen Arıza:</span> ${d.diagnosisText || '—'}</div>
+        <div class="a-line"><span>Tespit Edilen Arıza:</span> ${esc(d.diagnosisText) || '—'}</div>
         <div class="a-line"><span>Tahmini Fiyat:</span> ₺${d.estimatedPrice || 0}</div>
         <textarea id="approveNote" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)"></textarea>
         <button onclick="approveDiagnosis()">Onaylıyorum</button>
@@ -242,7 +265,7 @@ function render(d){
   if(parts.length){
     partsHtml = `
       <div class="parts-mini">
-        ${parts.map(p=>`<div class="p-line"><span>${p.name}</span><span>₺${lineGross(p).toFixed(2)}</span></div>`).join('')}
+        ${parts.map(p=>`<div class="p-line"><span>${esc(p.name)}</span><span>₺${lineGross(p).toFixed(2)}</span></div>`).join('')}
       </div>`;
   }
 
@@ -253,8 +276,8 @@ function render(d){
   document.getElementById('resultCard').innerHTML = `
     <div class="device-head">
       <div>
-        <div class="device-model">${d.model}</div>
-        <div class="device-code">${d.trackingCode}</div>
+        <div class="device-model">${esc(d.model)}</div>
+        <div class="device-code">${esc(d.trackingCode)}</div>
       </div>
       <div class="status-pill" style="color:${pillColor}; background:${pillBg};">${currentStepLabel}</div>
     </div>
@@ -286,7 +309,7 @@ async function approveDiagnosis(){
     const res = await fetch(`${API_BASE}/track/${encodeURIComponent(currentDevice.trackingCode)}/approve`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ note: note || undefined })
+      body: JSON.stringify({ note: note || undefined, phone: lastPhoneSuffix })
     });
     if(res.ok){
       currentDevice = await res.json();

@@ -25,7 +25,7 @@ router.post('/', requireAdmin, async (req, res, next) => {
       name: z.string().min(1),
       role: z.string().min(1),
       username: z.string().min(1),
-      password: z.string().min(4),
+      password: z.string().min(8),
       permission: z.enum(['ADMIN', 'RESTRICTED']),
       phone: z.string().optional(),
       email: z.string().email().optional().or(z.literal('')),
@@ -46,7 +46,7 @@ router.patch('/:id', requireAdmin, async (req, res, next) => {
       active: z.boolean().optional(),
       permission: z.enum(['ADMIN', 'RESTRICTED']).optional(),
       role: z.string().optional(),
-      password: z.string().min(4).optional(),
+      password: z.string().min(8).optional(),
     });
     const { password, ...rest } = schema.parse(req.body);
     const data = password ? { ...rest, passwordHash: await hashPassword(password) } : rest;

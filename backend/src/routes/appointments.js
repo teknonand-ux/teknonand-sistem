@@ -3,6 +3,7 @@ const rateLimit = require('express-rate-limit');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee } = require('../middleware/auth');
+const { sendNotificationEmail } = require('../services/mail');
 
 const router = express.Router();
 
@@ -22,7 +23,19 @@ router.post('/', publicLimiter, async (req, res, next) => {
     const appt = await prisma.appointment.create({
       data: { ...data, datetime: new Date(data.datetime), source: 'WEBSITE' },
     });
-    // TODO: WhatsApp bildirimi (müşteriye teyit + işletmeye bilgi) sendStatusWhatsapp benzeri servis ile gönderilecek
+    sendNotificationEmail(
+      'Yeni Randevu Talebi — Teknonand',
+      [
+        'Web sitesinden yeni bir randevu talebi alındı:',
+        '',
+        `Ad Soyad: ${data.customerName}`,
+        `Telefon: ${data.phone}`,
+        `Tarih / Saat: ${new Date(data.datetime).toLocaleString('tr-TR', { dateStyle: 'long', timeStyle: 'short' })}`,
+        data.service ? `Not: ${data.service}` : null,
+        '',
+        'Yönetici panelindeki Randevular sayfasından onaylayabilirsiniz.',
+      ].filter(Boolean).join('\n')
+    ).catch((e) => console.error('Randevu e-postası gönderilemedi:', e.message));
     res.status(201).json(appt);
   } catch (e) {
     next(e);

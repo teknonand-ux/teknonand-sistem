@@ -16,11 +16,18 @@ const appointmentRoutes = require('./routes/appointments');
 const trackRoutes = require('./routes/track');
 const settingsRoutes = require('./routes/settings');
 const reportRoutes = require('./routes/reports');
+const { startExchangeRateScheduler } = require('./services/exchangeRateScheduler');
 
 const app = express();
 
 const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
 const allowAllOrigins = allowedOrigins.length === 0 || allowedOrigins.includes('*');
+if (allowAllOrigins) {
+  // CORS_ORIGIN tanımlı değil (veya "*") — API'ye HERHANGİ bir web sitesinden tarayıcı
+  // isteği atılabiliyor demektir. .env dosyasında panelin/portalların gerçek adres(ler)ini
+  // virgülle ayırarak tanımlayın (bkz. .env.example) ve üretimde bunu mutlaka kapatın.
+  console.warn('[cors] CORS_ORIGIN tanımlı değil — API şu an TÜM originlerden erişime açık. Üretimde .env dosyasında CORS_ORIGIN ayarlayın.');
+}
 app.use(cors({ origin: allowAllOrigins ? true : allowedOrigins }));
 app.use(express.json({ limit: '2mb' }));
 
@@ -53,3 +60,5 @@ app.use(errorHandler);
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Teknonand API ${port} portunda çalışıyor`));
+
+startExchangeRateScheduler();

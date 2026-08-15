@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
+const { fetchUsdTryRate } = require('../services/exchangeRate');
 
 const router = express.Router();
 
@@ -35,6 +36,22 @@ router.put('/:key', requireAuth, requireEmployee, async (req, res, next) => {
     res.json(setting.value);
   } catch (e) {
     next(e);
+  }
+});
+
+// POST /api/settings/exchangeRate/refresh — güncel USD/TL piyasa kurunu otomatik çeker ve kaydeder
+router.post('/exchangeRate/refresh', requireAuth, requireEmployee, async (req, res, next) => {
+  try {
+    const { rate, source, fetchedAt } = await fetchUsdTryRate();
+    const value = { rate, source, updatedAt: fetchedAt };
+    const setting = await prisma.appSetting.upsert({
+      where: { key: 'exchangeRate' },
+      update: { value },
+      create: { key: 'exchangeRate', value },
+    });
+    res.json(setting.value);
+  } catch (e) {
+    res.status(502).json({ error: e.message || 'Kur çekilemedi' });
   }
 });
 

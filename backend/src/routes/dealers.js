@@ -27,7 +27,7 @@ router.post('/', requireAuth, requireEmployee, async (req, res, next) => {
       name: z.string().min(1),
       phone: z.string().optional(),
       username: z.string().min(1),
-      password: z.string().min(4),
+      password: z.string().min(8),
     });
     const { name, phone, username, password } = schema.parse(req.body);
     const dealer = await prisma.dealer.create({
@@ -61,7 +61,7 @@ router.post('/:id/transactions', requireAuth, requireEmployee, async (req, res, 
 
 router.patch('/:id', requireAuth, requireEmployee, async (req, res, next) => {
   try {
-    const { password } = z.object({ password: z.string().min(4) }).parse(req.body);
+    const { password } = z.object({ password: z.string().min(8) }).parse(req.body);
     const dealer = await prisma.dealer.update({
       where: { id: req.params.id },
       data: { passwordHash: await hashPassword(password) },

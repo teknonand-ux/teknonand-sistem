@@ -616,8 +616,9 @@
         <div class="form-grid">
           <div class="field"><label>USD / TL Satış Kuru</label><input id="fx-rate" type="number" step="0.01"></div>
           <div class="field"><label>&nbsp;</label><button class="ghost" style="width:100%;" onclick="saveExchangeRate()">Kuru Kaydet</button></div>
+          <div class="field"><label>&nbsp;</label><button class="ghost" style="width:100%;" onclick="refreshExchangeRate()" id="fx-refresh-btn">Piyasa Kurunu Otomatik Çek</button></div>
         </div>
-        <div class="login-hint" style="margin-top:0;">Harem Altın'ın (haremaltin.com) güncel USD/TL satış kurunu kontrol edip buraya girin — parça maliyetleri bu kur üzerinden TL'ye çevrilir. Tarayıcı güvenlik kısıtları nedeniyle kur otomatik çekilemiyor, günlük elle güncellenmesi gerekiyor.</div>
+        <div class="login-hint" style="margin-top:0;" id="fx-source-hint">Sunucu, kuru arka planda otomatik olarak açık piyasa kaynaklarından günde iki kez günceller; "Piyasa Kurunu Otomatik Çek" ile de anlık tazeleyebilirsiniz. Bu değer genel USD/TL piyasa kuru olup Harem Altın'ın kendi satış kuruyla birebir aynı olmayabilir — Harem Altın'a göre elle girmek isterseniz kutuya yazıp "Kuru Kaydet"e basmanız yeterli.</div>
       </div>
 
       <div class="card">
@@ -792,6 +793,18 @@ const STATUS_COLORS = {
   RETURNED:['#C1442A','#FBEAE6'], CANCELLED:['#C1442A','#FBEAE6']
 };
 
+// Kullanıcı tarafından girilen (veya randevu/takip formu gibi herkese açık uçlardan gelen)
+// her metni innerHTML içine basmadan önce buradan geçirin — aksi halde saklı XSS'e açık olur.
+function esc(str){
+  if(str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 let authToken = null;
 let devices = [];
 let stock = [];
@@ -905,7 +918,7 @@ function customerSuggest(field){
   if(!matches.length){ box.classList.remove('show'); box.innerHTML=''; return; }
   box.innerHTML = matches.slice(0,6).map(c=>`
     <div class="suggest-item" onclick='pickCustomer(${JSON.stringify(c.id)})'>
-      <div class="s-name">${c.fullName}</div><div class="s-sub">${c.phone}</div>
+      <div class="s-name">${esc(c.fullName)}</div><div class="s-sub">${esc(c.phone)}</div>
     </div>`).join('');
   box.classList.add('show');
 }
@@ -961,7 +974,7 @@ function renderCustomers(){
   if(!tbody) return;
   tbody.innerHTML = customers.length ? customers.map(c=>{
     const count = devices.filter(d=>d.customerId===c.id).length;
-    return `<tr><td>${c.fullName}</td><td>${c.phone}</td><td>${c.backupPhone||'—'}</td><td>${count}</td>
+    return `<tr><td>${esc(c.fullName)}</td><td>${esc(c.phone)}</td><td>${esc(c.backupPhone)||'—'}</td><td>${count}</td>
     <td><button class="ghost admin-only" onclick="removeItem('customers','${c.id}')">Sil</button></td></tr>`;
   }).join('') : `<tr><td colspan="5" class="empty">Henüz müşteri kaydı yok</td></tr>`;
 }
@@ -1133,7 +1146,7 @@ function dealerSuggest(){
   if(!matches.length){ box.classList.remove('show'); box.innerHTML=''; return; }
   box.innerHTML = matches.slice(0,6).map(d=>`
     <div class="suggest-item" onclick='pickDealer(${JSON.stringify(d.id)})'>
-      <div class="s-name">${d.name}</div><div class="s-sub">${d.phone||'—'} · Bakiye ₺${(parseFloat(d.balance)||0).toFixed(2)}</div>
+      <div class="s-name">${esc(d.name)}</div><div class="s-sub">${esc(d.phone)||'—'} · Bakiye ₺${(parseFloat(d.balance)||0).toFixed(2)}</div>
     </div>`).join('');
   box.classList.add('show');
 }
@@ -1387,20 +1400,20 @@ function renderDeviceDetail(){
   box.innerHTML = `
     <div class="detail-head">
       <div>
-        <div class="detail-title">${d.model}</div>
-        <div class="detail-code">${d.trackingCode}</div>
+        <div class="detail-title">${esc(d.model)}</div>
+        <div class="detail-code">${esc(d.trackingCode)}</div>
       </div>
       ${pill(d.status)}
     </div>
 
     <div class="card">
       <div class="detail-meta">
-        <div><span>Müşteri</span>${d.customer.fullName}</div>
-        <div><span>Telefon</span>${d.customer.phone || '—'}</div>
-        <div><span>Yedek Telefon</span>${d.backupPhone || '—'}</div>
-        <div><span>Cihaz Şifresi</span>${d.devicePassword || '—'}</div>
-        <div><span>IMEI / Seri No</span>${d.imeiSerial || '—'}</div>
-        <div><span>Arıza</span>${d.issueDescription || '—'}</div>
+        <div><span>Müşteri</span>${esc(d.customer.fullName)}</div>
+        <div><span>Telefon</span>${esc(d.customer.phone) || '—'}</div>
+        <div><span>Yedek Telefon</span>${esc(d.backupPhone) || '—'}</div>
+        <div><span>Cihaz Şifresi</span>${esc(d.devicePassword) || '—'}</div>
+        <div><span>IMEI / Seri No</span>${esc(d.imeiSerial) || '—'}</div>
+        <div><span>Arıza</span>${esc(d.issueDescription) || '—'}</div>
         <div><span>Kabul Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
       </div>
       <button class="ghost" style="margin-top:10px;" onclick="sendTrackingLinkWhatsApp('${d.id}')">WhatsApp ile Takip Linki Gönder</button>
@@ -1410,7 +1423,7 @@ function renderDeviceDetail(){
       <h3>Durum Geçmişi</h3>
       ${(d.statusHistory||[]).map(h=>`
         <div class="note-item">
-          ${pill(h.status)} ${h.note ? '— '+h.note : ''}
+          ${pill(h.status)} ${h.note ? '— '+esc(h.note) : ''}
           <div class="note-time">${new Date(h.changedAt).toLocaleString('tr-TR')}</div>
         </div>`).join('')}
       <div class="form-grid" style="margin-top:12px;">
@@ -1461,10 +1474,10 @@ function renderDeviceDetail(){
       <h3>Arıza Tespiti ve Onay</h3>
       ${d.diagnosisText ? `
         <div class="detail-meta" style="margin-bottom:10px;">
-          <div><span>Arıza Tespiti</span>${d.diagnosisText}</div>
+          <div><span>Arıza Tespiti</span>${esc(d.diagnosisText)}</div>
           <div><span>Tahmini Fiyat</span>₺${d.estimatedPrice||0}</div>
         </div>
-        ${(d.diagnosisImages && d.diagnosisImages.length) ? `<div class="img-gallery">${d.diagnosisImages.map(src=>`<img src="${src}" onclick="openLightbox('${src}')">`).join('')}</div>` : ''}
+        ${(d.diagnosisImages && d.diagnosisImages.length) ? `<div class="img-gallery">${d.diagnosisImages.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}</div>` : ''}
         <button class="ghost" style="margin-top:10px;" onclick="sendDiagnosisApprovalWhatsApp('${d.id}')">WhatsApp ile Onay İste</button>
       ` : `<p class="empty">Durum "Arıza Tespiti Bitti" olarak güncellendiğinde arıza tespiti ve tahmini fiyat burada görünür.</p>`}
       ${d.status === 'AWAITING_PARTS' ? `<button class="ghost" style="margin-top:10px;" onclick="sendAwaitingPartsWhatsApp('${d.id}')">WhatsApp ile "Parça Bekleniyor" Bildir</button>` : ''}
@@ -1474,17 +1487,17 @@ function renderDeviceDetail(){
       <h3>İade Bilgisi</h3>
       ${d.returnReason ? `
         <div class="detail-meta" style="margin-bottom:10px;">
-          <div><span>İade Sebebi</span>${d.returnReason}</div>
+          <div><span>İade Sebebi</span>${esc(d.returnReason)}</div>
         </div>
-        ${(d.returnImages && d.returnImages.length) ? `<div class="img-gallery">${d.returnImages.map(src=>`<img src="${src}" onclick="openLightbox('${src}')">`).join('')}</div>` : ''}
+        ${(d.returnImages && d.returnImages.length) ? `<div class="img-gallery">${d.returnImages.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}</div>` : ''}
       ` : `<p class="empty">Cihaz "İade Edildi" durumuna alındığında iade sebebi ve görseller burada görünür.</p>`}
     </div>
 
     <div class="card">
       <h3>Teslim Notu ve Görseller</h3>
       ${d.deliveryNote || (d.deliveryImages && d.deliveryImages.length) ? `
-        ${d.deliveryNote ? `<div style="font-size:13px; margin-bottom:8px;">${d.deliveryNote}</div>` : ''}
-        ${(d.deliveryImages && d.deliveryImages.length) ? `<div class="img-gallery">${d.deliveryImages.map(src=>`<img src="${src}" onclick="openLightbox('${src}')">`).join('')}</div>` : ''}
+        ${d.deliveryNote ? `<div style="font-size:13px; margin-bottom:8px;">${esc(d.deliveryNote)}</div>` : ''}
+        ${(d.deliveryImages && d.deliveryImages.length) ? `<div class="img-gallery">${d.deliveryImages.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}</div>` : ''}
       ` : `<p class="empty">Cihaz teslim edilirken eklenen not ve görseller (varsa) burada görünür.</p>`}
     </div>
 
@@ -1495,7 +1508,7 @@ function renderDeviceDetail(){
         <tbody>
           ${parts.length ? parts.map((p)=>`
             <tr>
-              <td>${p.name}</td>
+              <td>${esc(p.name)}</td>
               <td>${p.stockItemId ? 'Stok' : 'Manuel'}</td>
               <td><span class="badge vat">%20 KDV ${p.vatMode==='HARIC'?'Hariç':'Dahil'}</span></td>
               <td><span class="badge ${p.warrantyMonths>0?'warranty':'no-warranty'}">${WARRANTY_LABELS[p.warrantyMonths]}</span></td>
@@ -1509,7 +1522,7 @@ function renderDeviceDetail(){
         <div class="field"><label>Stoktan Seç</label>
           <select id="ln-stock" onchange="onStockPick()">
             <option value="">— Manuel giriş —</option>
-            ${stock.map(s=>`<option value="${s.id}">${s.name} (${s.quantity} adet)</option>`).join('')}
+            ${stock.map(s=>`<option value="${s.id}">${esc(s.name)} (${s.quantity} adet)</option>`).join('')}
           </select>
         </div>
         <div class="field"><label>Parça / İşlem Adı</label><input id="ln-name" placeholder="Ekran değişimi" oninput="onPartNameInput()"></div>
@@ -1563,13 +1576,13 @@ function renderDeviceDetail(){
     <div class="card">
       <h3>Personel Devri</h3>
       <div class="detail-meta" style="margin-bottom:10px;">
-        <div><span>Şu An Atanan</span>${d.assignedEmployee ? d.assignedEmployee.name : 'Atanmadı'}</div>
+        <div><span>Şu An Atanan</span>${d.assignedEmployee ? esc(d.assignedEmployee.name) : 'Atanmadı'}</div>
       </div>
       <div class="form-grid" style="margin-top:12px;">
         <div class="field"><label>Personel Seç</label>
           <select id="assign-employee">
             <option value="">— Seçin —</option>
-            ${employees.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}
+            ${employees.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}
           </select>
         </div>
         <div class="field"><label>&nbsp;</label><button class="primary" style="margin-top:0; width:100%;" onclick="assignDevice()">Devret</button></div>
@@ -1579,7 +1592,7 @@ function renderDeviceDetail(){
     <div class="card">
       <h3>Ödeme / Tahsilat</h3>
       ${(d.payments||[]).length ? (d.payments.map((p)=>`
-        <div class="pay-row"><span class="pay-method">${p.method}</span><span>₺${(parseFloat(p.amount)||0).toFixed(2)} · ${new Date(p.paidAt).toLocaleString('tr-TR')} <button class="ghost" style="padding:3px 8px; margin-left:6px;" onclick="removePayment('${p.id}')">Sil</button></span></div>`).join('')) : `<p class="empty">Henüz tahsilat girilmedi</p>`}
+        <div class="pay-row"><span class="pay-method">${esc(p.method)}</span><span>₺${(parseFloat(p.amount)||0).toFixed(2)} · ${new Date(p.paidAt).toLocaleString('tr-TR')} <button class="ghost" style="padding:3px 8px; margin-left:6px;" onclick="removePayment('${p.id}')">Sil</button></span></div>`).join('')) : `<p class="empty">Henüz tahsilat girilmedi</p>`}
       <div class="pay-add">
         <div class="field"><label>Yöntem</label>
           <select id="pay-method"><option>Nakit</option><option>Banka Hesabı</option><option>Kredi Kartı</option><option>Sanal POS</option><option>Cari Hesap</option></select>
@@ -1609,7 +1622,7 @@ function renderDeviceDetail(){
     <div class="card">
       <h3>İşlem Notları</h3>
       ${notes.length ? notes.map(n=>`
-        <div class="note-item">${n.text}<div class="note-time">${new Date(n.at).toLocaleString('tr-TR')}</div></div>
+        <div class="note-item">${esc(n.text)}<div class="note-time">${new Date(n.at).toLocaleString('tr-TR')}</div></div>
       `).join('') : `<p class="empty">Henüz not eklenmedi</p>`}
       <div class="field" style="margin-top:10px;"><textarea id="note-text" rows="2" placeholder="Yapılan işlemi açıklayın (örn. Ekran sökülüp yeni panel takıldı, test edildi)"></textarea></div>
       <button class="primary" onclick="addNote()">Not Ekle</button>
@@ -1688,19 +1701,19 @@ function buildDeliveryFormHTML(d){
   return `
     ${buildCompanyHeaderHTML()}
     <h4>Cihaz Teslim Formu</h4>
-    <div class="fp-sub">Kayıt No: ${d.trackingCode} · Teslim Tarihi: ${deliveredAt}</div>
+    <div class="fp-sub">Kayıt No: ${esc(d.trackingCode)} · Teslim Tarihi: ${deliveredAt}</div>
     <div class="detail-meta">
-      <div><span>Müşteri</span>${d.customer.fullName}</div>
-      <div><span>Telefon</span>${d.customer.phone || '—'}</div>
-      <div><span>Cihaz</span>${d.model}</div>
-      <div><span>IMEI / Seri No</span>${d.imeiSerial || '—'}</div>
+      <div><span>Müşteri</span>${esc(d.customer.fullName)}</div>
+      <div><span>Telefon</span>${esc(d.customer.phone) || '—'}</div>
+      <div><span>Cihaz</span>${esc(d.model)}</div>
+      <div><span>IMEI / Seri No</span>${esc(d.imeiSerial) || '—'}</div>
     </div>
-    <div style="margin-top:8px;"><span style="color:var(--ink-soft); font-size:11.5px;">Arıza</span><br>${d.issueDescription || '—'}</div>
+    <div style="margin-top:8px;"><span style="color:var(--ink-soft); font-size:11.5px;">Arıza</span><br>${esc(d.issueDescription) || '—'}</div>
     <table class="line-table">
       <thead><tr><th>Yapılan İşlem</th><th>Garanti</th><th>Fiyat</th></tr></thead>
       <tbody>
         ${parts.length ? parts.map(p=>`
-          <tr><td>${p.name}</td><td>${WARRANTY_LABELS[p.warrantyMonths]}</td><td>₺${lineGross(p).toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Kayıtlı işlem yok</td></tr>`}
+          <tr><td>${esc(p.name)}</td><td>${WARRANTY_LABELS[p.warrantyMonths]}</td><td>₺${lineGross(p).toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Kayıtlı işlem yok</td></tr>`}
       </tbody>
     </table>
     <div class="fp-total">Toplam: ₺${total.toFixed(2)} &nbsp;·&nbsp; Ödenen: ₺${paid.toFixed(2)} &nbsp;·&nbsp; Kalan: ₺${remaining.toFixed(2)}</div>
@@ -1827,7 +1840,7 @@ function populateWhatsappTemplateCards(){
     return `
     <div class="card">
       <h3>${tpl.label}</h3>
-      <textarea id="wt-${key}" rows="7" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; border:1.5px solid var(--line); border-radius:8px; padding:10px; background:var(--paper); color:var(--ink);">${tpl.text}</textarea>
+      <textarea id="wt-${key}" rows="7" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; border:1.5px solid var(--line); border-radius:8px; padding:10px; background:var(--paper); color:var(--ink);">${esc(tpl.text)}</textarea>
       <div class="login-hint" style="margin-top:8px;">Kullanılabilir alanlar: ${WHATSAPP_TEMPLATES_DEFAULT[key].placeholders.map(p=>`{${p}}`).join(', ')}</div>
     </div>`;
   }).join('');
@@ -2010,7 +2023,7 @@ function renderImageThumbs(arr, previewElId, key){
   const box = document.getElementById(previewElId);
   if(!box) return;
   box.innerHTML = arr.map((src,i)=>`
-    <div class="img-thumb"><img src="${src}"><button onclick="removeTempImage('${key}',${i},'${previewElId}')">×</button></div>
+    <div class="img-thumb"><img src="${esc(src)}"><button onclick="removeTempImage('${key}',${i},'${previewElId}')">×</button></div>
   `).join('');
 }
 
@@ -2131,7 +2144,7 @@ function renderEmployees(){
   const tbody = document.getElementById('employeeTable');
   if(!tbody) return;
   tbody.innerHTML = employees.length ? employees.map(e=>`
-    <tr><td>${e.name}</td><td class="code">${e.username||'—'}</td><td>${e.role||'—'}</td>
+    <tr><td>${esc(e.name)}</td><td class="code">${esc(e.username)||'—'}</td><td>${esc(e.role)||'—'}</td>
     <td>${e.permission==='RESTRICTED' ? '<span class="pill" style="color:var(--amber); background:#FBF0DD;">Kısıtlı</span>' : '<span class="pill" style="color:var(--green); background:#E4F3EC;">Yönetici</span>'}</td>
     <td><button class="ghost" onclick="resetEmployeePassword('${e.id}')">Şifre Değiştir</button> <button class="ghost" onclick="removeItem('employees','${e.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz personel eklenmedi</td></tr>`;
 }
@@ -2167,8 +2180,8 @@ async function startSession(user){
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('userBadge').innerHTML = `
-    <div class="u-name">${user.name}</div>
-    <div class="u-role">${user.permission==='RESTRICTED'?'Kısıtlı Yetki':'Yönetici'} · ${user.role||''}</div>
+    <div class="u-name">${esc(user.name)}</div>
+    <div class="u-role">${user.permission==='RESTRICTED'?'Kısıtlı Yetki':'Yönetici'} · ${esc(user.role)}</div>
     <button onclick="doLogout()">Çıkış Yap</button>
   `;
   document.getElementById('login-username').value = '';
@@ -2248,8 +2261,8 @@ function renderDealers(){
     <div class="dealer-card row-click" onclick="openDealer('${dl.id}')">
       <div class="dealer-top">
         <div>
-          <div class="dealer-name">${dl.name}</div>
-          <div class="dealer-phone">${dl.phone || '—'}</div>
+          <div class="dealer-name">${esc(dl.name)}</div>
+          <div class="dealer-phone">${esc(dl.phone) || '—'}</div>
         </div>
         <div class="dealer-balance ${parseFloat(dl.balance)>0?'owes':'clear'}">₺${(parseFloat(dl.balance)||0).toFixed(2)}</div>
       </div>
@@ -2259,13 +2272,13 @@ function renderDealers(){
   const sel = document.getElementById('f-dealer');
   if(sel){
     const current = sel.value;
-    sel.innerHTML = '<option value="">— Yok —</option>' + dealers.map(dl=>`<option value="${dl.id}">${dl.name}</option>`).join('');
+    sel.innerHTML = '<option value="">— Yok —</option>' + dealers.map(dl=>`<option value="${dl.id}">${esc(dl.name)}</option>`).join('');
     sel.value = current;
   }
   const bulkSel = document.getElementById('bulk-dealer');
   if(bulkSel){
     const current = bulkSel.value;
-    bulkSel.innerHTML = '<option value="">— Bayi seçin —</option>' + dealers.map(dl=>`<option value="${dl.id}">${dl.name}</option>`).join('');
+    bulkSel.innerHTML = '<option value="">— Bayi seçin —</option>' + dealers.map(dl=>`<option value="${dl.id}">${esc(dl.name)}</option>`).join('');
     bulkSel.value = current;
   }
 }
@@ -2337,7 +2350,7 @@ function renderDealerDeviceList(){
     const total = (d.parts||[]).reduce((s,p)=>s+lineGross(p),0);
     return `
     <tr class="row-click" onclick="openDevice('${d.id}')">
-      <td class="code">${d.trackingCode}</td><td>${d.model}</td><td>${d.customer.fullName}</td><td>${pill(d.status)}</td>
+      <td class="code">${esc(d.trackingCode)}</td><td>${esc(d.model)}</td><td>${esc(d.customer.fullName)}</td><td>${pill(d.status)}</td>
       <td class="code">₺${total.toFixed(2)}</td>
     </tr>`;
   }).join('') : `<tr><td colspan="5" class="empty">${query?'Eşleşen cihaz bulunamadı':'Bu bayiye bağlı cihaz yok'}</td></tr>`;
@@ -2357,14 +2370,14 @@ function generateDealerReport(){
   let total = 0;
   const rows = list.map(d=>{
     const parts = d.parts || [];
-    const partNames = parts.map(p=>p.name).join(', ') || '—';
+    const partNames = esc(parts.map(p=>p.name).join(', ')) || '—';
     const price = parts.reduce((s,p)=>s+lineGross(p),0);
     total += price;
     const deliveredEntry = (d.statusHistory||[]).find(h=>h.status==='DELIVERED');
     return `<tr>
       <td>${new Date(d.createdAt).toLocaleDateString('tr-TR')}</td>
-      <td>${d.model}</td>
-      <td>${d.issueDescription||'—'}</td>
+      <td>${esc(d.model)}</td>
+      <td>${esc(d.issueDescription)||'—'}</td>
       <td>${partNames}</td>
       <td class="code">₺${price.toFixed(2)}</td>
       <td>${deliveredEntry ? new Date(deliveredEntry.changedAt).toLocaleDateString('tr-TR') : '—'}</td>
@@ -2373,7 +2386,7 @@ function generateDealerReport(){
 
   const dealer = dealers.find(d=>d.id===currentDealerId);
   lastDealerReport = {
-    dealerName: dealer ? dealer.name : '—',
+    dealerName: dealer ? esc(dealer.name) : '—',
     fromLabel: from.toLocaleDateString('tr-TR'), toLabel: to.toLocaleDateString('tr-TR'),
     rowsHTML: rows, total
   };
@@ -2418,8 +2431,8 @@ function renderDealerDetail(){
   box.innerHTML = `
     <div class="detail-head">
       <div>
-        <div class="detail-title">${dl.name}</div>
-        <div class="detail-code">${dl.phone || '—'}</div>
+        <div class="detail-title">${esc(dl.name)}</div>
+        <div class="detail-code">${esc(dl.phone) || '—'}</div>
       </div>
     </div>
 
@@ -2432,7 +2445,7 @@ function renderDealerDetail(){
     <div class="card">
       <h3>Bayi Portal Girişi</h3>
       <div class="detail-meta" style="margin-bottom:10px;">
-        <div><span>Kullanıcı Adı</span>${dl.username || '—'}</div>
+        <div><span>Kullanıcı Adı</span>${esc(dl.username) || '—'}</div>
       </div>
       ${pendingDealerCredentials && pendingDealerCredentials.dealerId === dl.id ? `
       <div class="approve-box" style="margin-bottom:10px;">
@@ -2549,7 +2562,7 @@ function renderExpenseSupplierSelect(){
   const sel = document.getElementById('ex-supplier');
   if(!sel) return;
   const current = sel.value;
-  sel.innerHTML = '<option value="">— Seçin —</option>' + suppliers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  sel.innerHTML = '<option value="">— Seçin —</option>' + suppliers.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   sel.value = current;
 }
 
@@ -2578,11 +2591,11 @@ function renderCashbox(){
   `;
 
   cashTbody.innerHTML = all.length ? all.map(p=>`
-    <tr><td>${new Date(p.at).toLocaleString('tr-TR')}</td><td>${p.source}</td><td>${p.method}</td><td class="code">₺${p.amount.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz tahsilat yok</td></tr>`;
+    <tr><td>${new Date(p.at).toLocaleString('tr-TR')}</td><td>${esc(p.source)}</td><td>${esc(p.method)}</td><td class="code">₺${p.amount.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz tahsilat yok</td></tr>`;
 
   exTbody.innerHTML = expenses.length ? expenses.map(e=>`
-    <tr><td>${new Date(e.createdAt).toLocaleString('tr-TR')}</td><td>${e.category}${e.supplier?` · ${e.supplier.name}`:''}</td>
-    <td>${e.description||'—'}</td><td>${e.method}</td><td class="code">₺${(parseFloat(e.amount)||0).toFixed(2)}</td>
+    <tr><td>${new Date(e.createdAt).toLocaleString('tr-TR')}</td><td>${esc(e.category)}${e.supplier?` · ${esc(e.supplier.name)}`:''}</td>
+    <td>${esc(e.description)||'—'}</td><td>${esc(e.method)}</td><td class="code">₺${(parseFloat(e.amount)||0).toFixed(2)}</td>
     <td><button class="ghost" onclick="removeItem('expenses','${e.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="6" class="empty">Henüz gider kaydı yok</td></tr>`;
 
   renderExpenseSupplierSelect();
@@ -2621,9 +2634,9 @@ function renderProfit(){
   `;
   const empKeys = Object.keys(empStats);
   empTbody.innerHTML = empKeys.length ? empKeys.map(k=>`
-    <tr><td>${k}</td><td>${empStats[k].count}</td><td class="code">₺${empStats[k].revenue.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Henüz devredilmiş cihaz yok</td></tr>`;
+    <tr><td>${esc(k)}</td><td>${empStats[k].count}</td><td class="code">₺${empStats[k].revenue.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Henüz devredilmiş cihaz yok</td></tr>`;
   devTbody.innerHTML = deviceRows.length ? deviceRows.map(r=>`
-    <tr><td class="code">${r.code}</td><td>₺${r.revenue.toFixed(2)}</td><td>₺${r.cost.toFixed(2)}</td>
+    <tr><td class="code">${esc(r.code)}</td><td>₺${r.revenue.toFixed(2)}</td><td>₺${r.cost.toFixed(2)}</td>
     <td style="color:${r.profit>=0?'var(--green)':'var(--red)'}">₺${r.profit.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz veri yok</td></tr>`;
 }
 
@@ -2658,9 +2671,34 @@ async function loadExchangeRate(){
   try{
     const data = await apiFetch('/settings/exchangeRate');
     if(data && data.rate) exchangeRate = data.rate;
+    updateFxSourceHint(data);
   }catch(e){ /* henüz kaydedilmiş kur yok, varsayılan kalır */ }
   const fxInput = document.getElementById('fx-rate');
   if(fxInput) fxInput.value = exchangeRate;
+}
+
+function updateFxSourceHint(data){
+  const hint = document.getElementById('fx-source-hint');
+  if(!hint || !data) return;
+  if(data.source){
+    const when = data.updatedAt ? new Date(data.updatedAt).toLocaleString('tr-TR') : '';
+    hint.textContent = `Son kaynak: ${data.source}${when ? ' — ' + when : ''}. Genel USD/TL piyasa kuru olup Harem Altın'ın kendi satış kuruyla birebir aynı olmayabilir; farklıysa kutuya elle yazıp "Kuru Kaydet"e basabilirsiniz.`;
+  }
+}
+
+async function refreshExchangeRate(){
+  const btn = document.getElementById('fx-refresh-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Çekiliyor...'; }
+  try{
+    const data = await apiFetch('/settings/exchangeRate/refresh', { method: 'POST' });
+    if(data && data.rate){
+      exchangeRate = data.rate;
+      document.getElementById('fx-rate').value = data.rate;
+      updateFxSourceHint(data);
+      toast(`Kur çekildi: ₺${data.rate} (${data.source})`);
+    }
+  }catch(e){ toast('Kur çekilemedi, bağlantıyı kontrol edin'); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = 'Piyasa Kurunu Otomatik Çek'; } }
 }
 
 async function saveExchangeRate(){
@@ -2668,7 +2706,7 @@ async function saveExchangeRate(){
   if(isNaN(val) || val<=0){ toast('Geçerli bir kur girin'); return; }
   exchangeRate = val;
   try{
-    await apiFetch('/settings/exchangeRate', { method: 'PUT', body: JSON.stringify({ rate: val, updatedAt: new Date().toISOString() }) });
+    await apiFetch('/settings/exchangeRate', { method: 'PUT', body: JSON.stringify({ rate: val, source: 'Elle giriş', updatedAt: new Date().toISOString() }) });
     toast(`Kur güncellendi: ₺${val}`);
   }catch(e){ toast('Kur kaydedilemedi'); }
 }
@@ -2782,10 +2820,10 @@ function buildCompanyHeaderHTML(){
   const lines = [c.address, [c.phone, c.email].filter(Boolean).join(' · '), c.tax ? 'Vergi: '+c.tax : ''].filter(Boolean);
   return `
     <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px; padding-bottom:14px; border-bottom:1.5px solid var(--line);">
-      <img src="${logoSrc}" style="height:48px; width:auto; max-width:140px; object-fit:contain;">
+      <img src="${esc(logoSrc)}" style="height:48px; width:auto; max-width:140px; object-fit:contain;">
       <div style="text-align:left;">
-        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">${c.name || 'Teknonand'}</div>
-        ${lines.map(l=>`<div style="font-size:10.5px; color:var(--ink-soft);">${l}</div>`).join('')}
+        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">${esc(c.name) || 'Teknonand'}</div>
+        ${lines.map(l=>`<div style="font-size:10.5px; color:var(--ink-soft);">${esc(l)}</div>`).join('')}
       </div>
     </div>
   `;
@@ -2875,9 +2913,9 @@ function renderAppointments(){
     <div class="appt-item">
       <div class="appt-top">
         <div>
-          <div class="appt-name">${a.customerName} <span style="color:var(--ink-soft); font-weight:400;">· ${a.phone}</span> ${a.source==='WEBSITE' ? '<span class="badge vat" style="margin-left:4px;">Web Sitesi</span>' : ''} ${upcoming ? '<span class="badge warranty" style="margin-left:4px;">Yaklaşıyor</span>' : ''}</div>
+          <div class="appt-name">${esc(a.customerName)} <span style="color:var(--ink-soft); font-weight:400;">· ${esc(a.phone)}</span> ${a.source==='WEBSITE' ? '<span class="badge vat" style="margin-left:4px;">Web Sitesi</span>' : ''} ${upcoming ? '<span class="badge warranty" style="margin-left:4px;">Yaklaşıyor</span>' : ''}</div>
           <div class="appt-when">${when.toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})} ${past?'(geçti)':''}</div>
-          ${a.service ? `<div class="appt-service">${a.service}</div>` : ''}
+          ${a.service ? `<div class="appt-service">${esc(a.service)}</div>` : ''}
         </div>
         <button class="ghost" onclick="deleteAppointment('${a.id}')">Sil</button>
       </div>
@@ -2999,12 +3037,12 @@ function renderDeviceTable(){
     return `
     <tr class="row-click" onclick="openDevice('${d.id}')">
       <td onclick="event.stopPropagation()"><input type="checkbox" class="device-row-check" data-id="${d.id}" ${selectedDeviceIds.has(d.id)?'checked':''} onchange="toggleDeviceSelect('${d.id}', this.checked)"></td>
-      <td class="code">${d.trackingCode}</td>
+      <td class="code">${esc(d.trackingCode)}</td>
       <td>${new Date(d.createdAt).toLocaleDateString('tr-TR')}<br><span style="color:var(--ink-soft); font-size:11px;">${new Date(d.createdAt).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}</span></td>
-      <td>${d.model}${d.devicePassword?`<br><span style="color:var(--ink-soft); font-size:11px;">Şifre: ${d.devicePassword}</span>`:''}</td>
-      <td>${d.issueDescription||'—'}</td>
-      <td>${d.customer.fullName}<br><span style="color:var(--ink-soft); font-size:11.5px;">${d.customer.phone||''}</span>${d.backupPhone?`<br><span style="color:var(--ink-soft); font-size:11px;">Yedek: ${d.backupPhone}</span>`:''}</td>
-      <td>${d.assignedEmployee ? d.assignedEmployee.name : '<span style="color:var(--ink-soft);">Atanmadı</span>'}</td>
+      <td>${esc(d.model)}${d.devicePassword?`<br><span style="color:var(--ink-soft); font-size:11px;">Şifre: ${esc(d.devicePassword)}</span>`:''}</td>
+      <td>${esc(d.issueDescription)||'—'}</td>
+      <td>${esc(d.customer.fullName)}<br><span style="color:var(--ink-soft); font-size:11.5px;">${esc(d.customer.phone)||''}</span>${d.backupPhone?`<br><span style="color:var(--ink-soft); font-size:11px;">Yedek: ${esc(d.backupPhone)}</span>`:''}</td>
+      <td>${d.assignedEmployee ? esc(d.assignedEmployee.name) : '<span style="color:var(--ink-soft);">Atanmadı</span>'}</td>
       <td onclick="event.stopPropagation()">${pill(d.status)}</td>
       <td>${parts.length} kalem · ₺${total.toFixed(0)}</td>
       <td onclick="event.stopPropagation()"><button class="ghost" onclick="printDeviceLabel('${d.id}')">Etiket Bas</button></td>
@@ -3033,7 +3071,7 @@ function renderAll(){
   `;
   const recent = devices.slice(0,5);
   document.getElementById('recentDevices').innerHTML = recent.length ? recent.map(d=>`
-    <tr><td class="code">${d.trackingCode}</td><td>${d.model}</td><td>${d.customer.fullName}</td>
+    <tr><td class="code">${esc(d.trackingCode)}</td><td>${esc(d.model)}</td><td>${esc(d.customer.fullName)}</td>
     <td>${pill(d.status)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz kayıt yok</td></tr>`;
 
   // Devices table
@@ -3041,14 +3079,14 @@ function renderAll(){
 
   // Stock table
   document.getElementById('stockTable').innerHTML = stock.length ? stock.map(s=>`
-    <tr><td>${s.name}</td>
+    <tr><td>${esc(s.name)}</td>
     <td style="color:${s.quantity<=s.minThreshold?'var(--red)':'var(--ink)'}">${s.quantity}</td>
     <td>${s.minThreshold}</td><td>₺${(parseFloat(s.unitCostTry)||0).toFixed(2)}${s.unitCostUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(s.unitCostUsd).toFixed(2)})</span>`:''}</td>
     <td><button class="ghost" onclick="removeItem('stock','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz parça eklenmedi</td></tr>`;
 
   // Suppliers table
   document.getElementById('supplierTable').innerHTML = suppliers.length ? suppliers.map(s=>`
-    <tr><td>${s.name}</td><td>${s.phone||'—'}</td><td>₺${(parseFloat(s.currentBalance)||0).toFixed(2)}</td>
+    <tr><td>${esc(s.name)}</td><td>${esc(s.phone)||'—'}</td><td>₺${(parseFloat(s.currentBalance)||0).toFixed(2)}</td>
     <td><button class="ghost" onclick="removeItem('suppliers','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz toptancı eklenmedi</td></tr>`;
 
   renderAppointments();
