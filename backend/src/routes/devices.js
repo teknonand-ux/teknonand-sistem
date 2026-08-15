@@ -86,6 +86,7 @@ router.get('/', async (req, res, next) => {
       include: {
         customer: true, dealer: true, assignedEmployee: true, parts: true, payments: true,
         statusHistory: { orderBy: { changedAt: 'desc' } },
+        diagnosisItems: { orderBy: { createdAt: 'asc' } },
       },
     });
     res.json(devices);
@@ -105,6 +106,7 @@ router.get('/:id', async (req, res, next) => {
         parts: true,
         payments: true,
         statusHistory: { orderBy: { changedAt: 'desc' }, include: { changedByEmployee: true } },
+        diagnosisItems: { orderBy: { createdAt: 'asc' } },
         repair: true,
       },
     });
@@ -224,6 +226,12 @@ router.patch('/:id/status', async (req, res, next) => {
       diagnosisText: z.string().optional(),
       estimatedPrice: z.number().optional(),
       diagnosisImages: z.array(dataUrlImage).max(4).optional(),
+      // Bir cihazda birden fazla ariza olabilir -- her biri kendi fiyati ve
+      // (musteri/bayi tarafindan) kendi onay/ret durumuyla ayri ayri takip edilir.
+      diagnosisItems: z.array(z.object({
+        description: z.string().min(1),
+        price: z.number().nonnegative(),
+      })).max(20).optional(),
       returnReason: z.string().optional(),
       returnImages: z.array(dataUrlImage).max(4).optional(),
       deliveryMethod: z.string().optional(),
@@ -231,7 +239,7 @@ router.patch('/:id/status', async (req, res, next) => {
       deliveryImages: z.array(dataUrlImage).max(4).optional(),
       imeiSerial: z.string().optional(), // cihaz kapalı kabul edilmişse teslimde girilir
     });
-    const { status, note, changedAt, imeiSerial, ...fields } = schema.parse(req.body);
+    const { status, note, changedAt, imeiSerial, diagnosisItems, ...fields } = schema.parse(req.body);
 
     // Arıza tespiti yeniden girildiğinde (ör. tanı/fiyat güncellendi) önceki onay artık
     // geçersizdir — müşteri/bayiden tekrar onay istenmesi için onay bilgilerini sıfırlıyoruz.
@@ -239,10 +247,30 @@ router.patch('/:id/status', async (req, res, next) => {
       ? { customerApproved: false, dealerApproved: false, approvalNote: null, approvedAt: null }
       : {};
 
-    const device = await prisma.device.update({
-      where: { id: req.params.id },
-      data: { status, ...fields, ...resetApproval, ...(imeiSerial ? { imeiSerial } : {}) },
-      include: { customer: true },
+    // diagnosisItems gönderildiyse (arıza tespiti kalem kalem girildiyse), eski kalemleri
+    // silip yenilerini oluşturuyoruz; diagnosisText/estimatedPrice de bu kalemlerden
+    // otomatik hesaplanıp geriye dönük uyumluluk için (WhatsApp şablonları, dashboard vb.)
+    // Device üzerinde de tutulmaya devam ediyor.
+    const itemFields = {};
+    if (status === 'DIAGNOSIS_DONE' && diagnosisItems && diagnosisItems.length) {
+      itemFields.diagnosisText = diagnosisItems.map((it) => it.description).join(', ');
+      itemFields.estimatedPrice = diagnosisItems.reduce((s, it) => s + it.price, 0);
+    }
+
+    const device = await prisma.$transaction(async (tx) => {
+      if (status === 'DIAGNOSIS_DONE' && diagnosisItems) {
+        await tx.diagnosisItem.deleteMany({ where: { deviceId: req.params.id } });
+        if (diagnosisItems.length) {
+          await tx.diagnosisItem.createMany({
+            data: diagnosisItems.map((it) => ({ deviceId: req.params.id, description: it.description, price: it.price })),
+          });
+        }
+      }
+      return tx.device.update({
+        where: { id: req.params.id },
+        data: { status, ...fields, ...itemFields, ...resetApproval, ...(imeiSerial ? { imeiSerial } : {}) },
+        include: { customer: true, diagnosisItems: { orderBy: { createdAt: 'asc' } } },
+      });
     });
 
     await prisma.deviceStatusHistory.create({

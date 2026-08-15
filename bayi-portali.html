@@ -76,6 +76,12 @@
   .device-detail .d-line span{color:var(--ink-soft); display:block; font-size:11px;}
   .approve-box{background:#FBF0DD; border:1px solid #EFD8A6; border-radius:9px; padding:12px; margin-top:10px;}
   .approve-box textarea{width:100%; font-family:'Inter',sans-serif; font-size:12.5px; border:1.5px solid var(--line); border-radius:8px; padding:8px 10px; margin-top:8px; background:var(--card); color:var(--ink); resize:vertical;}
+  .approve-box .diag-item{padding:8px 0; border-top:1px solid #EFD8A6;}
+  .approve-box .diag-item:first-of-type{border-top:none;}
+  .approve-box .item-state{font-size:11.5px; font-weight:600; display:inline-block;}
+  .approve-box .item-state.ok{color:var(--green);}
+  .approve-box .item-state.no{color:var(--red);}
+  .approve-box .item-actions{display:flex; gap:8px; margin-top:6px;}
   .empty{color:var(--ink-soft); font-size:13px; padding:16px 0; text-align:center;}
 
   .tx-line{display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #EEEDE7; font-size:12.5px;}
@@ -374,10 +380,24 @@ function renderDevices(){
         <div class="d-line"><span>Arıza</span>${esc(d.issueDescription) || '—'}</div>
         <div class="d-line"><span>Kayıt Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
         ${total>0 ? `<div class="d-line"><span>Tutar</span>₺${total.toFixed(2)}</div>` : ''}
-        ${d.diagnosisText ? `<div class="d-line"><span>Arıza Tespiti</span>${esc(d.diagnosisText)}</div>` : ''}
-        ${d.estimatedPrice ? `<div class="d-line"><span>Tahmini Fiyat</span>₺${d.estimatedPrice}</div>` : ''}
+        ${(!d.diagnosisItems || !d.diagnosisItems.length) && d.diagnosisText ? `<div class="d-line"><span>Arıza Tespiti</span>${esc(d.diagnosisText)}</div>` : ''}
+        ${(!d.diagnosisItems || !d.diagnosisItems.length) && d.estimatedPrice ? `<div class="d-line"><span>Tahmini Fiyat</span>₺${d.estimatedPrice}</div>` : ''}
         ${imgGallery(d.diagnosisImages, 'Arıza Tespiti Görselleri')}
-        ${needsApproval ? `
+        ${(d.diagnosisItems && d.diagnosisItems.length) ? `
+          <div class="approve-box" onclick="event.stopPropagation()">
+            <div style="font-weight:600; margin-bottom:4px;">${d.diagnosisItems.some(it=>it.approved===null||it.approved===undefined) ? 'Her arıza kalemi için ayrı ayrı onayınız bekleniyor' : 'Arıza Kalemleri'}</div>
+            ${d.diagnosisItems.map(it=>{
+              const responded = it.approved===true || it.approved===false;
+              const stateLabel = it.approved===true ? '<span class="item-state ok">✓ Onaylandı</span>' : it.approved===false ? '<span class="item-state no">✕ Yapılmasın dediniz</span>' : '';
+              const actions = !responded ? `
+                <div class="item-actions">
+                  <button class="primary" onclick="respondDealerDiagnosisItem('${d.id}','${it.id}',true)">Onaylıyorum</button>
+                  <button class="ghost" style="border-color:var(--red); color:var(--red);" onclick="respondDealerDiagnosisItem('${d.id}','${it.id}',false)">Yapılmasın</button>
+                </div>` : '';
+              return `<div class="diag-item"><div class="d-line"><span>${esc(it.description)}</span>₺${it.price}</div>${stateLabel}${actions}</div>`;
+            }).join('')}
+          </div>` : ''}
+        ${(needsApproval && (!d.diagnosisItems || !d.diagnosisItems.length)) ? `
           <div class="approve-box" onclick="event.stopPropagation()">
             Bu cihaz için tespit edilen arıza ve tahmini fiyatı onaylıyor musunuz?
             <textarea id="approveNote-${d.id}" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)"></textarea>
@@ -410,6 +430,20 @@ async function approveDevice(id){
     if(!res.ok) return;
     const updated = await res.json();
     const idx = devices.findIndex(x=>x.id===id);
+    if(idx>=0) devices[idx] = { ...devices[idx], ...updated };
+    renderDevices();
+  }catch(e){ /* apiFetch zaten 401'de oturumu kapatır */ }
+}
+
+async function respondDealerDiagnosisItem(deviceId, itemId, approved){
+  try{
+    const res = await apiFetch(`/dealers/me/devices/${deviceId}/diagnosis-items/${itemId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ approved })
+    });
+    if(!res.ok) return;
+    const updated = await res.json();
+    const idx = devices.findIndex(x=>x.id===deviceId);
     if(idx>=0) devices[idx] = { ...devices[idx], ...updated };
     renderDevices();
   }catch(e){ /* apiFetch zaten 401'de oturumu kapatır */ }

@@ -76,6 +76,13 @@
   .approve-box textarea{width:100%; font-family:'Inter',sans-serif; font-size:12.5px; border:1.5px solid var(--line); border-radius:8px; padding:9px 11px; margin-top:10px; background:var(--card); color:var(--ink); resize:vertical;}
   .approve-box button{width:100%; margin-top:10px;}
   .approved-note{color:var(--green); font-weight:600; font-size:13px; margin-top:6px;}
+  .diag-item{padding:8px 0; border-top:1px solid #EFD8A6;}
+  .diag-item:first-of-type{border-top:none;}
+  .item-state{font-size:12px; font-weight:600; display:inline-block;}
+  .item-state.ok{color:var(--green);}
+  .item-state.no{color:var(--red);}
+  .item-actions{display:flex; gap:8px; margin-top:6px;}
+  .item-actions button{width:auto; flex:1; margin-top:0;}
 
   .parts-mini{font-size:12.5px; margin-top:4px;}
   .parts-mini .p-line{display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #EEEDE7;}
@@ -251,7 +258,25 @@ function render(d){
   const paid = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
 
   let approveHtml = '';
-  if(d.status === 'DIAGNOSIS_DONE' && !d.customerApproved){
+  const diagItems = d.diagnosisItems || [];
+  if(diagItems.length){
+    const pending = diagItems.filter(it => it.approved === null || it.approved === undefined);
+    const itemsListHtml = diagItems.map(it => {
+      const responded = it.approved === true || it.approved === false;
+      const stateLabel = it.approved === true ? '<span class="item-state ok">✓ Onaylandı</span>' : it.approved === false ? '<span class="item-state no">✕ Yapılmasın dediniz</span>' : '';
+      const actions = !responded ? `
+        <div class="item-actions">
+          <button onclick="respondDiagnosisItem('${it.id}', true)">Onaylıyorum</button>
+          <button class="again-btn" onclick="respondDiagnosisItem('${it.id}', false)">Yapılmasın</button>
+        </div>` : '';
+      return `<div class="diag-item"><div class="a-line"><span>${esc(it.description)}</span> ₺${it.price}</div>${stateLabel}${actions}</div>`;
+    }).join('');
+    approveHtml = `
+      <div class="approve-box">
+        <div class="a-title">${pending.length ? 'Her Arıza Kalemi İçin Ayrı Ayrı Onayınız Bekleniyor' : 'Arıza Kalemleri Yanıtlandı'}</div>
+        ${itemsListHtml}
+      </div>`;
+  } else if(d.status === 'DIAGNOSIS_DONE' && !d.customerApproved){
     approveHtml = `
       <div class="approve-box">
         <div class="a-title">Onayınız Bekleniyor</div>
@@ -317,6 +342,25 @@ async function approveDiagnosis(){
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ note: note || undefined, phone: lastPhoneSuffix })
+    });
+    if(res.ok){
+      currentDevice = await res.json();
+      render(currentDevice);
+    }
+  }catch(e){
+  }finally{
+    setApproveBoxDisabled(false);
+  }
+}
+
+async function respondDiagnosisItem(itemId, approved){
+  if(!currentDevice) return;
+  setApproveBoxDisabled(true);
+  try{
+    const res = await fetch(`${API_BASE}/track/${encodeURIComponent(currentDevice.trackingCode)}/diagnosis-items/${encodeURIComponent(itemId)}/respond`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ approved, phone: lastPhoneSuffix })
     });
     if(res.ok){
       currentDevice = await res.json();

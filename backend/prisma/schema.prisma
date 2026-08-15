@@ -152,6 +152,7 @@ model Device {
   repair        Repair?
   whatsappMessages WhatsappMessage[]
   dealerTransactions DealerTransaction[]
+  diagnosisItems DiagnosisItem[]
 
   @@index([status])
   @@index([customerId])
@@ -170,6 +171,22 @@ model DeviceStatusHistory {
   changedAt      DateTime     @default(now())
 
   @@map("device_status_history")
+}
+
+// Bir cihazda birden fazla ariza olabilir -- her biri ayri satir, ayri fiyat ve
+// ayri musteri/bayi onayi (approved: null = beklemede, true = onaylandi, false = reddedildi/yapilmasin)
+model DiagnosisItem {
+  id          String    @id @default(uuid())
+  deviceId    String
+  device      Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  description String
+  price       Decimal   @db.Decimal(12, 2)
+  approved    Boolean?
+  respondedBy String? // "customer" | "dealer"
+  respondedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@map("diagnosis_items")
 }
 
 // ---------------------------------------------------------------------------

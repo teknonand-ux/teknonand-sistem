@@ -3,6 +3,7 @@ const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireDealer } = require('../middleware/auth');
 const { hashPassword } = require('../lib/auth');
+const { sendStatusWhatsapp } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -110,7 +111,11 @@ router.get('/me/devices', requireAuth, requireDealer, async (req, res, next) => 
       if (from) where.createdAt.gte = new Date(from);
       if (to) where.createdAt.lte = new Date(to);
     }
-    const devices = await prisma.device.findMany({ where, orderBy: { createdAt: 'desc' }, include: { parts: true } });
+    const devices = await prisma.device.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { parts: true, diagnosisItems: { orderBy: { createdAt: 'asc' } } },
+    });
     res.json(devices);
   } catch (e) {
     next(e);
@@ -163,6 +168,60 @@ router.post('/me/devices/:id/request-return', requireAuth, requireDealer, async 
       },
     });
     res.json(updated);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Tüm arıza kalemleri yanıtlandığında cihazı otomatik APPROVED/RETURN_REQUESTED
+// durumuna geçirir (bkz. track.js'teki aynı isimli fonksiyon — burada bayi tarafı için).
+async function advanceStatusIfAllItemsResponded(deviceId, respondedByLabel) {
+  const items = await prisma.diagnosisItem.findMany({ where: { deviceId } });
+  if (!items.length || items.some((it) => it.approved === null)) return null;
+
+  const anyApproved = items.some((it) => it.approved === true);
+  const newStatus = anyApproved ? 'APPROVED' : 'RETURN_REQUESTED';
+  const data = anyApproved
+    ? { status: 'APPROVED', approvedAt: new Date() }
+    : { status: 'RETURN_REQUESTED', returnReason: `${respondedByLabel} tüm arızaları reddetti, cihazın iadesini istedi` };
+
+  const updated = await prisma.device.update({ where: { id: deviceId }, data, include: { customer: true } });
+  await prisma.deviceStatusHistory.create({
+    data: {
+      deviceId,
+      status: newStatus,
+      note: anyApproved
+        ? `${respondedByLabel} tüm arıza kalemlerini yanıtladı, en az biri onaylandı`
+        : `${respondedByLabel} tüm arıza kalemlerini reddetti`,
+    },
+  });
+  await sendStatusWhatsapp(updated, updated.customer, newStatus);
+  return updated;
+}
+
+// POST /api/dealers/me/devices/:id/diagnosis-items/:itemId/respond — bayi, tek bir
+// arıza kalemini onaylar ya da reddeder ("yapılmasın")
+router.post('/me/devices/:id/diagnosis-items/:itemId/respond', requireAuth, requireDealer, async (req, res, next) => {
+  try {
+    const { approved } = z.object({ approved: z.boolean() }).parse(req.body);
+    const device = await prisma.device.findFirst({ where: { id: req.params.id, dealerId: req.user.sub } });
+    if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
+
+    const item = await prisma.diagnosisItem.findFirst({ where: { id: req.params.itemId, deviceId: device.id } });
+    if (!item) return res.status(404).json({ error: 'Arıza kalemi bulunamadı' });
+
+    await prisma.diagnosisItem.update({
+      where: { id: item.id },
+      data: { approved, respondedBy: 'dealer', respondedAt: new Date() },
+    });
+
+    await advanceStatusIfAllItemsResponded(device.id, 'Bayi');
+
+    const updatedDevice = await prisma.device.findUnique({
+      where: { id: device.id },
+      include: { parts: true, diagnosisItems: { orderBy: { createdAt: 'asc' } } },
+    });
+    res.json(updatedDevice);
   } catch (e) {
     next(e);
   }

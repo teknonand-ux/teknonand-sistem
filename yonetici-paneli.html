@@ -1689,9 +1689,15 @@ function renderDeviceDetail(){
         <div class="field"><label>Tarih / Saat</label><input id="st-datetime" type="datetime-local"></div>
       </div>
       <div id="st-diagnosis-fields" style="display:none;">
-        <div class="field"><label>Arıza Tespiti</label><textarea id="st-diagnosis-text" rows="2" placeholder="Tespit edilen arızayı yazın">${d.diagnosisText||''}</textarea></div>
-        <div class="field"><label>Tahmini Fiyat (₺)</label><input id="st-estimated-price" type="number" placeholder="1200" value="${d.estimatedPrice||''}"></div>
-        <div class="field">
+        <label>Arıza Kalemleri</label>
+        <div class="login-hint" style="margin-top:0;">Cihazda birden fazla arıza varsa her birini ayrı satır olarak ekleyin — müşteri/bayi her kalemi ayrı ayrı onaylayıp reddedebilecek.</div>
+        <div id="diagnosis-items-list" class="parts-list" style="margin:8px 0;"></div>
+        <div class="part-add-row">
+          <input id="di-desc" class="pname-input" placeholder="Arıza açıklaması (örn. Ekran kırık)" onkeydown="if(event.key==='Enter'){event.preventDefault(); addDiagnosisItem();}">
+          <input id="di-price" class="pprice-input" type="number" placeholder="Fiyat (₺)" onkeydown="if(event.key==='Enter'){event.preventDefault(); addDiagnosisItem();}">
+          <button type="button" class="ghost" onclick="addDiagnosisItem()">Ekle</button>
+        </div>
+        <div class="field" style="margin-top:10px;">
           <label>Görsel Ekle (opsiyonel, en fazla 4)</label>
           <input type="file" id="st-diagnosis-images-input" accept="image/*" multiple onchange="handleImageSelect(event,'diagnosis','st-diagnosis-images-preview')">
           <div class="img-thumb-row" id="st-diagnosis-images-preview"></div>
@@ -1728,14 +1734,22 @@ function renderDeviceDetail(){
 
     <div class="card">
       <h3>Arıza Tespiti ve Onay</h3>
-      ${d.diagnosisText ? `
+      ${(d.diagnosisItems && d.diagnosisItems.length) ? `
+        <table class="line-table" style="margin-bottom:10px;">
+          <thead><tr><th>Arıza</th><th>Fiyat</th><th>Durum</th></tr></thead>
+          <tbody>
+            ${d.diagnosisItems.map(it=>{
+              const stateLabel = it.approved===true ? '<span style="color:#16a34a;">Onaylandı</span>' : it.approved===false ? '<span style="color:#dc2626;">Reddedildi</span>' : '<span style="color:#a16207;">Bekliyor</span>';
+              return `<tr><td>${esc(it.description)}</td><td>₺${it.price}</td><td>${stateLabel}</td></tr>`;
+            }).join('')}
+          </tbody>
+        </table>
         <div class="detail-meta" style="margin-bottom:10px;">
-          <div><span>Arıza Tespiti</span>${esc(d.diagnosisText)}</div>
-          <div><span>Tahmini Fiyat</span>₺${d.estimatedPrice||0}</div>
+          <div><span>Toplam Tahmini Fiyat</span>₺${d.estimatedPrice||0}</div>
         </div>
         ${(d.diagnosisImages && d.diagnosisImages.length) ? `<div class="img-gallery">${d.diagnosisImages.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}</div>` : ''}
         <button class="ghost" style="margin-top:10px;" onclick="sendDiagnosisApprovalWhatsApp('${d.id}')">WhatsApp ile Onay İste</button>
-      ` : `<p class="empty">Durum "Arıza Tespiti Bitti" olarak güncellendiğinde arıza tespiti ve tahmini fiyat burada görünür.</p>`}
+      ` : `<p class="empty">Durum "Arıza Tespiti Bitti" olarak güncellendiğinde arıza kalemleri ve tahmini fiyat burada görünür.</p>`}
       ${d.status === 'AWAITING_PARTS' ? `<button class="ghost" style="margin-top:10px;" onclick="sendAwaitingPartsWhatsApp('${d.id}')">WhatsApp ile "Parça Bekleniyor" Bildir</button>` : ''}
     </div>
 
@@ -1893,6 +1907,9 @@ function renderDeviceDetail(){
   renderImageThumbs(tempImages.diagnosis, 'st-diagnosis-images-preview', 'diagnosis');
   renderImageThumbs(tempImages.return, 'st-return-images-preview', 'return');
   renderImageThumbs(tempImages.delivery, 'st-delivery-images-preview', 'delivery');
+
+  tempDiagnosisItems = (d.diagnosisItems || []).map(it => ({ description: it.description, price: it.price }));
+  renderDiagnosisItemsList();
 
   document.getElementById('pay-datetime').value = toLocalInputValue(new Date());
 
@@ -2235,6 +2252,33 @@ function onStatusFieldChange(){
 }
 
 let tempImages = {diagnosis:[], return:[], delivery:[]};
+let tempDiagnosisItems = [];
+
+function renderDiagnosisItemsList(){
+  const box = document.getElementById('diagnosis-items-list');
+  if(!box) return;
+  box.innerHTML = tempDiagnosisItems.length ? tempDiagnosisItems.map((it,i)=>`
+    <div class="part-line"><span>${esc(it.description)}</span><span>₺${it.price}</span><button type="button" onclick="removeDiagnosisItem(${i})">×</button></div>
+  `).join('') : `<p class="empty">Henüz arıza kalemi eklenmedi</p>`;
+}
+
+function addDiagnosisItem(){
+  const descEl = document.getElementById('di-desc');
+  const priceEl = document.getElementById('di-price');
+  const description = descEl.value.trim();
+  const price = parseFloat(priceEl.value) || 0;
+  if(!description){ toast('Arıza açıklaması girin'); return; }
+  tempDiagnosisItems.push({ description, price });
+  descEl.value = '';
+  priceEl.value = '';
+  descEl.focus();
+  renderDiagnosisItemsList();
+}
+
+function removeDiagnosisItem(i){
+  tempDiagnosisItems.splice(i, 1);
+  renderDiagnosisItemsList();
+}
 
 function resizeImageFile(file, maxDim, quality){
   return new Promise((resolve)=>{
@@ -2293,14 +2337,16 @@ async function addStatusEntry(){
   let newImeiSerial = null;
 
   if(status === 'DIAGNOSIS_DONE'){
-    const diagnosisText = document.getElementById('st-diagnosis-text').value.trim();
-    const estimatedPrice = parseFloat(document.getElementById('st-estimated-price').value) || 0;
-    payload.diagnosisText = diagnosisText;
-    payload.estimatedPrice = estimatedPrice;
+    if(!tempDiagnosisItems.length){
+      toast('En az bir arıza kalemi ekleyin');
+      return;
+    }
+    const estimatedPrice = tempDiagnosisItems.reduce((sum,it)=>sum+(it.price||0), 0);
+    payload.diagnosisItems = tempDiagnosisItems;
     payload.diagnosisImages = tempImages.diagnosis.slice(0,4);
-    payload.note = note || `Arıza tespiti: ${diagnosisText} — Tahmini fiyat: ₺${estimatedPrice}`;
+    payload.note = note || `Arıza tespiti: ${tempDiagnosisItems.map(it=>it.description).join(', ')} — Tahmini fiyat: ₺${estimatedPrice}`;
   }
-  if(status === 'RETURNED'){
+  if(status === 'RETURNED' || status === 'RETURN_REQUESTED'){
     const returnReason = document.getElementById('st-return-reason').value.trim();
     payload.returnReason = returnReason;
     payload.returnImages = tempImages.return.slice(0,4);
