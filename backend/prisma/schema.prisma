@@ -381,6 +381,7 @@ model WhatsappMessage {
   templateType String // "cihaz_alindi" / "parca_bekleniyor" / "teslime_hazir" vb.
   content      String
   status       WhatsappStatus @default(GONDERILDI)
+  errorMessage String?
   sentAt       DateTime       @default(now())
 
   @@map("whatsapp_messages")
