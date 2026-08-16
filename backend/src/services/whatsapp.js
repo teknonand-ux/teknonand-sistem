@@ -79,6 +79,91 @@ async function sendViaCloudApi(templateType, data, phone) {
   }
 }
 
+// PDF/belge gibi bir dosyayı Meta'nın medya sunucusuna yükler, referans olarak
+// kullanılacak media id'yi döner. Belge mesajları da (metin mesajları gibi)
+// business-initiated ise onaylı bir şablonun "header" bileşeni üzerinden gönderilir.
+async function uploadMediaToMeta(buffer, filename, mimeType) {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('file', new Blob([buffer], { type: mimeType }), filename);
+  const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/media`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || `HTTP ${res.status}`);
+  return json.id;
+}
+
+async function sendDocumentTemplateMessage(phone, templateName, mediaId, filename, bodyParams) {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const to = toCloudApiPhone(phone);
+  if (!to) throw new Error('Müşteri telefon numarası yok');
+
+  const body = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: process.env.WHATSAPP_TEMPLATE_LANG || 'tr' },
+      components: [
+        { type: 'header', parameters: [{ type: 'document', document: { id: mediaId, filename } }] },
+        { type: 'body', parameters: bodyParams.map((text) => ({ type: 'text', text: String(text) })) },
+      ],
+    },
+  };
+  const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || `HTTP ${res.status}`);
+  return json;
+}
+
+// Yalnızca personelin panelde ilgili "WhatsApp ile Gönder" butonuna basmasıyla
+// tetiklenir (otomatik durum bildirimlerinden bağımsızdır). templateType, DB'ye
+// hangi belgenin gönderildiğini not düşmek için (ör. "DELIVERY_FORM", "INVOICE").
+async function sendDocumentWhatsapp({ device, customer, pdfBuffer, filename, templateEnvKey, bodyParams, templateType }) {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const templateName = process.env[templateEnvKey];
+  const phone = customer.phone || device.backupPhone;
+
+  let status_ = 'GONDERILDI';
+  let errorMessage = null;
+
+  if (!accessToken || !phoneNumberId || !templateName) {
+    status_ = 'BASARISIZ';
+    errorMessage = 'WhatsApp Cloud API yapılandırılmamış veya bu belge için onaylı şablon tanımlı değil';
+  } else {
+    try {
+      const mediaId = await uploadMediaToMeta(pdfBuffer, filename, 'application/pdf');
+      await sendDocumentTemplateMessage(phone, templateName, mediaId, filename, bodyParams);
+    } catch (e) {
+      status_ = 'BASARISIZ';
+      errorMessage = e.message;
+    }
+  }
+
+  return prisma.whatsappMessage.create({
+    data: {
+      deviceId: device.id,
+      customerId: customer.id,
+      templateType,
+      content: `[Belge] ${filename}`,
+      status: status_,
+      errorMessage,
+    },
+  });
+}
+
 async function sendStatusWhatsapp(device, customer, status) {
   const templateFn = TEMPLATES[status];
   if (!templateFn) return null;
@@ -108,4 +193,4 @@ async function sendStatusWhatsapp(device, customer, status) {
   });
 }
 
-module.exports = { sendStatusWhatsapp };
+module.exports = { sendStatusWhatsapp, sendDocumentWhatsapp };

@@ -1992,10 +1992,10 @@ function renderDeviceDetail(){
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <a class="ghost" style="text-decoration:none; display:inline-flex; align-items:center;" href="${d.invoicePdf}" target="_blank" download="Fatura-${esc(d.trackingCode)}.pdf">Faturayı Görüntüle / İndir</a>
-          <button class="ghost" onclick="sendInvoiceWhatsApp('${d.id}')">WhatsApp ile Bildir</button>
+          <button class="ghost" onclick="sendInvoiceWhatsApp('${d.id}')">WhatsApp ile PDF Gönder</button>
           <button class="ghost" style="color:var(--red); border-color:var(--red);" onclick="removeInvoice('${d.id}')">Kaldır</button>
         </div>
-        <p class="login-hint" style="margin-top:8px; margin-bottom:0;">WhatsApp üzerinden PDF otomatik eklenemez — buton, müşteriye faturasını takip sayfasından indirebileceğini bildiren bir mesaj hazırlar. Dosyayı doğrudan iletmek isterseniz "İndir" ile kaydedip WhatsApp'tan elle ekleyebilirsiniz.</p>
+        <p class="login-hint" style="margin-top:8px; margin-bottom:0;">Butona bastığınızda fatura PDF'i müşteriye doğrudan WhatsApp belgesi olarak gönderilir (onaylı şablon üzerinden) — otomatik gönderim yapılmaz, yalnızca bu butona bastığınızda çalışır.</p>
       ` : `
         <p class="login-hint" style="margin-top:0;">Müşteri ödemesini aldıktan sonra faturayı PDF olarak buradan yükleyin.</p>
         <input type="file" id="invoice-pdf-input" accept="application/pdf" onchange="uploadInvoicePdf('${d.id}', event)">
@@ -2008,8 +2008,9 @@ function renderDeviceDetail(){
         <div class="form-preview" id="deliveryFormPreview">${buildDeliveryFormHTML(d)}</div>
         <div style="display:flex; gap:8px; margin-top:14px;">
           <button class="primary" style="margin-top:0;" onclick="printDeliveryForm('${d.id}')">Formu Yazdır</button>
-          <button class="ghost" onclick="sendDeliveryFormWhatsApp('${d.id}')">WhatsApp ile Gönder</button>
+          <button class="ghost" onclick="sendDeliveryFormWhatsApp('${d.id}')">WhatsApp ile PDF Gönder</button>
         </div>
+        <p class="login-hint" style="margin-top:8px; margin-bottom:0;">Butona bastığınızda bu form PDF olarak oluşturulup müşteriye doğrudan WhatsApp belgesi olarak gönderilir (onaylı şablon üzerinden) — otomatik gönderim yapılmaz, yalnızca bu butona bastığınızda çalışır.</p>
       ` : `<p class="empty">Cihaz "Teslim Edildi" durumuna alındığında teslim formu burada otomatik oluşur.</p>`}
     </div>
 
@@ -2275,30 +2276,18 @@ function toWhatsAppNumber(phone){
   return n;
 }
 
-function sendDeliveryFormWhatsApp(id){
+async function sendDeliveryFormWhatsApp(id){
   const d = devices.find(x=>x.id===id);
   if(!d) return;
-  const parts = d.parts || [];
-  const total = parts.reduce((s,p)=>s+lineGross(p),0);
-  const paid = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
-  const remaining = total - paid;
-  const deliveredEntry = (d.statusHistory||[]).find(h=>h.status==='DELIVERED');
-  const deliveredAt = deliveredEntry ? new Date(deliveredEntry.changedAt).toLocaleString('tr-TR') : '—';
-  const islemListesi = parts.length ? parts.map(p=>`- ${p.name}: ₺${lineGross(p).toFixed(2)} (Garanti: ${WARRANTY_LABELS[p.warrantyMonths]})`).join('\n') : '- Kayıtlı işlem yok';
-
-  const text = encodeURIComponent(fillTemplate(whatsappTemplates.delivered.text, {
-    takip_kodu: d.trackingCode,
-    musteri_adi: d.customer.fullName,
-    cihaz_modeli: d.model,
-    teslim_tarihi: deliveredAt,
-    teslim_sekli: d.deliveryMethod || 'Elden Teslim',
-    islem_listesi: islemListesi,
-    toplam_tutar: total.toFixed(2),
-    odenen_tutar: paid.toFixed(2),
-    kalan_tutar: remaining.toFixed(2)
-  }));
-  const number = toWhatsAppNumber(d.customer.phone);
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  if(!confirm(`${d.customer.fullName} numaralı müşteriye teslim formu PDF olarak WhatsApp'tan gönderilecek. Onaylıyor musunuz?`)) return;
+  try{
+    const message = await apiFetch(`/devices/${id}/send-delivery-form-whatsapp`, { method: 'POST' });
+    if(message.status === 'BASARISIZ'){
+      toast(message.errorMessage || 'Gönderilemedi — şablon henüz onaylı olmayabilir');
+    } else {
+      toast('Teslim formu WhatsApp\'tan gönderildi');
+    }
+  }catch(e){ toast(e.message || 'Gönderilemedi'); }
 }
 
 function sendDiagnosisApprovalWhatsApp(id){
@@ -2780,23 +2769,18 @@ async function removeInvoice(id){
   }catch(e){ toast(e.message || 'Kaldırılamadı'); }
 }
 
-function sendInvoiceWhatsApp(id){
+async function sendInvoiceWhatsApp(id){
   const d = devices.find(x=>x.id===id);
   if(!d || !d.customer.phone) return;
-  const lines = [
-    `Teknonand — Fatura Bilgilendirmesi`,
-    `Sayın ${d.customer.fullName},`,
-    `${d.model} (${d.trackingCode}) cihazınıza ait faturanız hazırdır.`,
-    `Aşağıdaki takip sayfasından, takip kodunuz ve telefon numaranızın son 4 hanesiyle giriş yaparak faturanızı görüntüleyip indirebilirsiniz:`,
-    TRACK_PORTAL_URL,
-    ``,
-    `Takip Kodu: ${d.trackingCode}`,
-    ``,
-    `Teşekkür ederiz.`
-  ];
-  const text = encodeURIComponent(lines.join('\n'));
-  const number = toWhatsAppNumber(d.customer.phone);
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  if(!confirm(`${d.customer.fullName} numaralı müşteriye fatura PDF olarak WhatsApp'tan gönderilecek. Onaylıyor musunuz?`)) return;
+  try{
+    const message = await apiFetch(`/devices/${id}/send-invoice-whatsapp`, { method: 'POST' });
+    if(message.status === 'BASARISIZ'){
+      toast(message.errorMessage || 'Gönderilemedi — şablon henüz onaylı olmayabilir');
+    } else {
+      toast('Fatura WhatsApp\'tan gönderildi');
+    }
+  }catch(e){ toast(e.message || 'Gönderilemedi'); }
 }
 
 function sendTrackingLinkWhatsApp(id){

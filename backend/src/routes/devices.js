@@ -2,7 +2,8 @@ const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
-const { sendStatusWhatsapp } = require('../services/whatsapp');
+const { sendStatusWhatsapp, sendDocumentWhatsapp } = require('../services/whatsapp');
+const { buildDeliveryFormPdfBuffer } = require('../services/pdfGenerator');
 
 const router = express.Router();
 router.use(requireAuth, requireEmployee);
@@ -341,6 +342,74 @@ router.delete('/:id/invoice', async (req, res, next) => {
       data: { invoicePdf: null, invoiceUploadedAt: null },
     });
     res.json(device);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/devices/:id/send-invoice-whatsapp — yüklü fatura PDF'ini WhatsApp'tan
+// belge olarak gönderir. Yalnızca panelde bu butona basıldığında tetiklenir,
+// otomatik durum bildirimlerinden bağımsızdır.
+router.post('/:id/send-invoice-whatsapp', async (req, res, next) => {
+  try {
+    const device = await prisma.device.findUnique({
+      where: { id: req.params.id },
+      include: { customer: true },
+    });
+    if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
+    if (!device.invoicePdf) return res.status(400).json({ error: 'Yüklenmiş bir fatura yok' });
+
+    const base64 = device.invoicePdf.split(',')[1];
+    const pdfBuffer = Buffer.from(base64, 'base64');
+    const filename = `Fatura-${device.trackingCode}.pdf`;
+
+    const message = await sendDocumentWhatsapp({
+      device,
+      customer: device.customer,
+      pdfBuffer,
+      filename,
+      templateEnvKey: 'WHATSAPP_TEMPLATE_INVOICE',
+      bodyParams: [device.customer.fullName, device.model],
+      templateType: 'INVOICE',
+    });
+    res.json(message);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/devices/:id/send-delivery-form-whatsapp — cihaz teslim formunu PDF
+// olarak üretip WhatsApp'tan belge olarak gönderir. Yalnızca panelde bu butona
+// basıldığında tetiklenir, otomatik durum bildirimlerinden bağımsızdır.
+router.post('/:id/send-delivery-form-whatsapp', async (req, res, next) => {
+  try {
+    const device = await prisma.device.findUnique({
+      where: { id: req.params.id },
+      include: { customer: true, parts: true, payments: true, statusHistory: true },
+    });
+    if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
+    if (device.status !== 'DELIVERED') return res.status(400).json({ error: 'Cihaz henüz teslim edilmedi' });
+
+    const [companyInfoSetting, companyLogoSetting] = await Promise.all([
+      prisma.appSetting.findUnique({ where: { key: 'companyInfo' } }),
+      prisma.appSetting.findUnique({ where: { key: 'companyLogo' } }),
+    ]);
+    const companyInfo = companyInfoSetting?.value || {};
+    const companyLogo = companyLogoSetting?.value || null;
+
+    const pdfBuffer = await buildDeliveryFormPdfBuffer(device, companyInfo, companyLogo);
+    const filename = `Teslim-Formu-${device.trackingCode}.pdf`;
+
+    const message = await sendDocumentWhatsapp({
+      device,
+      customer: device.customer,
+      pdfBuffer,
+      filename,
+      templateEnvKey: 'WHATSAPP_TEMPLATE_DELIVERY_FORM',
+      bodyParams: [device.customer.fullName, device.model],
+      templateType: 'DELIVERY_FORM',
+    });
+    res.json(message);
   } catch (e) {
     next(e);
   }

@@ -1,0 +1,163 @@
+const PDFDocument = require('pdfkit');
+
+const WARRANTY_LABELS = { 0: 'Garanti Yok', 1: '1 Ay', 3: '3 Ay', 6: '6 Ay', 12: '1 Yıl' };
+
+// yonetici-paneli.html'deki WARRANTY_EXCLUSIONS ile birebir aynı — teslim formunda
+// hangi kalemler için hangi garanti kapsam dışı metninin basılacağını belirler.
+const WARRANTY_EXCLUSIONS = [
+  {
+    id: 'anakart',
+    kw: ['anakart', 'kart tamiri', 'anakart tamiri'],
+    title: 'Anakart Onarımı — 6 Ay Garanti Kapsam Dışı Koşullar',
+    text: 'Anakart onarımı 6 (altı) ay garanti kapsamındadır. Cihazın sıvıyla temas etmesi, darbe alması veya düşürülmesi, kasa ya da ekranında deformasyon oluşması, onarım sonrasında tarafımızca takılan garanti etiketinin sökülmesi veya cihazın başka bir yetkisiz serviste açılması/müdahale görmesi durumlarında garanti kapsam dışı kalır.',
+  },
+  {
+    id: 'ekran',
+    kw: ['ekran', 'ön cam', 'on cam', 'arka cam', 'kamera camı', 'kamera cami'],
+    title: 'Ekran / Cam Değişimi — 3 Ay Garanti Kapsam Dışı Koşullar',
+    text: 'Ekran ve cam değişimleri 3 (üç) ay garanti kapsamındadır. Ekranın kırılması, camın çatlaması, kasada deformasyon oluşması, cihazın darbe alması veya sıvıyla teması, tarafımızca takılan garanti etiketinin koparılması ya da cihazın başka bir serviste açılması durumlarında garanti kapsam dışı kalır.',
+  },
+  {
+    id: 'batarya',
+    kw: ['batarya', 'pil'],
+    title: 'Batarya Değişimi — 1 Yıl Garanti Kapsam Dışı Koşullar',
+    text: 'Batarya değişimi 1 (bir) yıl garanti kapsamındadır. Bataryanın 1 yılı aşması, 350 şarj döngüsünün üzerine çıkması, başka bir serviste bataryaya müdahale edilmiş olması, cihazın sıvıyla teması veya tarafımızca takılan garanti etiketinin sökülmesi durumlarında garanti kapsam dışı kalır.',
+  },
+  {
+    id: 'diger',
+    kw: ['soket', 'film', 'titreşim', 'titresim', 'faceid', 'face id', 'sensör', 'sensor'],
+    kwKamera: true,
+    title: 'Soket / Film / Kamera / Titreşim / Face ID / Sensör Değişimi — 3 Ay Garanti Kapsam Dışı Koşullar',
+    text: 'Soket, film, kamera, titreşim motoru, Face ID ve sensör değişimleri 3 (üç) ay garanti kapsamındadır. Cihazın sıvıyla teması, darbe alması, başka bir serviste işlem görmesi veya tarafımızca takılan garanti etiketinin sökülmesi durumlarında garanti kapsam dışı kalır.',
+  },
+];
+
+function detectWarrantyExclusions(parts) {
+  const matchedIds = new Set();
+  (parts || []).forEach((p) => {
+    const n = (p.name || '').toLowerCase();
+    WARRANTY_EXCLUSIONS.forEach((group) => {
+      if (group.kw.some((k) => n.includes(k))) matchedIds.add(group.id);
+      else if (group.kwKamera && n.includes('kamera') && !n.includes('kamera cam')) matchedIds.add(group.id);
+    });
+  });
+  return WARRANTY_EXCLUSIONS.filter((g) => matchedIds.has(g.id));
+}
+
+function lineGross(part) {
+  const price = Number(part.price) || 0;
+  return part.vatMode === 'HARIC' ? price * 1.2 : price;
+}
+
+// Device (customer, parts, payments, statusHistory dahil) + companyInfo/companyLogo
+// ayarlarından "Cihaz Teslim Formu" PDF'ini oluşturup Buffer olarak döner.
+function buildDeliveryFormPdfBuffer(device, companyInfo, companyLogoDataUrl) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: 'A5', margin: 28 });
+      const chunks = [];
+      doc.on('data', (c) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const parts = device.parts || [];
+      const total = parts.reduce((s, p) => s + lineGross(p), 0);
+      const paid = (device.payments || []).reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+      const remaining = total - paid;
+      const deliveredEntry = (device.statusHistory || []).find((h) => h.status === 'DELIVERED');
+      const deliveredAt = deliveredEntry ? new Date(deliveredEntry.changedAt).toLocaleString('tr-TR') : '—';
+      const exclusions = detectWarrantyExclusions(parts);
+
+      // Başlık — logo (varsa) + firma bilgileri
+      let headerY = doc.y;
+      if (companyLogoDataUrl && companyLogoDataUrl.startsWith('data:image')) {
+        try {
+          const base64 = companyLogoDataUrl.split(',')[1];
+          const imgBuf = Buffer.from(base64, 'base64');
+          doc.image(imgBuf, doc.x, headerY, { height: 34 });
+        } catch (e) {
+          /* logo bozuksa sessizce atla */
+        }
+      }
+      const textX = doc.x + 50;
+      doc.fontSize(13).font('Helvetica-Bold').text(companyInfo.name || 'Teknonand', textX, headerY, { width: 300 });
+      const infoLines = [companyInfo.address, [companyInfo.phone, companyInfo.email].filter(Boolean).join(' · '), companyInfo.tax ? 'Vergi: ' + companyInfo.tax : ''].filter(Boolean);
+      doc.fontSize(8).font('Helvetica').fillColor('#666');
+      infoLines.forEach((l) => doc.text(l, textX, doc.y, { width: 300 }));
+      doc.fillColor('#000');
+      doc.moveDown(1);
+      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
+      doc.moveDown(0.6);
+
+      doc.fontSize(14).font('Helvetica-Bold').text('Cihaz Teslim Formu');
+      doc.fontSize(9).font('Helvetica').fillColor('#666').text(`Kayıt No: ${device.trackingCode} · Teslim Tarihi: ${deliveredAt}`);
+      doc.fillColor('#000');
+      doc.moveDown(0.8);
+
+      doc.fontSize(9).font('Helvetica-Bold').text('Müşteri: ', { continued: true }).font('Helvetica').text(device.customer.fullName || '—');
+      doc.font('Helvetica-Bold').text('Telefon: ', { continued: true }).font('Helvetica').text(device.customer.phone || '—');
+      doc.font('Helvetica-Bold').text('Cihaz: ', { continued: true }).font('Helvetica').text(device.model || '—');
+      doc.font('Helvetica-Bold').text('IMEI / Seri No: ', { continued: true }).font('Helvetica').text(device.imeiSerial || '—');
+      doc.moveDown(0.6);
+      doc.font('Helvetica-Bold').text('Arıza:');
+      doc.font('Helvetica').text(device.issueDescription || '—', { width: doc.page.width - doc.page.margins.left - doc.page.margins.right });
+      doc.moveDown(0.8);
+
+      // Parçalar tablosu
+      doc.font('Helvetica-Bold').fontSize(9);
+      const colX = { name: doc.page.margins.left, warranty: 210, price: 290 };
+      const tableTop = doc.y;
+      doc.text('Yapılan İşlem', colX.name, tableTop, { width: 175 });
+      doc.text('Garanti', colX.warranty, tableTop, { width: 75 });
+      doc.text('Fiyat', colX.price, tableTop, { width: 80 });
+      doc.moveDown(0.3);
+      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
+      doc.moveDown(0.2);
+      doc.font('Helvetica').fontSize(9);
+      if (parts.length) {
+        parts.forEach((p) => {
+          const rowY = doc.y;
+          doc.text(p.name, colX.name, rowY, { width: 175 });
+          doc.text(WARRANTY_LABELS[p.warrantyMonths] ?? '—', colX.warranty, rowY, { width: 75 });
+          doc.text(`₺${lineGross(p).toFixed(2)}`, colX.price, rowY, { width: 80 });
+          doc.moveDown(0.4);
+        });
+      } else {
+        doc.fillColor('#999').text('Kayıtlı işlem yok');
+        doc.fillColor('#000');
+      }
+      doc.moveDown(0.4);
+      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
+      doc.moveDown(0.4);
+
+      doc.font('Helvetica-Bold').fontSize(10).text(
+        `Toplam: ₺${total.toFixed(2)}   ·   Ödenen: ₺${paid.toFixed(2)}   ·   Kalan: ₺${remaining.toFixed(2)}`,
+        { align: 'right' }
+      );
+      doc.moveDown(0.8);
+
+      if (exclusions.length) {
+        doc.font('Helvetica-Bold').fontSize(9).text('Garanti Kapsam Dışı Koşullar');
+        doc.moveDown(0.2);
+        exclusions.forEach((g) => {
+          doc.font('Helvetica-Bold').fontSize(7.5).text(g.title);
+          doc.font('Helvetica').fontSize(7.5).fillColor('#444').text(g.text, { width: doc.page.width - doc.page.margins.left - doc.page.margins.right });
+          doc.fillColor('#000');
+          doc.moveDown(0.4);
+        });
+      }
+
+      doc.moveDown(1);
+      const signY = doc.y;
+      doc.fontSize(8).fillColor('#666');
+      doc.text('Teslim Eden (Teknonand)', doc.page.margins.left, signY);
+      doc.text('Teslim Alan (Müşteri)', doc.page.width - doc.page.margins.right - 150, signY, { width: 150, align: 'right' });
+
+      doc.end();
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+module.exports = { buildDeliveryFormPdfBuffer };
