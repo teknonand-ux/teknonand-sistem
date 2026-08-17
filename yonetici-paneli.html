@@ -1143,7 +1143,16 @@ function startWaPolling(){
       const inboxActive = document.getElementById('view-whatsapp-inbox')?.classList.contains('active');
       if(inboxActive && waActiveConvId){
         const data = await apiFetch(`/whatsapp/conversations/${waActiveConvId}/messages`);
+        // Arka plandaki periyodik yenileme sohbet kutusunu (composer dahil) baştan çiziyor —
+        // kullanıcı o sırada henüz göndermediği bir yazı yazıyorsa kaybolmasın diye saklayıp geri koyuyoruz.
+        const draftInput = document.getElementById('waComposerInput');
+        const draft = draftInput ? { value: draftInput.value, selStart: draftInput.selectionStart, selEnd: draftInput.selectionEnd, hadFocus: document.activeElement === draftInput } : null;
         renderWaThread(data);
+        if(draft && draft.value){
+          const newInput = document.getElementById('waComposerInput');
+          newInput.value = draft.value;
+          if(draft.hadFocus){ newInput.focus(); newInput.setSelectionRange(draft.selStart, draft.selEnd); }
+        }
       }
     }catch(e){ /* ağ hatasında sessizce bir sonraki denemeyi bekle */ }
   }, 10000);
