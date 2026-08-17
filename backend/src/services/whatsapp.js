@@ -130,6 +130,34 @@ async function sendDocumentTemplateMessage(phone, templateName, mediaId, filenam
 // Yalnızca personelin panelde ilgili "WhatsApp ile Gönder" butonuna basmasıyla
 // tetiklenir (otomatik durum bildirimlerinden bağımsızdır). templateType, DB'ye
 // hangi belgenin gönderildiğini not düşmek için (ör. "DELIVERY_FORM", "INVOICE").
+// Otomatik durum/belge bildirimlerini de panelin "WhatsApp" gelen kutusu sohbetine
+// işler — personel oraya gidip müşteriyle olan TÜM yazışmayı (bizim otomatik
+// bildirimlerimiz + serbest yazışma) tek yerden takip edebilsin diye.
+async function recordOutboundInInbox({ phone, customerId, body, ok, errorMessage }) {
+  const waPhone = toCloudApiPhone(phone);
+  if (!waPhone) return;
+  const text = ok ? body : `${body}\n\n⚠️ Gönderilemedi: ${errorMessage}`;
+  try {
+    const existing = await prisma.whatsappConversation.findUnique({ where: { phone: waPhone } });
+    const conversation =
+      existing ||
+      (await prisma.whatsappConversation.create({ data: { phone: waPhone, customerId: customerId || null } }));
+    await prisma.whatsappChatMessage.create({
+      data: { conversationId: conversation.id, direction: 'OUT', body: text },
+    });
+    await prisma.whatsappConversation.update({
+      where: { id: conversation.id },
+      data: {
+        lastMessageAt: new Date(),
+        lastMessagePreview: text.slice(0, 120),
+        ...(customerId && !conversation.customerId ? { customerId } : {}),
+      },
+    });
+  } catch (e) {
+    console.error('[whatsapp] gelen kutusuna işlenemedi:', e);
+  }
+}
+
 async function sendDocumentWhatsapp({ device, customer, pdfBuffer, filename, templateEnvKey, bodyParams, templateType }) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -151,6 +179,14 @@ async function sendDocumentWhatsapp({ device, customer, pdfBuffer, filename, tem
       errorMessage = e.message;
     }
   }
+
+  await recordOutboundInInbox({
+    phone,
+    customerId: customer.id,
+    body: `[Belge] ${filename}`,
+    ok: status_ === 'GONDERILDI',
+    errorMessage,
+  });
 
   return prisma.whatsappMessage.create({
     data: {
@@ -180,6 +216,14 @@ async function sendStatusWhatsapp(device, customer, status) {
     status_ = 'BASARISIZ';
     errorMessage = result.error;
   }
+
+  await recordOutboundInInbox({
+    phone,
+    customerId: customer.id,
+    body: content,
+    ok: status_ === 'GONDERILDI',
+    errorMessage,
+  });
 
   return prisma.whatsappMessage.create({
     data: {
