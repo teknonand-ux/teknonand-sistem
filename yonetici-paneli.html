@@ -3614,21 +3614,16 @@ function renderAppointments(){
   }).join('') : `<p class="empty">Henüz randevu yok</p>`;
 }
 
-function sendAppointmentConfirmationWhatsApp(id){
+async function sendAppointmentConfirmationWhatsApp(id){
   const a = appointments.find(x=>x.id===id);
   if(!a) return;
-  const when = new Date(a.datetime);
-  const whenStr = when.toLocaleString('tr-TR', {dateStyle:'long', timeStyle:'short'});
-  const lines = [
-    `Teknonand — Randevu Onayı`,
-    `Sayın ${a.customerName},`,
-    `${whenStr} tarihindeki randevunuz onaylanmıştır.${a.service ? ' Not: '+a.service+'.' : ''}`,
-    ``,
-    `Sizi bu tarihte bekliyoruz. İyi günler dileriz!`
-  ];
-  const text = encodeURIComponent(lines.join('\n'));
-  const number = toWhatsAppNumber(a.phone);
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  if(!confirm(`${a.customerName} adlı müşteriye randevu onayı WhatsApp'tan (yeni işletme hattımızdan) gönderilsin mi?`)) return;
+  try{
+    await apiFetch(`/appointments/${id}/send-confirmation-whatsapp`, { method: 'POST' });
+    toast('Randevu onayı WhatsApp\'tan gönderildi');
+  }catch(e){
+    toast(e.message || 'Randevu onayı gönderilemedi');
+  }
 }
 
 function sendAppointmentReminderWhatsApp(id){

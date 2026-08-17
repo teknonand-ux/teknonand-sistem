@@ -4,6 +4,7 @@ const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee } = require('../middleware/auth');
 const { sendNotificationEmail } = require('../services/mail');
+const { sendNewAppointmentStaffAlert, sendAppointmentConfirmation } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -36,6 +37,7 @@ router.post('/', publicLimiter, async (req, res, next) => {
         'Yönetici panelindeki Randevular sayfasından onaylayabilirsiniz.',
       ].filter(Boolean).join('\n')
     ).catch((e) => console.error('Randevu e-postası gönderilemedi:', e.message));
+    sendNewAppointmentStaffAlert(appt).catch((e) => console.error('Randevu WhatsApp bildirimi gönderilemedi:', e.message));
     res.status(201).json(appt);
   } catch (e) {
     next(e);
@@ -60,6 +62,21 @@ router.post('/panel', requireAuth, requireEmployee, async (req, res, next) => {
       data: { ...data, datetime: new Date(data.datetime), source: 'PANEL' },
     });
     res.status(201).json(appt);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/appointments/:id/send-confirmation-whatsapp — panelden müşteriye gerçek
+// WhatsApp Cloud API üzerinden onay gönderir (bkz. yonetici-paneli.html Randevular sayfası).
+router.post('/:id/send-confirmation-whatsapp', requireAuth, requireEmployee, async (req, res, next) => {
+  try {
+    const appt = await prisma.appointment.findUnique({ where: { id: req.params.id } });
+    if (!appt) return res.status(404).json({ error: 'Randevu bulunamadı' });
+
+    const result = await sendAppointmentConfirmation(appt);
+    if (!result.ok) return res.status(502).json({ error: result.error });
+    res.json({ ok: true });
   } catch (e) {
     next(e);
   }

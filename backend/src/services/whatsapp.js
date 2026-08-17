@@ -268,4 +268,84 @@ async function sendFreeTextMessage(phone, text) {
   }
 }
 
-module.exports = { sendStatusWhatsapp, sendDocumentWhatsapp, sendFreeTextMessage, toCloudApiPhone };
+function formatApptDateTime(datetime) {
+  return new Date(datetime).toLocaleString('tr-TR', {
+    timeZone: 'Europe/Istanbul',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+// Meta'da onaylı, sabit isimli bir şablonu (parametreleri sırayla body'ye dolduran)
+// verilen numaraya gönderir — randevu bildirimleri gibi tek-parametre setli, basit
+// şablonlar için sendViaCloudApi'nin genelleştirilmiş hali.
+async function sendNamedTemplateMessage(phone, templateName, params) {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!accessToken || !phoneNumberId || !templateName) {
+    return { ok: false, error: 'WhatsApp Cloud API yapılandırılmamış veya bu bildirim için onaylı şablon tanımlı değil' };
+  }
+  const to = toCloudApiPhone(phone);
+  if (!to) return { ok: false, error: 'Telefon numarası yok' };
+
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: process.env.WHATSAPP_TEMPLATE_LANG || 'tr' },
+          components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text: String(text) })) }],
+        },
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) return { ok: false, error: json.error?.message || `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// Web sitesinden yeni bir randevu talebi geldiğinde işletmeye (WHATSAPP_STAFF_ALERT_PHONE)
+// haber verir — panel/e-posta bildiriminden bağımsız, ayrı bir kanal.
+async function sendNewAppointmentStaffAlert(appointment) {
+  const staffPhone = process.env.WHATSAPP_STAFF_ALERT_PHONE;
+  if (!staffPhone) return { ok: false, error: 'WHATSAPP_STAFF_ALERT_PHONE tanımlı değil' };
+
+  const templateName = process.env.WHATSAPP_TEMPLATE_NEW_APPOINTMENT;
+  const body = `Web sitesinden yeni bir randevu talebi alındı. Müşteri: ${appointment.customerName}. Tarih: ${formatApptDateTime(appointment.datetime)}. Telefon: ${appointment.phone}. Panelden onaylayabilirsiniz.`;
+  const result = await sendNamedTemplateMessage(staffPhone, templateName, [
+    appointment.customerName,
+    formatApptDateTime(appointment.datetime),
+    appointment.phone,
+  ]);
+  await recordOutboundInInbox({ phone: staffPhone, customerId: null, body, ok: result.ok, errorMessage: result.error });
+  return result;
+}
+
+// Panelden "WhatsApp ile Onay Gönder" ile müşteriye randevu onayı gönderir.
+async function sendAppointmentConfirmation(appointment) {
+  const templateName = process.env.WHATSAPP_TEMPLATE_APPOINTMENT_CONFIRMED;
+  const whenStr = formatApptDateTime(appointment.datetime);
+  const body = `Sayın ${appointment.customerName}, ${whenStr} tarihindeki randevunuz onaylanmıştır. Sizi bekliyoruz!`;
+  const result = await sendNamedTemplateMessage(appointment.phone, templateName, [appointment.customerName, whenStr]);
+  await recordOutboundInInbox({ phone: appointment.phone, customerId: null, body, ok: result.ok, errorMessage: result.error });
+  return result;
+}
+
+module.exports = {
+  sendStatusWhatsapp,
+  sendDocumentWhatsapp,
+  sendFreeTextMessage,
+  sendNewAppointmentStaffAlert,
+  sendAppointmentConfirmation,
+  toCloudApiPhone,
+};
