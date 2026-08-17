@@ -153,4 +153,16 @@ router.post('/conversations/:id/messages', async (req, res, next) => {
   }
 });
 
+// DELETE /api/whatsapp/conversations/:id — sohbeti ve tüm mesajlarını kalıcı olarak siler
+// (onDelete: Cascade — bkz. schema.prisma). Yalnızca panelden, geri alınamaz.
+router.delete('/conversations/:id', async (req, res, next) => {
+  try {
+    await prisma.whatsappConversation.delete({ where: { id: req.params.id } });
+    res.status(204).end();
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Sohbet bulunamadı' });
+    next(e);
+  }
+});
+
 module.exports = router;
