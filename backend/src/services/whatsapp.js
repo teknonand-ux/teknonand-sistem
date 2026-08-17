@@ -193,4 +193,35 @@ async function sendStatusWhatsapp(device, customer, status) {
   });
 }
 
-module.exports = { sendStatusWhatsapp, sendDocumentWhatsapp };
+// Panelden gelen kutusuna verilen serbest metin yanıtları için — şablon gerektirmez,
+// yalnızca müşterinin son 24 saat içinde bize yazdığı "customer service window"
+// içindeyken çalışır (Meta bunun dışındaki denemeleri kendi tarafında reddeder).
+async function sendFreeTextMessage(phone, text) {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!accessToken || !phoneNumberId) {
+    return { ok: false, error: 'WhatsApp Cloud API yapılandırılmamış' };
+  }
+  const to = toCloudApiPhone(phone);
+  if (!to) return { ok: false, error: 'Müşteri telefon numarası yok' };
+
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: { body: text },
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) return { ok: false, error: json.error?.message || `HTTP ${res.status}` };
+    return { ok: true, waMessageId: json.messages?.[0]?.id };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+module.exports = { sendStatusWhatsapp, sendDocumentWhatsapp, sendFreeTextMessage, toCloudApiPhone };

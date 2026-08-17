@@ -301,7 +301,32 @@
     .toast{left:14px; right:14px; transform:none; text-align:center; bottom:calc(16px + env(safe-area-inset-bottom));}
     .login-card{margin:30px auto 0;}
     .search-row, .search-mode-btn, .dealer-search-mode-btn{flex-wrap:wrap;}
+    .wa-inbox{grid-template-columns:1fr !important; height:auto !important;}
+    .wa-conv-list{max-height:220px;}
   }
+
+  /* WhatsApp gelen kutusu */
+  .wa-inbox{display:grid; grid-template-columns:280px 1fr; gap:14px; height:calc(100vh - 220px); min-height:420px;}
+  .wa-conv-list{background:var(--card); border:1px solid var(--line); border-radius:14px; overflow-y:auto;}
+  .wa-conv-item{padding:12px 14px; border-bottom:1px solid var(--line); cursor:pointer; display:flex; flex-direction:column; gap:3px;}
+  .wa-conv-item:hover{background:var(--paper);}
+  .wa-conv-item.active{background:var(--accent); color:#fff;}
+  .wa-conv-item.active .wa-conv-preview, .wa-conv-item.active .wa-conv-time{color:rgba(255,255,255,.8);}
+  .wa-conv-name{font-weight:600; font-size:13.5px; display:flex; justify-content:space-between; align-items:center; gap:6px;}
+  .wa-conv-preview{font-size:12px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .wa-conv-time{font-size:10.5px; color:var(--ink-soft);}
+  .wa-unread-badge{background:var(--green); color:#fff; font-size:10.5px; font-weight:700; border-radius:20px; padding:1px 7px; flex-shrink:0;}
+  nav button .wa-unread-badge{margin-left:auto;}
+  .wa-thread{background:var(--card); border:1px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;}
+  .wa-thread-head{padding:12px 16px; border-bottom:1px solid var(--line); font-weight:600;}
+  .wa-thread-body{flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px;}
+  .wa-bubble{max-width:72%; padding:8px 12px; border-radius:12px; font-size:13px; line-height:1.4; white-space:pre-wrap; word-break:break-word;}
+  .wa-bubble.in{align-self:flex-start; background:var(--paper); border:1px solid var(--line); border-bottom-left-radius:3px;}
+  .wa-bubble.out{align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:3px;}
+  .wa-bubble-meta{font-size:10px; opacity:.65; margin-top:4px;}
+  .wa-thread-empty{flex:1; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:13px;}
+  .wa-composer{display:flex; gap:8px; padding:12px; border-top:1px solid var(--line);}
+  .wa-composer textarea{flex:1; resize:none; border:1px solid var(--line); border-radius:10px; padding:9px 12px; font:inherit; font-size:13.5px; max-height:90px;}
 </style>
 </head>
 <body>
@@ -330,6 +355,7 @@
       <button data-view="new-device">Cihaz Kabul</button>
       <button data-view="devices">Cihazlar</button>
       <button data-view="customers">Müşteriler</button>
+      <button data-view="whatsapp-inbox">WhatsApp<span id="waNavBadge" class="wa-unread-badge" style="display:none;"></span></button>
       <button data-view="appointments">Randevular</button>
       <button data-view="stock">Stok</button>
       <button data-view="suppliers">Toptancı</button>
@@ -549,6 +575,18 @@
         </div>
         <table><thead><tr><th>Ad Soyad</th><th>Telefon</th><th>Yedek Telefon</th><th>Cihaz Sayısı</th><th></th></tr></thead>
           <tbody id="customerTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- WHATSAPP INBOX -->
+    <div class="view" id="view-whatsapp-inbox">
+      <h1>WhatsApp</h1>
+      <p class="subtitle">Müşterilerin yeni WhatsApp numaramıza yazdığı mesajlar — buradan görüp yanıtlayabilirsiniz.</p>
+      <div class="wa-inbox">
+        <div class="wa-conv-list" id="waConvList"></div>
+        <div class="wa-thread" id="waThread">
+          <div class="wa-thread-empty">Bir sohbet seçin</div>
+        </div>
       </div>
     </div>
 
@@ -934,6 +972,9 @@ let openDealerId = null;
 let currentUserId = null;
 let currentUserName = null;
 let currentUserPermission = null;
+let waConversations = [];
+let waActiveConvId = null;
+let waPollTimer = null;
 
 const DEFAULT_LABEL_SETTINGS = {
   widthCm:6, heightCm:4,
@@ -1001,6 +1042,114 @@ function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+function waTime(iso){
+  return new Date(iso).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+async function loadWhatsappConversations(){
+  waConversations = await apiFetch('/whatsapp/conversations');
+  renderWaConvList();
+  updateWaNavBadge();
+}
+
+function updateWaNavBadge(){
+  const total = waConversations.reduce((s,c)=>s+(c.unreadCount||0), 0);
+  const badge = document.getElementById('waNavBadge');
+  if(!badge) return;
+  if(total > 0){ badge.style.display = 'inline-block'; badge.textContent = total > 99 ? '99+' : String(total); }
+  else badge.style.display = 'none';
+}
+
+function renderWaConvList(){
+  const box = document.getElementById('waConvList');
+  if(!box) return;
+  if(!waConversations.length){
+    box.innerHTML = '<div style="padding:16px; color:var(--ink-soft); font-size:12.5px;">Henüz mesaj yok</div>';
+    return;
+  }
+  box.innerHTML = waConversations.map(c=>{
+    const name = c.customer?.fullName || c.contactName || c.phone;
+    return `
+      <div class="wa-conv-item ${c.id===waActiveConvId?'active':''}" onclick="openWaConversation('${c.id}')">
+        <div class="wa-conv-name"><span>${esc(name)}</span>${c.unreadCount>0?`<span class="wa-unread-badge">${c.unreadCount}</span>`:''}</div>
+        <div class="wa-conv-preview">${esc(c.lastMessagePreview || '')}</div>
+        <div class="wa-conv-time">${waTime(c.lastMessageAt)}</div>
+      </div>`;
+  }).join('');
+}
+
+async function openWaConversation(id){
+  waActiveConvId = id;
+  renderWaConvList();
+  const data = await apiFetch(`/whatsapp/conversations/${id}/messages`);
+  renderWaThread(data);
+  const conv = waConversations.find(c=>c.id===id);
+  if(conv) conv.unreadCount = 0; // sunucuda da sıfırlandı (GET .../messages) — rozeti anında güncelle
+  updateWaNavBadge();
+}
+
+function renderWaThread(data){
+  const { conversation, messages } = data;
+  const name = conversation.customer?.fullName || conversation.contactName || conversation.phone;
+  const box = document.getElementById('waThread');
+  box.innerHTML = `
+    <div class="wa-thread-head">${esc(name)} <span style="color:var(--ink-soft); font-weight:400; font-size:12px;">· ${esc(conversation.phone)}</span></div>
+    <div class="wa-thread-body" id="waThreadBody">
+      ${messages.map(m=>`
+        <div class="wa-bubble ${m.direction==='IN'?'in':'out'}">${esc(m.body)}<div class="wa-bubble-meta">${m.direction==='OUT' && m.employee ? esc(m.employee.name)+' · ' : ''}${waTime(m.createdAt)}</div></div>
+      `).join('') || '<div style="color:var(--ink-soft); font-size:12.5px;">Henüz mesaj yok</div>'}
+    </div>
+    <div class="wa-composer">
+      <textarea id="waComposerInput" rows="1" placeholder="Mesaj yazın... (Enter ile gönder)" onkeydown="onWaComposerKeydown(event)"></textarea>
+      <button class="primary" onclick="sendWaReply()">Gönder</button>
+    </div>
+  `;
+  const bodyEl = document.getElementById('waThreadBody');
+  bodyEl.scrollTop = bodyEl.scrollHeight;
+}
+
+function onWaComposerKeydown(e){
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendWaReply(); }
+}
+
+async function sendWaReply(){
+  const input = document.getElementById('waComposerInput');
+  const text = input.value.trim();
+  if(!text || !waActiveConvId) return;
+  input.disabled = true;
+  try{
+    await apiFetch(`/whatsapp/conversations/${waActiveConvId}/messages`, { method:'POST', body: JSON.stringify({ text }) });
+    input.value = '';
+    const data = await apiFetch(`/whatsapp/conversations/${waActiveConvId}/messages`);
+    renderWaThread(data);
+    await loadWhatsappConversations();
+  }catch(e){
+    toast(e.message || 'Mesaj gönderilemedi');
+  }finally{
+    input.disabled = false;
+    document.getElementById('waComposerInput')?.focus();
+  }
+}
+
+// Sekme açıkken rozet + aktif sohbet arka planda periyodik güncellenir (basit polling,
+// gerçek zamanlı bildirim altyapısı yok).
+function startWaPolling(){
+  stopWaPolling();
+  waPollTimer = setInterval(async ()=>{
+    try{
+      await loadWhatsappConversations();
+      const inboxActive = document.getElementById('view-whatsapp-inbox')?.classList.contains('active');
+      if(inboxActive && waActiveConvId){
+        const data = await apiFetch(`/whatsapp/conversations/${waActiveConvId}/messages`);
+        renderWaThread(data);
+      }
+    }catch(e){ /* ağ hatasında sessizce bir sonraki denemeyi bekle */ }
+  }, 10000);
+}
+function stopWaPolling(){
+  if(waPollTimer){ clearInterval(waPollTimer); waPollTimer = null; }
 }
 
 function openLightbox(src){
@@ -2621,6 +2770,8 @@ async function startSession(user){
   document.getElementById('login-password').value = '';
   document.getElementById('loginError').style.display = 'none';
   await loadAll();
+  loadWhatsappConversations().catch(()=>{});
+  startWaPolling();
   const lastView = localStorage.getItem('teknonand_admin_last_view');
   if(!lastView || !RESTORABLE_VIEWS.has(lastView) || !switchView(lastView)){
     switchView('dashboard');
@@ -2630,6 +2781,8 @@ async function startSession(user){
 function doLogout(){
   currentUserId = null; currentUserName = null; currentUserPermission = null;
   authToken = null;
+  stopWaPolling();
+  waConversations = []; waActiveConvId = null;
   localStorage.removeItem('teknonand_admin_token');
   document.body.classList.remove('restricted-user');
   document.getElementById('app').style.display = 'none';
@@ -3728,6 +3881,7 @@ function switchView(name){
   if(name==='label-design') populateLabelDesignForm();
   if(name==='doc-design') populateDocDesignForm();
   if(name==='whatsapp-templates') populateWhatsappTemplateCards();
+  if(name==='whatsapp-inbox'){ renderWaConvList(); if(waActiveConvId) openWaConversation(waActiveConvId); }
   if(name==='backup'){
     showLastBackupInfo('backup-devices-info', 'teknonand_last_backup_devices');
     showLastBackupInfo('backup-cari-info', 'teknonand_last_backup_cari');
@@ -3742,6 +3896,7 @@ async function refreshViewData(name){
     if(name==='label-design'){ await loadLabelDesign(); populateLabelDesignForm(); return; }
     if(name==='doc-design'){ await loadCompanyDesign(); populateDocDesignForm(); return; }
     if(name==='whatsapp-templates'){ await loadWhatsappTemplates(); populateWhatsappTemplateCards(); return; }
+    if(name==='whatsapp-inbox'){ await loadWhatsappConversations(); return; }
     if(name==='backup') return;
     const isAdmin = currentUserPermission === 'ADMIN';
     [devices, stock, suppliers, appointments, employees, dealers, customers, expenses] = await Promise.all([

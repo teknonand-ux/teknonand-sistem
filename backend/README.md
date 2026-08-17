@@ -21,10 +21,23 @@ Node.js + Express + Prisma (PostgreSQL) REST API.
   logo gibi alanlar için S3 uyumlu bir nesne depolama (ör. Cloudflare R2,
   ücretsiz katmanı var) kullanılması önerilir — Railway/Render'ın disk alanı
   yeniden deploy'da sıfırlanabilir.
-- **WhatsApp:** `src/services/whatsapp.js` — durum değişiminde tetiklenir,
-  mesajı `whatsapp_messages` tablosuna kaydeder. Gerçek 360dialog/Twilio API
-  çağrısı `WHATSAPP_PROVIDER` ortam değişkeni ayarlandığında eklenecek
-  (şablonların Meta Business Manager'da onayı gerekir, bkz. `sistem-plani.md`).
+- **WhatsApp:** `src/services/whatsapp.js` — WhatsApp Business Cloud API'yi
+  (Meta) doğrudan kullanır. Durum değişiminde otomatik tetiklenir, mesajı
+  `whatsapp_messages` tablosuna kaydeder. `WHATSAPP_ACCESS_TOKEN` ve
+  `WHATSAPP_PHONE_NUMBER_ID` ile birlikte, gönderilen her durum/belge için
+  Meta Business Manager'da onaylanmış bir şablon adı gerekir
+  (`WHATSAPP_TEMPLATE_*` — bkz. `.env.example`). Bir şablon henüz onaylı
+  değilse veya ortam değişkenleri eksikse gönderim `BASARISIZ` olarak
+  loglanır, panel/takip portalı çalışmaya devam eder.
+- **WhatsApp gelen kutusu:** `src/routes/whatsappInbox.js` — müşterinin
+  numaramıza serbest metin yazması `POST /api/whatsapp/webhook` ile bize
+  ulaşır (Meta App Dashboard > WhatsApp > Configuration > Webhook alanına
+  bu servisin `/api/whatsapp/webhook` adresi ve `WHATSAPP_WEBHOOK_VERIFY_TOKEN`
+  girilmelidir). Konuşmalar `whatsapp_conversations`/`whatsapp_chat_messages`
+  tablolarında tutulur, panelde "WhatsApp" sekmesinden görüntülenip
+  yanıtlanır. Yanıtlar şablon gerektirmez ama yalnızca müşterinin son 24
+  saat içinde yazdığı "customer service window" içindeyken gönderilebilir
+  (Meta'nın kısıtı — bu pencere dışında deneme API'den hata döner).
 
 ## Yerel kurulum
 
@@ -63,5 +76,5 @@ Tüm panel/bayi uç noktaları `Authorization: Bearer <token>` header'ı bekler.
 Bkz. proje kökündeki deploy rehberi (sohbet geçmişinde adım adım verildi) —
 özetle: Railway'de bir Postgres eklentisi + bu `backend/` klasörünü kaynak
 gösteren bir Node servisi oluşturulur, `DATABASE_URL` otomatik enjekte edilir,
-diğer ortam değişkenleri (`JWT_SECRET`, `CORS_ORIGIN`, `SEED_ADMIN_*`) elle
-girilir.
+diğer ortam değişkenleri (`JWT_SECRET`, `CORS_ORIGIN`, `SEED_ADMIN_*`,
+WhatsApp Cloud API değişkenleri — bkz. `.env.example`) elle girilir.

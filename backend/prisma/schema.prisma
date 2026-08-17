@@ -35,6 +35,7 @@ model Employee {
   assignedDevices Device[]             @relation("AssignedEmployee")
   statusChanges   DeviceStatusHistory[]
   repairs         Repair[]
+  whatsappChatMessages WhatsappChatMessage[]
 
   @@map("employees")
 }
@@ -86,6 +87,7 @@ model Customer {
   createdAt   DateTime @default(now())
 
   devices Device[]
+  whatsappConversations WhatsappConversation[]
 
   @@index([phone])
   @@map("customers")
@@ -385,6 +387,45 @@ model WhatsappMessage {
   sentAt       DateTime       @default(now())
 
   @@map("whatsapp_messages")
+}
+
+// Müşterinin yeni WhatsApp numaramıza serbest metin olarak yazdığı, panelde
+// gelen kutusu gibi görüntülenip yanıtlanan sohbetler — statü bildirimi
+// şablonlarından (WhatsappMessage) bağımsız, ayrı bir akış.
+enum WhatsappDirection {
+  IN // müşteriden bize
+  OUT // bizden müşteriye
+}
+
+model WhatsappConversation {
+  id                 String    @id @default(uuid())
+  phone              String    @unique // wa_id — 90XXXXXXXXXX formatında
+  customerId         String?
+  customer           Customer? @relation(fields: [customerId], references: [id])
+  contactName        String? // Meta'nın gönderdiği WhatsApp profil adı (varsa)
+  lastMessageAt      DateTime  @default(now())
+  lastMessagePreview String?
+  unreadCount        Int       @default(0)
+  createdAt          DateTime  @default(now())
+
+  messages WhatsappChatMessage[]
+
+  @@map("whatsapp_conversations")
+}
+
+model WhatsappChatMessage {
+  id             String               @id @default(uuid())
+  conversationId String
+  conversation   WhatsappConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction      WhatsappDirection
+  body           String
+  waMessageId    String?              @unique // Meta mesaj id'si — webhook tekrarlarını (retry) ayıklamak için
+  employeeId     String? // OUT mesajını panelden gönderen personel
+  employee       Employee?            @relation(fields: [employeeId], references: [id])
+  createdAt      DateTime             @default(now())
+
+  @@index([conversationId])
+  @@map("whatsapp_chat_messages")
 }
 
 // ---------------------------------------------------------------------------
