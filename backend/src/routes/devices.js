@@ -228,6 +228,109 @@ router.post('/bulk', async (req, res, next) => {
   }
 });
 
+const DEVICE_STATUS_VALUES = [
+  'RECEIVED', 'DIAGNOSING', 'DIAGNOSIS_DONE', 'AWAITING_PARTS', 'APPROVED',
+  'IN_REPAIR', 'TESTING', 'READY', 'DELIVERED', 'RETURN_REQUESTED', 'RETURNED', 'CANCELLED',
+];
+
+const bulkImportRowSchema = z.object({
+  // Verilirse ve mevcut bir cihazla eşleşirse GÜNCELLER; yoksa (veya eşleşmezse) bu
+  // kodla YENİ bir cihaz oluşturur — boşsa otomatik takip kodu üretilir. Bu sayede
+  // "Dışa Aktar" ile alınan dosya düzenlenip "İçe Aktar" ile geri yüklendiğinde
+  // mevcut kayıtlar güncellenir, silinip yeniden oluşturulmaz.
+  trackingCode: z.string().optional(),
+  customerName: z.string().min(1),
+  customerPhone: z.string().min(1),
+  backupPhone: z.string().optional(),
+  model: z.string().min(1),
+  imeiSerial: z.string().optional(),
+  devicePassword: z.string().optional(),
+  issueDescription: z.string().optional(),
+  receivedAt: z.string().datetime().optional(),
+  status: z.enum(DEVICE_STATUS_VALUES).optional(),
+  parts: z.array(z.object({ name: z.string().min(1), price: z.number(), cost: z.number().optional() })).optional(),
+});
+
+// POST /api/devices/bulk-import — Cihazlar sayfasındaki "İçe Aktar" ile kullanılır.
+// Panel bunu büyük dosyalarda ~300 satırlık parçalar halinde çağırır. Hiçbir zaman
+// WhatsApp göndermez (toplu/tarihsel veri; müşteriye bildirim gitmesi istenmez).
+router.post('/bulk-import', async (req, res, next) => {
+  try {
+    const { rows } = z.object({ rows: z.array(bulkImportRowSchema).min(1).max(500) }).parse(req.body);
+    let created = 0, updated = 0;
+    const errors = [];
+
+    for (const row of rows) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          let customer = await tx.customer.findFirst({ where: { phone: row.customerPhone } });
+          customer = customer
+            ? await tx.customer.update({
+                where: { id: customer.id },
+                data: { fullName: row.customerName, backupPhone: row.backupPhone || customer.backupPhone },
+              })
+            : await tx.customer.create({
+                data: { fullName: row.customerName, phone: row.customerPhone, backupPhone: row.backupPhone },
+              });
+
+          const existing = row.trackingCode
+            ? await tx.device.findUnique({ where: { trackingCode: row.trackingCode } })
+            : null;
+
+          const deviceData = {
+            customerId: customer.id,
+            model: row.model,
+            imeiSerial: row.imeiSerial || null,
+            devicePassword: row.devicePassword || null,
+            deviceOff: !row.imeiSerial,
+            issueDescription: row.issueDescription || 'Belirtilmedi',
+            ...(row.receivedAt ? { receivedAt: new Date(row.receivedAt) } : {}),
+            ...(row.status ? { status: row.status } : {}),
+          };
+
+          let device;
+          if (existing) {
+            device = await tx.device.update({ where: { id: existing.id }, data: deviceData });
+            if (row.status && row.status !== existing.status) {
+              await tx.deviceStatusHistory.create({
+                data: { deviceId: device.id, status: row.status, note: 'İçe aktarımla güncellendi' },
+              });
+            }
+          } else {
+            device = await tx.device.create({
+              data: {
+                ...deviceData,
+                trackingCode: row.trackingCode || await nextTrackingCode(),
+                status: row.status || 'RECEIVED',
+              },
+            });
+            await tx.deviceStatusHistory.create({
+              data: { deviceId: device.id, status: device.status, note: 'İçe aktarımla oluşturuldu' },
+            });
+          }
+
+          if (row.parts) {
+            await tx.devicePart.deleteMany({ where: { deviceId: device.id } });
+            for (const p of row.parts) {
+              await tx.devicePart.create({
+                data: { deviceId: device.id, name: p.name, price: p.price, cost: p.cost || 0 },
+              });
+            }
+          }
+
+          if (existing) updated++; else created++;
+        });
+      } catch (e) {
+        errors.push({ trackingCode: row.trackingCode || null, customerName: row.customerName, error: e.message });
+      }
+    }
+
+    res.json({ created, updated, errors });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // PATCH /api/devices/:id/status
 router.patch('/:id/status', async (req, res, next) => {
   try {

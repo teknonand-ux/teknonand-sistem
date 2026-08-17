@@ -535,6 +535,7 @@
           <button class="ghost" onclick="exportDevices()">Dışa Aktar (CSV)</button>
           <button class="ghost" onclick="document.getElementById('device-import-file').click()">İçe Aktar (CSV)</button>
           <input type="file" id="device-import-file" accept=".csv" style="display:none;" onchange="importDevices(event)">
+          <button class="ghost" id="bulk-export-btn" onclick="exportDevices(true)" style="display:none;">Seçilenleri Dışa Aktar (<span id="bulk-export-count">0</span>)</button>
           <button class="ghost admin-only" id="bulk-delete-btn" onclick="deleteSelectedDevices()" style="display:none; color:var(--red); border-color:var(--red);">Seçilenleri Sil (<span id="bulk-delete-count">0</span>)</button>
         </div>
         <table><thead><tr><th><input type="checkbox" id="select-all-devices" onchange="toggleAllDevices(this.checked)"></th><th>Kod</th><th>Kayıt Tarihi</th><th>Cihaz</th><th>Arıza</th><th>Müşteri</th><th>Personel</th><th>Durum</th><th>Parçalar / Tutar</th><th></th></tr></thead>
@@ -1373,32 +1374,37 @@ function formatDateTR(dateStr){
   return `${dd}.${mm}.${d.getFullYear()} ${hh}:${min}`;
 }
 
-function exportDevices(){
-  if(!devices.length){ toast('Aktarılacak cihaz kaydı yok'); return; }
-  const header = ['Müşteri Adı Soyadı','Kayıt Tarihi','Tutar','Maliyet','Telefon','Arıza','Ürün','IMEI / Seri No'];
-  const rows = devices.map(d=>{
+function exportDevices(onlySelected){
+  const list = onlySelected ? devices.filter(d => selectedDeviceIds.has(d.id)) : devices;
+  if(!list.length){ toast(onlySelected ? 'Dışa aktarılacak seçili cihaz yok' : 'Aktarılacak cihaz kaydı yok'); return; }
+  const maxParts = Math.max(1, ...list.map(d => (d.parts||[]).length));
+  const header = ['Takip Kodu','Müşteri Adı Soyadı','Telefon','Yedek Telefon','Kayıt Tarihi','Ürün','IMEI / Seri No','Cihaz Şifresi','Arıza','Durum'];
+  for(let i=1; i<=maxParts; i++) header.push('Parça ' + i + ' Adı', 'Parça ' + i + ' Fiyat', 'Parça ' + i + ' Maliyet');
+  const rows = list.map(d=>{
+    const imeiCell = d.imeiSerial ? ('="' + d.imeiSerial + '"') : '';
+    const cells = [
+      d.trackingCode, d.customer.fullName, d.customer.phone||'', d.backupPhone||'',
+      formatDateTR(d.receivedAt), d.model, imeiCell, d.devicePassword||'',
+      d.issueDescription||'', STATUS_LABELS[d.status] || d.status
+    ];
     const parts = d.parts || [];
-    const total = parts.reduce((s,p)=>s+lineGross(p),0);
-    const cost = parts.reduce((s,p)=>s+(parseFloat(p.cost)||0),0);
-    // IMEI 15 haneli oldugu icin Excel'de otomatik olarak bilimsel gosterime
-    // (3,55E+14 gibi) donusturuluyor -- formul-metin numarasi ile bunu engelliyoruz.
-    const imeiCell = d.imeiSerial ? `="${d.imeiSerial}"` : '';
-    return [
-      d.customer.fullName, formatDateTR(d.createdAt), total.toFixed(2), cost.toFixed(2),
-      d.customer.phone||'', d.issueDescription||'', d.model, imeiCell
-    ].map(csvEscape).join(';');
+    for(let i=0; i<maxParts; i++){
+      const p = parts[i];
+      cells.push(p ? p.name : '', p ? Number(p.price).toFixed(2) : '', p ? Number(p.cost).toFixed(2) : '');
+    }
+    return cells.map(csvEscape).join(';');
   });
   const csv = '\uFEFF' + [header.join(';'), ...rows].join('\r\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `cihazlar-${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = 'cihazlar' + (onlySelected ? '-secili' : '') + '-' + new Date().toISOString().slice(0,10) + '.csv';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  toast(`${devices.length} cihaz dışa aktarıldı`);
+  toast(list.length + ' cihaz dışa aktarıldı');
 }
 
 function downloadBlob(filename, content, mime){
@@ -1474,66 +1480,120 @@ async function importDevices(event){
   const file = event.target.files[0];
   if(!file) return;
   const text = await file.text();
-  const lines = text.replace(/^\uFEFF/, '').split(/\r\n|\n/).filter(l => l.trim().length);
+  const lines = text.replace(/^﻿/, '').split(/\r\n|\n/).filter(l => l.trim().length);
   if(lines.length < 2){ toast('Dosyada okunacak satır bulunamadı'); event.target.value=''; return; }
 
   const delimiter = detectCsvDelimiter(lines[0]);
   const header = parseCsvLine(lines[0], delimiter).map(h=>h.trim().toLowerCase());
-  // "Müşteri Adı Soyadı" / "Ürün" — güncel dışa aktarım formatı; "Müşteri" / "Model" — eski format, geriye dönük uyumluluk için hâlâ tanınır.
+
+  const trackingIdx = header.indexOf('takip kodu');
   const nameIdx = header.indexOf('müşteri adı soyadı') > -1 ? header.indexOf('müşteri adı soyadı') : header.indexOf('müşteri');
   const modelIdx = header.indexOf('ürün') > -1 ? header.indexOf('ürün') : header.indexOf('model');
   const dateIdx = header.indexOf('kayıt tarihi');
-  const totalIdx = header.indexOf('tutar');
-  const costIdx = header.indexOf('maliyet');
   const phoneIdx = header.indexOf('telefon');
   const backupIdx = header.indexOf('yedek telefon');
   const imeiIdx = header.indexOf('imei / seri no');
   const passIdx = header.indexOf('cihaz şifresi');
   const issueIdx = header.indexOf('arıza');
+  const statusIdx = header.indexOf('durum');
+  const totalIdx = header.indexOf('tutar');
+  const costIdx = header.indexOf('maliyet');
   if(modelIdx === -1 || nameIdx === -1){
     toast('CSV başlıkları tanınmadı — "Müşteri Adı Soyadı" ve "Ürün" sütunları gerekli');
     event.target.value = '';
     return;
   }
 
-  let added = 0, skipped = 0;
+  const partCols = [];
+  for(let i=1; i<=30; i++){
+    const nameCol = header.indexOf('parça ' + i + ' adı');
+    if(nameCol === -1) break;
+    partCols.push({ name: nameCol, price: header.indexOf('parça ' + i + ' fiyat'), cost: header.indexOf('parça ' + i + ' maliyet') });
+  }
+
+  const statusByLabel = {};
+  Object.keys(STATUS_LABELS).forEach(k => { statusByLabel[STATUS_LABELS[k].toLowerCase()] = k; });
+
+  const rows = [];
+  let skipped = 0;
   for(let i=1; i<lines.length; i++){
     const cols = parseCsvLine(lines[i], delimiter);
     const model = (cols[modelIdx]||'').trim();
     const name = (cols[nameIdx]||'').trim();
     if(!model || !name){ skipped++; continue; }
+
+    const trackingCode = trackingIdx>-1 ? (cols[trackingIdx]||'').trim() : '';
     const phone = phoneIdx>-1 ? (cols[phoneIdx]||'').trim() : '';
     const backupPhone = backupIdx>-1 ? (cols[backupIdx]||'').trim() : '';
     const imei = imeiIdx>-1 ? cleanImeiCell(cols[imeiIdx]) : '';
     const devicePass = passIdx>-1 ? (cols[passIdx]||'').trim() : '';
     const issue = issueIdx>-1 ? (cols[issueIdx]||'').trim() : '';
-    const total = totalIdx>-1 ? parseFloat((cols[totalIdx]||'').replace(',','.')) || 0 : 0;
-    const cost = costIdx>-1 ? parseFloat((cols[costIdx]||'').replace(',','.')) || 0 : 0;
     const receivedDate = dateIdx>-1 ? parseTRDateTime(cols[dateIdx]) : null;
+    const statusLabel = statusIdx>-1 ? (cols[statusIdx]||'').trim().toLowerCase() : '';
+    const status = statusByLabel[statusLabel] || undefined;
 
-    const device = await apiFetch('/devices', {
-      method: 'POST',
-      body: JSON.stringify({
-        customerName: name, customerPhone: phone || 'belirtilmedi', backupPhone: backupPhone || undefined,
-        model, imeiSerial: imei || undefined, devicePassword: devicePass || undefined,
-        issueDescription: issue || 'CSV içe aktarımıyla oluşturuldu', deviceOff: !imei,
-        receivedAt: receivedDate ? receivedDate.toISOString() : undefined
-      })
-    });
-
-    if(total > 0){
-      const part = await apiFetch(`/devices/${device.id}/parts`, {
-        method: 'POST',
-        body: JSON.stringify({ name: issue || 'Onarım', price: total, cost: cost || 0 })
-      });
-      device.parts = [part];
+    let rowParts = [];
+    if(partCols.length){
+      rowParts = partCols.map(pc => {
+        const pname = (cols[pc.name]||'').trim();
+        if(!pname) return null;
+        const price = pc.price>-1 ? (parseFloat((cols[pc.price]||'').replace(',','.')) || 0) : 0;
+        const cost = pc.cost>-1 ? (parseFloat((cols[pc.cost]||'').replace(',','.')) || 0) : 0;
+        return { name: pname, price, cost };
+      }).filter(Boolean);
+    } else if(totalIdx>-1){
+      const total = parseFloat((cols[totalIdx]||'').replace(',','.')) || 0;
+      const cost = costIdx>-1 ? (parseFloat((cols[costIdx]||'').replace(',','.')) || 0) : 0;
+      if(total > 0) rowParts = [{ name: issue || 'Onarım', price: total, cost }];
     }
 
-    devices.unshift(device);
-    added++;
+    rows.push({
+      trackingCode: trackingCode || undefined,
+      customerName: name,
+      customerPhone: phone || 'belirtilmedi',
+      backupPhone: backupPhone || undefined,
+      model,
+      imeiSerial: imei || undefined,
+      devicePassword: devicePass || undefined,
+      issueDescription: issue || undefined,
+      receivedAt: receivedDate ? receivedDate.toISOString() : undefined,
+      status,
+      parts: rowParts.length ? rowParts : undefined,
+    });
   }
+
+  if(!rows.length){
+    toast('İçe aktarılacak geçerli satır bulunamadı');
+    event.target.value = '';
+    return;
+  }
+
+  const CHUNK = 200;
+  let created = 0, updated = 0;
+  const errors = [];
+  for(let i=0; i<rows.length; i+=CHUNK){
+    const chunk = rows.slice(i, i+CHUNK);
+    try{
+      const res = await apiFetch('/devices/bulk-import', { method:'POST', body: JSON.stringify({ rows: chunk }) });
+      created += res.created;
+      updated += res.updated;
+      errors.push(...(res.errors||[]));
+    }catch(e){
+      errors.push({ error: e.message });
+    }
+    toast('İçe aktarılıyor... ' + Math.min(i+CHUNK, rows.length) + '/' + rows.length);
+  }
+
   event.target.value = '';
-  toast(`${added} cihaz içe aktarıldı${skipped ? `, ${skipped} satır eksik bilgi nedeniyle atlandı` : ''}`);
+  const summary = [];
+  if(created) summary.push(created + ' yeni');
+  if(updated) summary.push(updated + ' güncellendi');
+  if(skipped) summary.push(skipped + ' satır atlandı');
+  if(errors.length) summary.push(errors.length + ' hata');
+  toast(summary.join(', ') || 'İçe aktarım tamamlandı');
+  if(errors.length) console.error('İçe aktarım hataları:', errors);
+
+  devices = await apiFetch('/devices');
   renderAll();
 }
 
@@ -3670,6 +3730,16 @@ function toggleAllDevices(checked){
 function updateBulkDeleteButton(){
   const btn = document.getElementById('bulk-delete-btn');
   const countEl = document.getElementById('bulk-delete-count');
+  const exportBtn = document.getElementById('bulk-export-btn');
+  const exportCountEl = document.getElementById('bulk-export-count');
+  if(exportBtn){
+    if(selectedDeviceIds.size > 0){
+      exportBtn.style.display = 'inline-block';
+      exportCountEl.textContent = selectedDeviceIds.size;
+    } else {
+      exportBtn.style.display = 'none';
+    }
+  }
   if(!btn) return;
   if(selectedDeviceIds.size > 0){
     btn.style.display = 'inline-block';
