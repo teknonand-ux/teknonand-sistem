@@ -250,8 +250,9 @@ router.patch('/:id/status', async (req, res, next) => {
       deliveryNote: z.string().optional(),
       deliveryImages: z.array(dataUrlImage).max(4).optional(),
       imeiSerial: z.string().optional(), // cihaz kapalı kabul edilmişse teslimde girilir
+      sendWhatsapp: z.boolean().optional(), // panelde personelin onayı — bkz. aşağıdaki kullanım
     });
-    const { status, note, changedAt, imeiSerial, diagnosisItems, ...fields } = schema.parse(req.body);
+    const { status, note, changedAt, imeiSerial, diagnosisItems, sendWhatsapp, ...fields } = schema.parse(req.body);
 
     // Arıza tespiti yeniden girildiğinde (ör. tanı/fiyat güncellendi) önceki onay artık
     // geçersizdir — müşteri/bayiden tekrar onay istenmesi için onay bilgilerini sıfırlıyoruz.
@@ -294,7 +295,12 @@ router.patch('/:id/status', async (req, res, next) => {
 
     await creditDealerIfDelivered(device);
 
-    await sendStatusWhatsapp(device, device.customer, status);
+    // Panel personeli her durum değişikliğinde WhatsApp gönderimini onaylar/reddeder
+    // (bkz. yonetici-paneli.html addStatusEntry) — açıkça false gelmediği sürece
+    // (ör. bu alanı göndermeyen eski/harici çağıranlar için) gönderim yapılır.
+    if (sendWhatsapp !== false) {
+      await sendStatusWhatsapp(device, device.customer, status);
+    }
 
     res.json(device);
   } catch (e) {

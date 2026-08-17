@@ -2490,11 +2490,21 @@ async function addStatusEntry(){
     if(newImeiSerial) payload.imeiSerial = newImeiSerial;
   }
 
+  // Yalnızca bu durumların onaylı WhatsApp şablonu var (bkz. backend whatsapp.js
+  // TEMPLATES) — diğer durumlarda zaten mesaj gitmeyeceği için sormaya gerek yok.
+  const WHATSAPP_TEMPLATED_STATUSES = ['RECEIVED', 'DIAGNOSIS_DONE', 'AWAITING_PARTS', 'READY', 'DELIVERED'];
+  let sendWhatsapp = true;
+  if (WHATSAPP_TEMPLATED_STATUSES.includes(status)) {
+    sendWhatsapp = confirm(`${d.customer.fullName} adlı müşteriye "${STATUS_LABELS[status]}" bildirimi WhatsApp'tan gönderilsin mi?`);
+  }
+  payload.sendWhatsapp = sendWhatsapp;
+
   const updated = await apiFetch(`/devices/${d.id}/status`, { method: 'PATCH', body: JSON.stringify(payload) });
   Object.assign(d, updated);
   const entry = await apiFetch(`/devices/${d.id}`);
   d.statusHistory = entry.statusHistory;
-  toast(status==='DELIVERED' ? `${d.trackingCode} teslim edildi — teslim formu hazır` : `${d.trackingCode} → ${STATUS_LABELS[status]} (WhatsApp bildirimi tetiklenir)`);
+  const whatsappSuffix = WHATSAPP_TEMPLATED_STATUSES.includes(status) ? (sendWhatsapp ? ' (WhatsApp bildirimi gönderildi)' : ' (WhatsApp bildirimi gönderilmedi)') : '';
+  toast(status==='DELIVERED' ? `${d.trackingCode} teslim edildi — teslim formu hazır` : `${d.trackingCode} → ${STATUS_LABELS[status]}${whatsappSuffix}`);
   renderDeviceDetail();
 }
 
