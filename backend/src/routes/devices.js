@@ -22,12 +22,14 @@ const dataUrlPdf = z
   .max(7_000_000)
   .regex(/^data:application\/pdf;base64,[A-Za-z0-9+/]+=*$/, 'Geçersiz PDF formatı');
 
-// Bayiye ait, teslim edilmiş bir cihazın parça/işlem tutarını bayinin veresiye
-// hesabına ekler (bir cihaz için yalnızca bir kez) — hem durum DELIVERED'a
-// geçtiğinde hem de zaten DELIVERED olan bir cihaz sonradan bir bayiye
-// atandığında (ör. Müşteri Bilgilerini Düzenle'den) çağrılır.
+// Bayiye ait bir cihazın parça/işlem tutarını bayinin veresiye hesabına ekler
+// (bir cihaz için yalnızca bir kez) — cihaz Teslime Hazır (READY) durumuna
+// geldiği anda işlenir; bir cihaz READY'yi atlayıp doğrudan DELIVERED olursa
+// (ör. hızlı teslim) orada da devreye girer. Zaten DELIVERED/READY olan bir
+// cihaz sonradan bir bayiye atandığında (ör. Müşteri Bilgilerini Düzenle'den)
+// da çağrılır.
 async function creditDealerIfDelivered(device) {
-  if (device.status !== 'DELIVERED' || !device.dealerId) return;
+  if (!['READY', 'DELIVERED'].includes(device.status) || !device.dealerId) return;
   const already = await prisma.dealerTransaction.findFirst({
     where: { deviceId: device.id, type: 'VERESIYE_SATIS' },
   });
