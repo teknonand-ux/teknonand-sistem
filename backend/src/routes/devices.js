@@ -75,6 +75,7 @@ const deviceCreateSchema = z.object({
   cargoAddress: z.string().optional(),
   issueDescription: z.string().min(1),
   receivedAt: z.string().datetime().optional(),
+  sendWhatsapp: z.boolean().optional(), // panelde personelin onayı — bkz. yonetici-paneli.html createDevice
 });
 
 // GET /api/devices?status=&query=&mode=imei|phone|name|model
@@ -165,7 +166,9 @@ async function createOneDevice(input, employeeId) {
     data: { deviceId: device.id, status: 'RECEIVED', changedByEmployeeId: employeeId, note: 'Cihaz kabul edildi' },
   });
 
-  await sendStatusWhatsapp(device, customerRecord, 'RECEIVED');
+  if (input.sendWhatsapp !== false) {
+    await sendStatusWhatsapp(device, customerRecord, 'RECEIVED');
+  }
   return device;
 }
 

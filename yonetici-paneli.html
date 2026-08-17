@@ -1698,6 +1698,7 @@ async function createDevice(){
   if(!name || !phone || !model){ toast('Müşteri adı, telefon ve model zorunlu'); return; }
   if(!imei && !deviceOff){ toast('IMEI / Seri No zorunlu — cihaz açılmıyorsa kutucuğu işaretleyin'); return; }
   const receivedAt = receivedAtRaw ? new Date(receivedAtRaw).toISOString() : new Date().toISOString();
+  const sendWhatsapp = confirm(`${name} adlı müşteriye "cihaz alındı" bildirimi WhatsApp'tan gönderilsin mi?`);
 
   const device = await apiFetch('/devices', {
     method: 'POST',
@@ -1705,7 +1706,7 @@ async function createDevice(){
       customerName: name, customerPhone: phone, backupPhone: backupPhone || undefined,
       dealerId, model, imeiSerial: imei || undefined, devicePassword: devicePass || undefined,
       deviceOff, isCargo, cargoAddress: cargoAddress || undefined,
-      issueDescription: issue || 'Belirtilmedi', receivedAt
+      issueDescription: issue || 'Belirtilmedi', receivedAt, sendWhatsapp
     })
   });
   devices.unshift(device);
@@ -1720,7 +1721,7 @@ async function createDevice(){
     document.getElementById('btn-'+key).style.display = 'inline-block';
   });
   setDefaultReceivedTime();
-  toast(`Kayıt oluşturuldu — takip kodu: ${device.trackingCode}`);
+  toast(`Kayıt oluşturuldu — takip kodu: ${device.trackingCode}${sendWhatsapp ? ' (WhatsApp bildirimi gönderildi)' : ' (WhatsApp bildirimi gönderilmedi)'}`);
   renderAll();
   openDevice(device.id);
 }
