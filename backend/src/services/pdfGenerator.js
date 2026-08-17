@@ -148,18 +148,23 @@ function buildDeliveryFormPdfBuffer(device, companyInfo, companyLogoDataUrl) {
       doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
       doc.moveDown(0.4);
 
+      // Tablo satırları sabit x koordinatlarıyla (colX.price) basıldığı için doc.x o
+      // noktada kalır — burada x/width açıkça verilmezse hem bu satır hem de altındaki
+      // başlıklar sayfanın sağına kayıp dar bir alana sıkışıyordu (Garanti Kapsam Dışı
+      // Koşullar'ın görünmemesinin sebebi buydu).
+      const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
       doc.font('Body-Bold').fontSize(10).text(
         `Toplam: ₺${total.toFixed(2)}   ·   Ödenen: ₺${paid.toFixed(2)}   ·   Kalan: ₺${remaining.toFixed(2)}`,
-        { align: 'right' }
+        doc.page.margins.left, doc.y, { width: contentWidth, align: 'right' }
       );
       doc.moveDown(0.8);
 
       if (exclusions.length) {
-        doc.font('Body-Bold').fontSize(9).text('Garanti Kapsam Dışı Koşullar');
+        doc.font('Body-Bold').fontSize(9).text('Garanti Kapsam Dışı Koşullar', doc.page.margins.left, doc.y, { width: contentWidth });
         doc.moveDown(0.2);
         exclusions.forEach((g) => {
-          doc.font('Body-Bold').fontSize(7.5).text(g.title);
-          doc.font('Body').fontSize(7.5).fillColor('#444').text(g.text, { width: doc.page.width - doc.page.margins.left - doc.page.margins.right });
+          doc.font('Body-Bold').fontSize(7.5).text(g.title, doc.page.margins.left, doc.y, { width: contentWidth });
+          doc.font('Body').fontSize(7.5).fillColor('#444').text(g.text, doc.page.margins.left, doc.y, { width: contentWidth });
           doc.fillColor('#000');
           doc.moveDown(0.4);
         });
