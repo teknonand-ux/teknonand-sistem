@@ -1,4 +1,13 @@
+const path = require('path');
+const fs = require('fs');
 const PDFDocument = require('pdfkit');
+
+// PDFKit'in yerleşik "Helvetica" fontu WinAnsi kodlamasını kullanır ve Türkçe'ye
+// özgü ı/İ/ş/Ş/ğ/Ğ karakterlerini içermez (panelde "bozuk yazı" olarak görülen buydu).
+// Bu yüzden tüm metinler için Türkçe karakterleri de kapsayan Arial gömülü olarak kullanılır.
+const FONT_REGULAR = path.join(__dirname, '..', 'assets', 'fonts', 'Roboto-Regular.ttf');
+const FONT_BOLD = path.join(__dirname, '..', 'assets', 'fonts', 'Roboto-Bold.ttf');
+const DEFAULT_LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo.png');
 
 const WARRANTY_LABELS = { 0: 'Garanti Yok', 1: '1 Ay', 3: '3 Ay', 6: '6 Ay', 12: '1 Yıl' };
 
@@ -60,6 +69,13 @@ function buildDeliveryFormPdfBuffer(device, companyInfo, companyLogoDataUrl) {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
+      // Not: font'u 'Helvetica' adıyla kaydedip standart fontun yerine geçirmek
+      // işe yaramıyor — PDFKit bu ismi WinAnsi kodlamalı yerleşik font olarak
+      // özel durum kabul edip Türkçe karakterleri yine bozuyor. Bu yüzden ayrı
+      // isimlerle kaydedip aşağıdaki tüm doc.font(...) çağrılarında bunları kullanıyoruz.
+      doc.registerFont('Body', FONT_REGULAR);
+      doc.registerFont('Body-Bold', FONT_BOLD);
+
       const parts = device.parts || [];
       const total = parts.reduce((s, p) => s + lineGross(p), 0);
       const paid = (device.payments || []).reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
@@ -70,41 +86,43 @@ function buildDeliveryFormPdfBuffer(device, companyInfo, companyLogoDataUrl) {
 
       // Başlık — logo (varsa) + firma bilgileri
       let headerY = doc.y;
-      if (companyLogoDataUrl && companyLogoDataUrl.startsWith('data:image')) {
-        try {
-          const base64 = companyLogoDataUrl.split(',')[1];
-          const imgBuf = Buffer.from(base64, 'base64');
-          doc.image(imgBuf, doc.x, headerY, { height: 34 });
-        } catch (e) {
-          /* logo bozuksa sessizce atla */
-        }
+      try {
+        // Panelde de aynı mantık kullanılır (bkz. yonetici-paneli.html companyLogo):
+        // özel logo yüklenmemişse varsayılan logo.png'ye düşülür.
+        const imgBuf =
+          companyLogoDataUrl && companyLogoDataUrl.startsWith('data:image')
+            ? Buffer.from(companyLogoDataUrl.split(',')[1], 'base64')
+            : fs.readFileSync(DEFAULT_LOGO_PATH);
+        doc.image(imgBuf, doc.x, headerY, { height: 34 });
+      } catch (e) {
+        /* logo bozuksa sessizce atla */
       }
       const textX = doc.x + 50;
-      doc.fontSize(13).font('Helvetica-Bold').text(companyInfo.name || 'Teknonand', textX, headerY, { width: 300 });
+      doc.fontSize(13).font('Body-Bold').text(companyInfo.name || 'Teknonand', textX, headerY, { width: 300 });
       const infoLines = [companyInfo.address, [companyInfo.phone, companyInfo.email].filter(Boolean).join(' · '), companyInfo.tax ? 'Vergi: ' + companyInfo.tax : ''].filter(Boolean);
-      doc.fontSize(8).font('Helvetica').fillColor('#666');
+      doc.fontSize(8).font('Body').fillColor('#666');
       infoLines.forEach((l) => doc.text(l, textX, doc.y, { width: 300 }));
       doc.fillColor('#000');
       doc.moveDown(1);
       doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
       doc.moveDown(0.6);
 
-      doc.fontSize(14).font('Helvetica-Bold').text('Cihaz Teslim Formu');
-      doc.fontSize(9).font('Helvetica').fillColor('#666').text(`Kayıt No: ${device.trackingCode} · Teslim Tarihi: ${deliveredAt}`);
+      doc.fontSize(14).font('Body-Bold').text('Cihaz Teslim Formu');
+      doc.fontSize(9).font('Body').fillColor('#666').text(`Kayıt No: ${device.trackingCode} · Teslim Tarihi: ${deliveredAt}`);
       doc.fillColor('#000');
       doc.moveDown(0.8);
 
-      doc.fontSize(9).font('Helvetica-Bold').text('Müşteri: ', { continued: true }).font('Helvetica').text(device.customer.fullName || '—');
-      doc.font('Helvetica-Bold').text('Telefon: ', { continued: true }).font('Helvetica').text(device.customer.phone || '—');
-      doc.font('Helvetica-Bold').text('Cihaz: ', { continued: true }).font('Helvetica').text(device.model || '—');
-      doc.font('Helvetica-Bold').text('IMEI / Seri No: ', { continued: true }).font('Helvetica').text(device.imeiSerial || '—');
+      doc.fontSize(9).font('Body-Bold').text('Müşteri: ', { continued: true }).font('Body').text(device.customer.fullName || '—');
+      doc.font('Body-Bold').text('Telefon: ', { continued: true }).font('Body').text(device.customer.phone || '—');
+      doc.font('Body-Bold').text('Cihaz: ', { continued: true }).font('Body').text(device.model || '—');
+      doc.font('Body-Bold').text('IMEI / Seri No: ', { continued: true }).font('Body').text(device.imeiSerial || '—');
       doc.moveDown(0.6);
-      doc.font('Helvetica-Bold').text('Arıza:');
-      doc.font('Helvetica').text(device.issueDescription || '—', { width: doc.page.width - doc.page.margins.left - doc.page.margins.right });
+      doc.font('Body-Bold').text('Arıza:');
+      doc.font('Body').text(device.issueDescription || '—', { width: doc.page.width - doc.page.margins.left - doc.page.margins.right });
       doc.moveDown(0.8);
 
       // Parçalar tablosu
-      doc.font('Helvetica-Bold').fontSize(9);
+      doc.font('Body-Bold').fontSize(9);
       const colX = { name: doc.page.margins.left, warranty: 210, price: 290 };
       const tableTop = doc.y;
       doc.text('Yapılan İşlem', colX.name, tableTop, { width: 175 });
@@ -113,7 +131,7 @@ function buildDeliveryFormPdfBuffer(device, companyInfo, companyLogoDataUrl) {
       doc.moveDown(0.3);
       doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
       doc.moveDown(0.2);
-      doc.font('Helvetica').fontSize(9);
+      doc.font('Body').fontSize(9);
       if (parts.length) {
         parts.forEach((p) => {
           const rowY = doc.y;
@@ -130,18 +148,18 @@ function buildDeliveryFormPdfBuffer(device, companyInfo, companyLogoDataUrl) {
       doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
       doc.moveDown(0.4);
 
-      doc.font('Helvetica-Bold').fontSize(10).text(
+      doc.font('Body-Bold').fontSize(10).text(
         `Toplam: ₺${total.toFixed(2)}   ·   Ödenen: ₺${paid.toFixed(2)}   ·   Kalan: ₺${remaining.toFixed(2)}`,
         { align: 'right' }
       );
       doc.moveDown(0.8);
 
       if (exclusions.length) {
-        doc.font('Helvetica-Bold').fontSize(9).text('Garanti Kapsam Dışı Koşullar');
+        doc.font('Body-Bold').fontSize(9).text('Garanti Kapsam Dışı Koşullar');
         doc.moveDown(0.2);
         exclusions.forEach((g) => {
-          doc.font('Helvetica-Bold').fontSize(7.5).text(g.title);
-          doc.font('Helvetica').fontSize(7.5).fillColor('#444').text(g.text, { width: doc.page.width - doc.page.margins.left - doc.page.margins.right });
+          doc.font('Body-Bold').fontSize(7.5).text(g.title);
+          doc.font('Body').fontSize(7.5).fillColor('#444').text(g.text, { width: doc.page.width - doc.page.margins.left - doc.page.margins.right });
           doc.fillColor('#000');
           doc.moveDown(0.4);
         });
