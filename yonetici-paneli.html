@@ -94,6 +94,7 @@
   button.ghost{background:none; border:1px solid var(--line); border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer; color:var(--ink-soft);}
   button:disabled{opacity:.4; cursor:not-allowed;}
   button.ghost:hover{border-color:var(--accent); color:var(--accent);}
+  button.ghost.active{border-color:var(--accent); color:var(--accent); background:var(--accent-soft, rgba(47,94,255,.08));}
 
   table{width:100%; border-collapse:collapse; font-size:13px;}
   th{text-align:left; font-size:11px; color:var(--ink-soft); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--line);}
@@ -355,7 +356,7 @@
       <button data-view="new-device">Cihaz Kabul</button>
       <button data-view="devices">Cihazlar</button>
       <button data-view="customers">Müşteriler</button>
-      <button data-view="whatsapp-inbox">WhatsApp<span id="waNavBadge" class="wa-unread-badge" style="display:none;"></span></button>
+      <button data-view="whatsapp-inbox">Mesajlar<span id="waNavBadge" class="wa-unread-badge" style="display:none;"></span><span id="igNavBadge" class="wa-unread-badge" style="display:none;"></span></button>
       <button data-view="appointments">Randevular</button>
       <button data-view="stock">Stok</button>
       <button data-view="suppliers">Toptancı</button>
@@ -587,11 +588,21 @@
 
     <!-- WHATSAPP INBOX -->
     <div class="view" id="view-whatsapp-inbox">
-      <h1>WhatsApp</h1>
-      <p class="subtitle">Müşterilerin yeni WhatsApp numaramıza yazdığı mesajlar — buradan görüp yanıtlayabilirsiniz.</p>
-      <div class="wa-inbox">
+      <h1>Mesajlar</h1>
+      <p class="subtitle">Müşterilerin WhatsApp ve Instagram üzerinden yazdığı mesajlar — buradan görüp yanıtlayabilirsiniz.</p>
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <button class="ghost" id="inbox-tab-whatsapp" onclick="switchInboxChannel('whatsapp')">WhatsApp</button>
+        <button class="ghost" id="inbox-tab-instagram" onclick="switchInboxChannel('instagram')">Instagram</button>
+      </div>
+      <div class="wa-inbox" id="wa-inbox-panel">
         <div class="wa-conv-list" id="waConvList"></div>
         <div class="wa-thread" id="waThread">
+          <div class="wa-thread-empty">Bir sohbet seçin</div>
+        </div>
+      </div>
+      <div class="wa-inbox" id="ig-inbox-panel" style="display:none;">
+        <div class="wa-conv-list" id="igConvList"></div>
+        <div class="wa-thread" id="igThread">
           <div class="wa-thread-empty">Bir sohbet seçin</div>
         </div>
       </div>
@@ -983,6 +994,12 @@ let waConversations = [];
 let waActiveConvId = null;
 let waPollTimer = null;
 
+let igConversations = [];
+let igActiveConvId = null;
+let igPollTimer = null;
+let igLoaded = false;
+let inboxChannel = 'whatsapp';
+
 const DEFAULT_LABEL_SETTINGS = {
   widthCm:6, heightCm:4,
   shop:{size:16, show:true},
@@ -1188,6 +1205,151 @@ function startWaPolling(){
 }
 function stopWaPolling(){
   if(waPollTimer){ clearInterval(waPollTimer); waPollTimer = null; }
+}
+
+function switchInboxChannel(channel){
+  inboxChannel = channel;
+  document.getElementById('inbox-tab-whatsapp').classList.toggle('active', channel==='whatsapp');
+  document.getElementById('inbox-tab-instagram').classList.toggle('active', channel==='instagram');
+  document.getElementById('wa-inbox-panel').style.display = channel==='whatsapp' ? 'grid' : 'none';
+  document.getElementById('ig-inbox-panel').style.display = channel==='instagram' ? 'grid' : 'none';
+  if(channel==='whatsapp'){
+    loadWhatsappConversations().catch(()=>{});
+  } else {
+    loadInstagramConversations().catch(()=>{});
+  }
+}
+
+async function loadInstagramConversations(){
+  igConversations = await apiFetch('/instagram/conversations');
+  igLoaded = true;
+  renderIgConvList();
+  updateIgNavBadge();
+}
+
+function updateIgNavBadge(){
+  const total = igConversations.reduce((s,c)=>s+(c.unreadCount||0), 0);
+  const badge = document.getElementById('igNavBadge');
+  if(!badge) return;
+  if(total > 0){ badge.style.display = 'inline-block'; badge.textContent = total > 99 ? '99+' : String(total); }
+  else badge.style.display = 'none';
+}
+
+function renderIgConvList(){
+  const box = document.getElementById('igConvList');
+  if(!box) return;
+  if(!igConversations.length){
+    box.innerHTML = '<div style="padding:16px; color:var(--ink-soft); font-size:12.5px;">Henüz Instagram mesajı yok</div>';
+    return;
+  }
+  box.innerHTML = igConversations.map(c=>{
+    const name = c.customer?.fullName || (c.username ? '@'+c.username : c.igsid);
+    return `
+      <div class="wa-conv-item ${c.id===igActiveConvId?'active':''}" onclick="openIgConversation('${c.id}')">
+        <div class="wa-conv-name"><span>${esc(name)}</span>${c.unreadCount>0?`<span class="wa-unread-badge">${c.unreadCount}</span>`:''}</div>
+        <div class="wa-conv-preview">${esc(c.lastMessagePreview || '')}</div>
+        <div class="wa-conv-time">${waTime(c.lastMessageAt)}</div>
+      </div>`;
+  }).join('');
+}
+
+async function openIgConversation(id){
+  igActiveConvId = id;
+  renderIgConvList();
+  const data = await apiFetch(`/instagram/conversations/${id}/messages`);
+  renderIgThread(data);
+  const conv = igConversations.find(c=>c.id===id);
+  if(conv) conv.unreadCount = 0;
+  updateIgNavBadge();
+}
+
+function renderIgThread(data){
+  const { conversation, messages } = data;
+  const name = conversation.customer?.fullName || (conversation.username ? '@'+conversation.username : conversation.igsid);
+  const box = document.getElementById('igThread');
+  box.innerHTML = `
+    <div class="wa-thread-head">
+      <span>${esc(name)}</span>
+      <button class="ghost" style="color:var(--red); border-color:var(--red);" onclick="deleteIgConversation('${conversation.id}')">Sohbeti Sil</button>
+    </div>
+    <div class="wa-thread-body" id="igThreadBody">
+      ${messages.map(m=>`
+        <div class="wa-bubble ${m.direction==='IN'?'in':'out'}">${esc(m.body)}<div class="wa-bubble-meta">${m.direction==='OUT' && m.employee ? esc(m.employee.name)+' · ' : ''}${waTime(m.createdAt)}</div></div>
+      `).join('') || '<div style="color:var(--ink-soft); font-size:12.5px;">Henüz mesaj yok</div>'}
+    </div>
+    <div class="wa-composer">
+      <textarea id="igComposerInput" rows="1" placeholder="Mesaj yazın... (Enter ile gönder)" onkeydown="onIgComposerKeydown(event)"></textarea>
+      <button class="primary" onclick="sendIgReply()">Gönder</button>
+    </div>
+  `;
+  const bodyEl = document.getElementById('igThreadBody');
+  bodyEl.scrollTop = bodyEl.scrollHeight;
+}
+
+async function deleteIgConversation(id){
+  const conv = igConversations.find(c=>c.id===id);
+  const name = conv ? (conv.customer?.fullName || (conv.username ? '@'+conv.username : conv.igsid)) : 'bu sohbeti';
+  if(!confirm(`${name} ile olan tüm Instagram yazışmasını kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return;
+  try{
+    await apiFetch(`/instagram/conversations/${id}`, { method:'DELETE' });
+    igConversations = igConversations.filter(c=>c.id!==id);
+    if(igActiveConvId===id){
+      igActiveConvId = null;
+      document.getElementById('igThread').innerHTML = '<div class="wa-thread-empty">Bir sohbet seçin</div>';
+    }
+    renderIgConvList();
+    updateIgNavBadge();
+    toast('Sohbet silindi');
+  }catch(e){
+    toast(e.message || 'Sohbet silinemedi');
+  }
+}
+
+function onIgComposerKeydown(e){
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendIgReply(); }
+}
+
+async function sendIgReply(){
+  const input = document.getElementById('igComposerInput');
+  const text = input.value.trim();
+  if(!text || !igActiveConvId) return;
+  input.disabled = true;
+  try{
+    await apiFetch(`/instagram/conversations/${igActiveConvId}/messages`, { method:'POST', body: JSON.stringify({ text }) });
+    input.value = '';
+    const data = await apiFetch(`/instagram/conversations/${igActiveConvId}/messages`);
+    renderIgThread(data);
+    await loadInstagramConversations();
+  }catch(e){
+    toast(e.message || 'Mesaj gönderilemedi');
+  }finally{
+    input.disabled = false;
+    document.getElementById('igComposerInput')?.focus();
+  }
+}
+
+function startIgPolling(){
+  stopIgPolling();
+  igPollTimer = setInterval(async ()=>{
+    try{
+      await loadInstagramConversations();
+      const inboxActive = document.getElementById('view-whatsapp-inbox')?.classList.contains('active') && inboxChannel==='instagram';
+      if(inboxActive && igActiveConvId){
+        const data = await apiFetch(`/instagram/conversations/${igActiveConvId}/messages`);
+        const draftInput = document.getElementById('igComposerInput');
+        const draft = draftInput ? { value: draftInput.value, selStart: draftInput.selectionStart, selEnd: draftInput.selectionEnd, hadFocus: document.activeElement === draftInput } : null;
+        renderIgThread(data);
+        if(draft && draft.value){
+          const newInput = document.getElementById('igComposerInput');
+          newInput.value = draft.value;
+          if(draft.hadFocus){ newInput.focus(); newInput.setSelectionRange(draft.selStart, draft.selEnd); }
+        }
+      }
+    }catch(e){ /* ağ hatasında sessizce bir sonraki denemeyi bekle */ }
+  }, 10000);
+}
+function stopIgPolling(){
+  if(igPollTimer){ clearInterval(igPollTimer); igPollTimer = null; }
 }
 
 function openLightbox(src){
@@ -2873,8 +3035,11 @@ async function startSession(user){
   document.getElementById('login-password').value = '';
   document.getElementById('loginError').style.display = 'none';
   await loadAll();
+  document.getElementById('inbox-tab-whatsapp')?.classList.add('active');
   loadWhatsappConversations().catch(()=>{});
   startWaPolling();
+  loadInstagramConversations().catch(()=>{});
+  startIgPolling();
   const lastView = localStorage.getItem('teknonand_admin_last_view');
   if(!lastView || !RESTORABLE_VIEWS.has(lastView) || !switchView(lastView)){
     switchView('dashboard');
@@ -2885,7 +3050,9 @@ function doLogout(){
   currentUserId = null; currentUserName = null; currentUserPermission = null;
   authToken = null;
   stopWaPolling();
+  stopIgPolling();
   waConversations = []; waActiveConvId = null;
+  igConversations = []; igActiveConvId = null; igLoaded = false; inboxChannel = 'whatsapp';
   localStorage.removeItem('teknonand_admin_token');
   document.body.classList.remove('restricted-user');
   document.getElementById('app').style.display = 'none';
@@ -3989,7 +4156,13 @@ function switchView(name){
   if(name==='label-design') populateLabelDesignForm();
   if(name==='doc-design') populateDocDesignForm();
   if(name==='whatsapp-templates') populateWhatsappTemplateCards();
-  if(name==='whatsapp-inbox'){ renderWaConvList(); if(waActiveConvId) openWaConversation(waActiveConvId); }
+  if(name==='whatsapp-inbox'){
+    if(inboxChannel==='instagram'){
+      renderIgConvList(); if(igActiveConvId) openIgConversation(igActiveConvId);
+    } else {
+      renderWaConvList(); if(waActiveConvId) openWaConversation(waActiveConvId);
+    }
+  }
   if(name==='backup'){
     showLastBackupInfo('backup-devices-info', 'teknonand_last_backup_devices');
     showLastBackupInfo('backup-cari-info', 'teknonand_last_backup_cari');
@@ -4004,7 +4177,11 @@ async function refreshViewData(name){
     if(name==='label-design'){ await loadLabelDesign(); populateLabelDesignForm(); return; }
     if(name==='doc-design'){ await loadCompanyDesign(); populateDocDesignForm(); return; }
     if(name==='whatsapp-templates'){ await loadWhatsappTemplates(); populateWhatsappTemplateCards(); return; }
-    if(name==='whatsapp-inbox'){ await loadWhatsappConversations(); return; }
+    if(name==='whatsapp-inbox'){
+      if(inboxChannel==='instagram') await loadInstagramConversations();
+      else await loadWhatsappConversations();
+      return;
+    }
     if(name==='backup') return;
     const isAdmin = currentUserPermission === 'ADMIN';
     [devices, stock, suppliers, appointments, employees, dealers, customers, expenses] = await Promise.all([
