@@ -36,6 +36,7 @@ model Employee {
   statusChanges   DeviceStatusHistory[]
   repairs         Repair[]
   whatsappChatMessages WhatsappChatMessage[]
+  instagramChatMessages InstagramChatMessage[]
 
   @@map("employees")
 }
@@ -88,6 +89,7 @@ model Customer {
 
   devices Device[]
   whatsappConversations WhatsappConversation[]
+  instagramConversations InstagramConversation[]
 
   @@index([phone])
   @@map("customers")
@@ -428,6 +430,37 @@ model WhatsappChatMessage {
 
   @@index([conversationId])
   @@map("whatsapp_chat_messages")
+}
+
+model InstagramConversation {
+  id                 String    @id @default(uuid())
+  igsid              String    @unique // Instagram-scoped kullanıcı id'si (gönderen/alıcı)
+  customerId         String?
+  customer           Customer? @relation(fields: [customerId], references: [id])
+  username           String? // biliniyorsa Instagram kullanıcı adı (@handle)
+  lastMessageAt      DateTime  @default(now())
+  lastMessagePreview String?
+  unreadCount        Int       @default(0)
+  createdAt          DateTime  @default(now())
+
+  messages InstagramChatMessage[]
+
+  @@map("instagram_conversations")
+}
+
+model InstagramChatMessage {
+  id             String                 @id @default(uuid())
+  conversationId String
+  conversation   InstagramConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction      WhatsappDirection
+  body           String
+  igMessageId    String?                @unique // Meta mesaj id'si — webhook tekrarlarını (retry) ayıklamak için
+  employeeId     String? // OUT mesajını panelden gönderen personel
+  employee       Employee?              @relation(fields: [employeeId], references: [id])
+  createdAt      DateTime               @default(now())
+
+  @@index([conversationId])
+  @@map("instagram_chat_messages")
 }
 
 // ---------------------------------------------------------------------------
