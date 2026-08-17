@@ -126,6 +126,7 @@ model Device {
   deviceOff      Boolean @default(false) // cihaz kapalı / IMEI okunamadı
   isCargo        Boolean @default(false) // cihaz kargo ile mi teslim alındı
   cargoAddress   String? // kargo gönderen adresi (opsiyonel)
+  intakeImages   Json    @default("[]") // cihaz alındı aşamasında eklenen görseller (opsiyonel, en fazla 4)
 
   issueDescription String
   status           DeviceStatus @default(RECEIVED)

@@ -75,6 +75,7 @@ const deviceCreateSchema = z.object({
   deviceOff: z.boolean().optional(),
   isCargo: z.boolean().optional(),
   cargoAddress: z.string().optional(),
+  intakeImages: z.array(dataUrlImage).max(4).optional(),
   issueDescription: z.string().min(1),
   receivedAt: z.string().datetime().optional(),
   sendWhatsapp: z.boolean().optional(), // panelde personelin onayı — bkz. yonetici-paneli.html createDevice
@@ -157,6 +158,7 @@ async function createOneDevice(input, employeeId) {
       deviceOff: !!input.deviceOff,
       isCargo: !!input.isCargo,
       cargoAddress: input.cargoAddress || null,
+      intakeImages: input.intakeImages || [],
       issueDescription: input.issueDescription,
       receivedAt: input.receivedAt ? new Date(input.receivedAt) : new Date(),
       status: 'RECEIVED',
