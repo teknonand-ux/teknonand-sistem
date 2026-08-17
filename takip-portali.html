@@ -86,6 +86,10 @@
   .item-state.no{color:var(--red);}
   .item-actions{display:flex; gap:8px; margin-top:6px;}
   .item-actions button{width:auto; flex:1; margin-top:0;}
+  .diag-item textarea{width:100%; font-family:'Inter',sans-serif; font-size:12px; border:1.5px solid var(--line); border-radius:8px; padding:8px 10px; margin-top:8px; background:var(--card); color:var(--ink); resize:vertical;}
+  .item-note{font-size:11.5px; color:var(--ink-soft); margin-top:4px; font-style:italic;}
+  .edit-link{background:none; border:none; color:var(--ink-soft); font-size:11.5px; font-weight:500; text-decoration:underline; padding:4px 0; width:auto; margin-top:4px; cursor:pointer;}
+  .edit-link:hover{color:var(--accent); opacity:1;}
 
   .parts-mini{font-size:12.5px; margin-top:4px;}
   .parts-mini .p-line{display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #EEEDE7;}
@@ -193,6 +197,7 @@ function lineGross(p){
 }
 
 let lastPhoneSuffix = '';
+let diagEditingItemId = null; // "Düzelt" ile açık olan arıza kalemi (o an yeniden yanıtlanabilir)
 
 async function lookup(){
   const code = document.getElementById('codeInput').value.trim().toUpperCase();
@@ -264,15 +269,27 @@ function render(d){
   const diagItems = d.diagnosisItems || [];
   if(diagItems.length){
     const pending = diagItems.filter(it => it.approved === null || it.approved === undefined);
+    // Cihaz henüz fiilen işleme alınmadıysa (bkz. backend DIAGNOSIS_RESPONSE_EDITABLE_STATUSES)
+    // müşteri yanlışlıkla bastığı onay/red kararını "Düzelt" ile değiştirebilir.
+    const canCorrect = ['DIAGNOSIS_DONE','APPROVED','RETURN_REQUESTED'].includes(d.status);
     const itemsListHtml = diagItems.map(it => {
       const responded = it.approved === true || it.approved === false;
+      const editing = diagEditingItemId === it.id;
       const stateLabel = it.approved === true ? '<span class="item-state ok">✓ Onaylandı</span>' : it.approved === false ? '<span class="item-state no">✕ Yapılmasın dediniz</span>' : '';
-      const actions = !responded ? `
-        <div class="item-actions">
-          <button onclick="respondDiagnosisItem('${it.id}', true)">Onaylıyorum</button>
-          <button class="again-btn" onclick="respondDiagnosisItem('${it.id}', false)">Yapılmasın</button>
-        </div>` : '';
-      return `<div class="diag-item"><div class="a-line"><span>${esc(it.description)}</span> ₺${it.price}</div>${stateLabel}${actions}</div>`;
+      const noteLine = (responded && !editing && it.respondNote) ? `<div class="item-note">Notunuz: ${esc(it.respondNote)}</div>` : '';
+      let actions = '';
+      if(!responded || editing){
+        actions = `
+          <textarea id="diag-note-${it.id}" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)">${editing && it.respondNote ? esc(it.respondNote) : ''}</textarea>
+          <div class="item-actions">
+            <button onclick="respondDiagnosisItem('${it.id}', true)">Onaylıyorum</button>
+            <button class="again-btn" onclick="respondDiagnosisItem('${it.id}', false)">Yapılmasın</button>
+          </div>
+          ${editing ? `<button class="edit-link" onclick="cancelEditDiagItem()">Vazgeç</button>` : ''}`;
+      } else if(canCorrect){
+        actions = `<button class="edit-link" onclick="startEditDiagItem('${it.id}')">Yanlışlıkla mı bastınız? Düzelt</button>`;
+      }
+      return `<div class="diag-item"><div class="a-line"><span>${esc(it.description)}</span> ₺${it.price}</div>${stateLabel}${noteLine}${actions}</div>`;
     }).join('');
     approveHtml = `
       <div class="approve-box">
@@ -361,20 +378,36 @@ async function approveDiagnosis(){
   }
 }
 
+function startEditDiagItem(itemId){
+  diagEditingItemId = itemId;
+  render(currentDevice);
+}
+function cancelEditDiagItem(){
+  diagEditingItemId = null;
+  render(currentDevice);
+}
+
 async function respondDiagnosisItem(itemId, approved){
   if(!currentDevice) return;
+  const noteEl = document.getElementById(`diag-note-${itemId}`);
+  const note = noteEl ? noteEl.value.trim() : '';
   setApproveBoxDisabled(true);
   try{
     const res = await fetch(`${API_BASE}/track/${encodeURIComponent(currentDevice.trackingCode)}/diagnosis-items/${encodeURIComponent(itemId)}/respond`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ approved, phone: lastPhoneSuffix })
+      body: JSON.stringify({ approved, note: note || undefined, phone: lastPhoneSuffix })
     });
     if(res.ok){
+      diagEditingItemId = null;
       currentDevice = await res.json();
       render(currentDevice);
+    }else{
+      const err = await res.json().catch(()=>({}));
+      alert(err.error || 'Yanıt kaydedilemedi, lütfen tekrar deneyin.');
     }
   }catch(e){
+    alert('Bağlantı hatası, lütfen tekrar deneyin.');
   }finally{
     setApproveBoxDisabled(false);
   }

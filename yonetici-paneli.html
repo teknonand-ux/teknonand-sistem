@@ -2027,7 +2027,8 @@ function renderDeviceDetail(){
           <tbody>
             ${d.diagnosisItems.map(it=>{
               const stateLabel = it.approved===true ? '<span style="color:#16a34a;">Onaylandı</span>' : it.approved===false ? '<span style="color:#dc2626;">Reddedildi</span>' : '<span style="color:#a16207;">Bekliyor</span>';
-              return `<tr><td>${esc(it.description)}</td><td>₺${it.price}</td><td>${stateLabel}</td></tr>`;
+              const noteLine = it.respondNote ? `<div style="font-size:11px; color:var(--ink-soft); font-style:italic; margin-top:2px;">Not: ${esc(it.respondNote)}</div>` : '';
+              return `<tr><td>${esc(it.description)}${noteLine}</td><td>₺${it.price}</td><td>${stateLabel}</td></tr>`;
             }).join('')}
           </tbody>
         </table>

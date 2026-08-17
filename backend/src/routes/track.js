@@ -24,7 +24,7 @@ const PUBLIC_DEVICE_SELECT = {
   diagnosisText: true,
   estimatedPrice: true,
   diagnosisImages: true,
-  diagnosisItems: { select: { id: true, description: true, price: true, approved: true } },
+  diagnosisItems: { select: { id: true, description: true, price: true, approved: true, respondNote: true } },
   customerApproved: true,
   invoicePdf: true,
   invoiceUploadedAt: true,
@@ -157,11 +157,17 @@ router.post('/:code/request-return', async (req, res, next) => {
 // (hiçbiri onaylanmadıysa) durumuna geçirir. Hem takip portalı hem bayi portalı
 // tarafından kullanılan ortak mantık.
 async function advanceStatusIfAllItemsResponded(deviceId, respondedByLabel, sendWhatsapp) {
-  const items = await prisma.diagnosisItem.findMany({ where: { deviceId } });
+  const [device, items] = await Promise.all([
+    prisma.device.findUnique({ where: { id: deviceId }, select: { status: true } }),
+    prisma.diagnosisItem.findMany({ where: { deviceId } }),
+  ]);
   if (!items.length || items.some((it) => it.approved === null)) return null;
 
   const anyApproved = items.some((it) => it.approved === true);
   const newStatus = anyApproved ? 'APPROVED' : 'RETURN_REQUESTED';
+  // Müşteri daha önce verdiği bir kararı düzeltip aynı sonuca (ör. yine APPROVED)
+  // varmışsa tekrar geçmiş kaydı/bildirim oluşturmuyoruz.
+  if (device?.status === newStatus) return null;
   const data = anyApproved
     ? { status: 'APPROVED', approvedAt: new Date() }
     : { status: 'RETURN_REQUESTED', returnReason: `${respondedByLabel} tüm arızaları reddetti, cihazın iadesini istedi` };
@@ -184,12 +190,18 @@ async function advanceStatusIfAllItemsResponded(deviceId, respondedByLabel, send
   return updated;
 }
 
+// Cihaz bu durumlardayken müşteri henüz fiilen işleme alınmamış demektir — arıza
+// kalemi yanıtı burada serbestçe verilip yanlışlıkla basılırsa düzeltilebilir.
+// Personel durumu IN_REPAIR ve sonrasına taşıdıktan sonra düzeltme kapanır.
+const DIAGNOSIS_RESPONSE_EDITABLE_STATUSES = ['DIAGNOSIS_DONE', 'APPROVED', 'RETURN_REQUESTED'];
+
 // POST /api/track/:code/diagnosis-items/:itemId/respond — müşteri, tek bir arıza
-// kalemini onaylar ya da reddeder ("yapılmasın")
+// kalemini onaylar ya da reddeder ("yapılmasın"); daha önce yanıtladığı bir kalemi
+// de (cihaz henüz işleme alınmadıysa) aynı uçtan tekrar çağırarak düzeltebilir.
 router.post('/:code/diagnosis-items/:itemId/respond', async (req, res, next) => {
   try {
-    const { approved, phone } = z
-      .object({ approved: z.boolean(), phone: phoneSuffixSchema })
+    const { approved, phone, note } = z
+      .object({ approved: z.boolean(), phone: phoneSuffixSchema, note: z.string().max(300).optional() })
       .parse(req.body);
     const code = req.params.code.toUpperCase();
     const notFoundOrMismatch = () =>
@@ -198,18 +210,23 @@ router.post('/:code/diagnosis-items/:itemId/respond', async (req, res, next) => 
     const deviceId = await findDeviceByCodeAndPhone(code, phone);
     if (!deviceId) return notFoundOrMismatch();
 
+    const device = await prisma.device.findUnique({ where: { id: deviceId }, select: { status: true } });
+    if (!DIAGNOSIS_RESPONSE_EDITABLE_STATUSES.includes(device.status)) {
+      return res.status(409).json({ error: 'Cihaz işleme alındığı için arıza kalemi yanıtı artık değiştirilemez' });
+    }
+
     const item = await prisma.diagnosisItem.findFirst({ where: { id: req.params.itemId, deviceId } });
     if (!item) return res.status(404).json({ error: 'Arıza kalemi bulunamadı' });
 
     await prisma.diagnosisItem.update({
       where: { id: item.id },
-      data: { approved, respondedBy: 'customer', respondedAt: new Date() },
+      data: { approved, respondedBy: 'customer', respondedAt: new Date(), respondNote: note || null },
     });
 
     await advanceStatusIfAllItemsResponded(deviceId, 'Müşteri', true);
 
-    const device = await prisma.device.findUnique({ where: { id: deviceId }, select: PUBLIC_DEVICE_SELECT });
-    res.json(device);
+    const deviceOut = await prisma.device.findUnique({ where: { id: deviceId }, select: PUBLIC_DEVICE_SELECT });
+    res.json(deviceOut);
   } catch (e) {
     next(e);
   }

@@ -191,6 +191,7 @@ model DiagnosisItem {
   approved    Boolean?
   respondedBy String? // "customer" | "dealer"
   respondedAt DateTime?
+  respondNote String? // müşteri/bayi kararıyla birlikte bıraktığı kısa not (opsiyonel)
   createdAt   DateTime  @default(now())
 
   @@map("diagnosis_items")
