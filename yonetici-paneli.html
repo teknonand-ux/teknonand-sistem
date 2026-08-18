@@ -15,6 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
 <style>
   :root{
     --paper:#F6F5F1; --ink:#17181C; --ink-soft:#5A5C66;
@@ -181,6 +182,10 @@
   .lightbox{display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:200; align-items:center; justify-content:center; padding:24px;}
   .lightbox.show{display:flex;}
   .lightbox img{max-width:100%; max-height:100%; border-radius:8px;}
+  .qr-scan-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:210; align-items:center; justify-content:center; padding:24px; flex-direction:column; gap:14px;}
+  .qr-scan-modal.show{display:flex;}
+  .qr-scan-modal video{width:100%; max-width:420px; border-radius:12px; background:#000;}
+  .qr-scan-status{color:#fff; font-size:13.5px; text-align:center;}
   .admin-only{}
   body.restricted-user .admin-only{display:none !important;}
   .user-select{margin-top:14px; padding-top:14px; border-top:1px solid #333;}
@@ -530,7 +535,10 @@
           <button class="ghost search-mode-btn" data-mode="name" onclick="setSearchMode('name')">İsim Soyisim ile Bul</button>
           <button class="ghost search-mode-btn" data-mode="model" onclick="setSearchMode('model')">Cihaz Modeli ile Bul</button>
         </div>
-        <input id="device-search" placeholder="Aramak için yazmaya başlayın..." oninput="renderDeviceTable()">
+        <div style="display:flex; gap:8px;">
+          <input id="device-search" placeholder="Aramak için yazmaya başlayın..." oninput="renderDeviceTable()" style="flex:1;">
+          <button class="ghost" onclick="openQrScan()">📷 Karekod ile Ara</button>
+        </div>
         <div class="field" style="max-width:280px; margin:10px 0 0;">
           <label>Duruma Göre Filtrele</label>
           <select id="device-status-filter" onchange="renderDeviceTable()">
@@ -982,6 +990,12 @@
 </div>
 <div id="printForm" class="form-preview"></div>
 <div class="lightbox" id="lightbox" onclick="closeLightbox()"><img src=""></div>
+<div class="qr-scan-modal" id="qrScanModal">
+  <video id="qrScanVideo" autoplay playsinline muted></video>
+  <canvas id="qrScanCanvas" style="display:none;"></canvas>
+  <div class="qr-scan-status" id="qrScanStatus">Karekodu kameraya gösterin</div>
+  <button class="ghost" style="color:#fff; border-color:#fff;" onclick="closeQrScan()">Kapat</button>
+</div>
 
 <script>
 const API_BASE = 'https://backend-production-a04d.up.railway.app/api';
@@ -2088,6 +2102,70 @@ function openDevice(id){
   customerEditOpen = false;
   switchView('device-detail');
   renderDeviceDetail();
+}
+
+let qrScanStream = null;
+let qrScanRAF = null;
+
+async function openQrScan(){
+  if(typeof jsQR !== 'function'){ toast('Karekod okuyucu yüklenemedi, internet bağlantınızı kontrol edin'); return; }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Bu cihaz/tarayıcı kamera erişimini desteklemiyor'); return; }
+  document.getElementById('qrScanModal').classList.add('show');
+  document.getElementById('qrScanStatus').textContent = 'Karekodu kameraya gösterin';
+  try{
+    qrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  }catch(e){
+    toast('Kameraya erişilemedi — izin vermeniz gerekiyor');
+    closeQrScan();
+    return;
+  }
+  const video = document.getElementById('qrScanVideo');
+  video.srcObject = qrScanStream;
+  await video.play();
+  qrScanTick();
+}
+
+function qrScanTick(){
+  const video = document.getElementById('qrScanVideo');
+  const canvas = document.getElementById('qrScanCanvas');
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const result = jsQR(imageData.data, imageData.width, imageData.height);
+    if(result && result.data){
+      handleQrScanResult(result.data);
+      return;
+    }
+  }
+  qrScanRAF = requestAnimationFrame(qrScanTick);
+}
+
+function handleQrScanResult(text){
+  let trackingCode = null;
+  try{
+    const url = new URL(text);
+    trackingCode = url.searchParams.get('takip');
+  }catch(e){ /* URL değil — düz metin/kod olabilir, aşağıda ham metin denenir */ }
+  if(!trackingCode) trackingCode = text.trim();
+  closeQrScan();
+  const target = devices.find(d => d.trackingCode === trackingCode.toUpperCase());
+  if(target){
+    openDevice(target.id);
+  } else {
+    toast('Eşleşen cihaz bulunamadı: ' + trackingCode);
+  }
+}
+
+function closeQrScan(){
+  if(qrScanRAF) cancelAnimationFrame(qrScanRAF);
+  qrScanRAF = null;
+  if(qrScanStream){ qrScanStream.getTracks().forEach(t=>t.stop()); qrScanStream = null; }
+  const video = document.getElementById('qrScanVideo');
+  if(video) video.srcObject = null;
+  document.getElementById('qrScanModal').classList.remove('show');
 }
 
 function toggleCustomerEdit(){
