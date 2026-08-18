@@ -681,7 +681,7 @@
         <table>
           <thead><tr><th>Alan</th><th>Yazı Boyutu (px)</th><th>Etikette Göster</th></tr></thead>
           <tbody>
-            <tr><td>Logo (boyut px)</td><td><input id="ld-size-logo" type="number" min="20" max="120" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-logo" onchange="onLabelDesignChange()"></td></tr>
+            <tr><td>Logo (genişlik px)</td><td><input id="ld-size-logo" type="number" min="20" max="220" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-logo" onchange="onLabelDesignChange()"></td></tr>
             <tr><td>Müşteri Adı</td><td><input id="ld-size-name" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-name" onchange="onLabelDesignChange()"></td></tr>
             <tr><td>Telefon</td><td><input id="ld-size-phone" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-phone" onchange="onLabelDesignChange()"></td></tr>
             <tr><td>Arıza</td><td><input id="ld-size-issue" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-issue" onchange="onLabelDesignChange()"></td></tr>
@@ -696,7 +696,7 @@
         <h3>Önizleme</h3>
         <div class="label-preview" id="designPreview" style="margin-left:auto; margin-right:auto;">
           <div class="lbl-header">
-            <img id="ldp-logo" src="logo-icon.png" style="display:block;">
+            <img id="ldp-logo" src="logo.png" style="display:block;">
             <div id="ldp-qr"></div>
           </div>
           <div class="lbl-row">
@@ -970,7 +970,7 @@
 <div class="toast" id="toast"></div>
 <div id="printLabel" style="flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; font-family:'Inter',sans-serif; box-sizing:border-box; padding:10px;">
   <div style="display:flex; align-items:flex-start; justify-content:space-between; width:100%;">
-    <img id="pl-logo" src="logo-icon.png" style="display:block;">
+    <img id="pl-logo" src="logo.png" style="display:block;">
     <div id="pl-qr"></div>
   </div>
   <div style="display:flex; align-items:baseline; justify-content:center; gap:10px; flex-wrap:wrap;">
@@ -1059,7 +1059,7 @@ let labelPrinterName = '';
 
 const DEFAULT_LABEL_SETTINGS = {
   widthCm:6, heightCm:4,
-  logo:{size:40, show:true},
+  logo:{size:90, show:true},
   name:{size:12, show:true},
   phone:{size:11, show:true},
   issue:{size:10.5, show:true},
@@ -2553,7 +2553,7 @@ function renderDeviceDetail(){
       </div>
       <div class="label-preview" id="labelPreview">
         <div class="lbl-header">
-          <img id="lp-logo" src="logo-icon.png" style="display:block;">
+          <img id="lp-logo" src="logo.png" style="display:block;">
           <div id="lp-qr"></div>
         </div>
         <div class="lbl-row">
