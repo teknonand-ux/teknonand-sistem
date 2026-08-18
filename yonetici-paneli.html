@@ -2135,7 +2135,22 @@ function onStockPick(){
   document.getElementById('ln-name').value = item.name;
   document.getElementById('ln-price').value = item.unitCostTry;
   document.getElementById('ln-cost').value = item.unitCostTry;
+  document.getElementById('ln-cost-usd').value = item.unitCostUsd || '';
+  document.getElementById('ln-supplier').value = item.supplierId || '';
   document.getElementById('ln-warranty').value = suggestWarranty(item.name);
+}
+
+let lastPartCostCurrency = 'TRY';
+
+function syncPartCostFromTry(){
+  lastPartCostCurrency = 'TRY';
+  const tl = parseFloat(document.getElementById('ln-cost').value);
+  if(!isNaN(tl) && exchangeRate>0) document.getElementById('ln-cost-usd').value = (tl / exchangeRate).toFixed(2);
+}
+function syncPartCostFromUsd(){
+  lastPartCostCurrency = 'USD';
+  const usd = parseFloat(document.getElementById('ln-cost-usd').value);
+  if(!isNaN(usd)) document.getElementById('ln-cost').value = (usd * exchangeRate).toFixed(2);
 }
 
 async function addLine(){
@@ -2144,13 +2159,18 @@ async function addLine(){
   const name = document.getElementById('ln-name').value.trim();
   const price = parseFloat(document.getElementById('ln-price').value);
   const cost = parseFloat(document.getElementById('ln-cost').value) || 0;
+  const costUsd = parseFloat(document.getElementById('ln-cost-usd').value) || 0;
+  const supplierId = document.getElementById('ln-supplier').value || undefined;
   const vatMode = document.getElementById('ln-vat').value;
   const warrantyMonths = parseInt(document.getElementById('ln-warranty').value) || 0;
   if(!name || isNaN(price)){ toast('Parça/işlem adı ve fiyat girin'); return; }
 
   const part = await apiFetch(`/devices/${d.id}/parts`, {
     method: 'POST',
-    body: JSON.stringify({ stockItemId: stockId || undefined, name, price, cost, vatMode, warrantyMonths })
+    body: JSON.stringify({
+      stockItemId: stockId || undefined, name, price, cost, costUsd: costUsd || undefined, vatMode, warrantyMonths,
+      supplierId, supplierCostCurrency: supplierId ? lastPartCostCurrency : undefined
+    })
   });
   if(!d.parts) d.parts = [];
   d.parts.push(part);
@@ -2159,9 +2179,16 @@ async function addLine(){
     const item = stock.find(s=>s.id===stockId);
     if(item) item.quantity -= 1;
   }
-  ['ln-name','ln-price','ln-cost'].forEach(id=>document.getElementById(id).value='');
+  ['ln-name','ln-price','ln-cost','ln-cost-usd'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ln-stock').value = '';
+  document.getElementById('ln-supplier').value = '';
   document.getElementById('ln-warranty').value = 0;
+  lastPartCostCurrency = 'TRY';
+  if(supplierId){
+    const freshSuppliers = await apiFetch('/suppliers');
+    suppliers.length = 0;
+    suppliers.push(...freshSuppliers);
+  }
   renderDeviceDetail();
 }
 
@@ -2357,7 +2384,7 @@ function renderDeviceDetail(){
           ${parts.length ? parts.map((p)=>`
             <tr>
               <td>${esc(p.name)}</td>
-              <td>${p.stockItemId ? 'Stok' : 'Manuel'}</td>
+              <td>${p.stockItemId ? 'Stok' : 'Manuel'}${p.supplier ? ` · ${esc(p.supplier.name)}` : ''}</td>
               <td><span class="badge vat">%20 KDV ${p.vatMode==='HARIC'?'Hariç':'Dahil'}</span></td>
               <td><span class="badge ${p.warrantyMonths>0?'warranty':'no-warranty'}">${WARRANTY_LABELS[p.warrantyMonths]}</span></td>
               <td class="code">₺${lineGross(p).toFixed(2)}</td>
@@ -2366,7 +2393,7 @@ function renderDeviceDetail(){
         </tbody>
       </table>
 
-      <div class="add-line-form" style="grid-template-columns:1.2fr 1.2fr 0.8fr 0.8fr 0.9fr 0.9fr auto;">
+      <div class="add-line-form" style="grid-template-columns:1.2fr 1.2fr 0.8fr 0.8fr 0.8fr 1.1fr 0.8fr 0.9fr auto;">
         <div class="field"><label>Stoktan Seç</label>
           <select id="ln-stock" onchange="onStockPick()">
             <option value="">— Manuel giriş —</option>
@@ -2375,7 +2402,11 @@ function renderDeviceDetail(){
         </div>
         <div class="field"><label>Parça / İşlem Adı</label><input id="ln-name" placeholder="Ekran değişimi" oninput="onPartNameInput()"></div>
         <div class="field"><label>Satış Fiyatı (₺)</label><input id="ln-price" type="number" placeholder="1200"></div>
-        <div class="field"><label>Maliyet (₺)</label><input id="ln-cost" type="number" placeholder="850"></div>
+        <div class="field"><label>Maliyet (₺)</label><input id="ln-cost" type="number" placeholder="850" oninput="syncPartCostFromTry()"></div>
+        <div class="field"><label>Maliyet ($)</label><input id="ln-cost-usd" type="number" placeholder="18" oninput="syncPartCostFromUsd()"></div>
+        <div class="field"><label>Toptancı (opsiyonel)</label>
+          <select id="ln-supplier"><option value="">— Seçilmedi —</option>${suppliers.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
+        </div>
         <div class="field"><label>KDV</label>
           <select id="ln-vat"><option value="DAHIL">%20 Dahil</option><option value="HARIC">%20 Hariç</option></select>
         </div>
@@ -2384,6 +2415,7 @@ function renderDeviceDetail(){
         </div>
         <button class="primary" style="margin-top:0;" onclick="addLine()">Ekle</button>
       </div>
+      <div class="login-hint" style="margin-top:0;">Toptancı seçilirse, girilen maliyet (hangi para biriminde girildiyse — ₺ veya $) o toptancının cari hesabına borç olarak eklenir.</div>
 
       <div class="summary-box">
         <div class="summary-line">Ara Toplam (KDV Hariç): ₺${netTotal.toFixed(2)}</div>

@@ -228,9 +228,12 @@ model DevicePart {
   device         Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   stockItemId    String?
   stockItem      StockItem? @relation(fields: [stockItemId], references: [id])
+  supplierId     String?
+  supplier       Supplier? @relation(fields: [supplierId], references: [id])
   name           String
   price          Decimal  @db.Decimal(12, 2) // satış fiyatı
   cost           Decimal  @default(0) @db.Decimal(12, 2) // maliyet (kâr/zarar hesaplamasında kullanılır)
+  costUsd        Decimal? @db.Decimal(12, 2)
   vatMode        VatMode  @default(DAHIL)
   warrantyMonths Int      @default(0) // 0 = garanti yok
   createdAt      DateTime @default(now())
@@ -310,6 +313,7 @@ model Supplier {
 
   transactions SupplierTransaction[]
   stockItems   StockItem[]
+  deviceParts  DevicePart[]
   expenses     Expense[]
 
   @@map("suppliers")

@@ -103,7 +103,7 @@ router.get('/', async (req, res, next) => {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        customer: true, dealer: true, assignedEmployee: true, parts: true, payments: true,
+        customer: true, dealer: true, assignedEmployee: true, parts: { include: { supplier: true } }, payments: true,
         statusHistory: { orderBy: { changedAt: 'desc' } },
         diagnosisItems: { orderBy: { createdAt: 'asc' } },
       },
@@ -122,7 +122,7 @@ router.get('/:id', async (req, res, next) => {
         customer: true,
         dealer: true,
         assignedEmployee: true,
-        parts: true,
+        parts: { include: { supplier: true } },
         payments: true,
         statusHistory: { orderBy: { changedAt: 'desc' }, include: { changedByEmployee: true } },
         diagnosisItems: { orderBy: { createdAt: 'asc' } },
@@ -586,14 +586,18 @@ router.post('/:id/parts', async (req, res, next) => {
       name: z.string().min(1),
       price: z.number().nonnegative(),
       cost: z.number().nonnegative().default(0),
+      costUsd: z.number().nonnegative().optional(),
       vatMode: z.enum(['DAHIL', 'HARIC']).default('DAHIL'),
       warrantyMonths: z.number().int().nonnegative().default(0),
+      supplierId: z.string().uuid().optional().nullable(),
+      supplierCostCurrency: z.enum(['TRY', 'USD']).optional(),
     });
-    const input = schema.parse(req.body);
+    const { supplierCostCurrency, ...input } = schema.parse(req.body);
 
     const part = await prisma.$transaction(async (tx) => {
       const created = await tx.devicePart.create({
         data: { deviceId: req.params.id, ...input },
+        include: { supplier: true },
       });
       if (input.stockItemId) {
         await tx.stockItem.update({
@@ -608,6 +612,22 @@ router.post('/:id/parts', async (req, res, next) => {
             reason: 'KULLANIM',
           },
         });
+      }
+      // Toptancı seçildiyse, girilen maliyet (girilen para birimi neyse o
+      // hesaba — TL veya USD) o toptancının cari hesabına borç olarak işlenir.
+      if (input.supplierId) {
+        const currency = supplierCostCurrency === 'USD' ? 'USD' : 'TRY';
+        const amount = currency === 'USD' ? Number(input.costUsd) : Number(input.cost);
+        if (amount > 0) {
+          const balanceField = currency === 'USD' ? 'currentBalanceUsd' : 'currentBalance';
+          await tx.supplier.update({
+            where: { id: input.supplierId },
+            data: { [balanceField]: { increment: amount } },
+          });
+          await tx.supplierTransaction.create({
+            data: { supplierId: input.supplierId, type: 'ALIM', currency, amount, description: input.name },
+          });
+        }
       }
       return created;
     });
