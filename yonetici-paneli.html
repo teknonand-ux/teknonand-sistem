@@ -2084,20 +2084,14 @@ async function saveCustomerEdit(customerId, deviceId){
       await apiFetch(`/devices/${deviceId}/dealer`, { method: 'PATCH', body: JSON.stringify({ dealerId: newDealerId }) });
       device.dealerId = newDealerId;
       device.dealer = newDealerId ? dealers.find(dl=>dl.id===newDealerId) : null;
+      // Not: veresiye tutarı bayiye otomatik işlenir (backend: creditDealerIfDelivered,
+      // cihaz READY/DELIVERED durumundaysa) — burada ayrıca eklemiyoruz, mükerrer kayda yol açar.
       dealerMsg = newDealerId ? ` — ${device.dealer.name} bayisine aktarıldı` : ' — bayi bağlantısı kaldırıldı';
-
       if(newDealerId){
-        const grossTotal = (device.parts||[]).reduce((s,p)=>s+lineGross(p), 0);
-        if(grossTotal > 0){
-          const updatedDealer = await apiFetch(`/dealers/${newDealerId}/transactions`, {
-            method: 'POST',
-            body: JSON.stringify({ type: 'VERESIYE_SATIS', amount: grossTotal, description: `${device.trackingCode} — ${device.model}` })
-          });
-          const dlIdx = dealers.findIndex(dl=>dl.id===newDealerId);
-          if(dlIdx>=0) dealers[dlIdx] = updatedDealer;
-          device.dealer = updatedDealer;
-          dealerMsg += `, ₺${grossTotal.toFixed(2)} veresiye hesabına eklendi`;
-        }
+        const freshDealers = await apiFetch('/dealers');
+        dealers.length = 0;
+        dealers.push(...freshDealers);
+        device.dealer = dealers.find(dl=>dl.id===newDealerId) || device.dealer;
       }
     }
   }
