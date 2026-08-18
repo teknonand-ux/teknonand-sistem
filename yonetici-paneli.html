@@ -4401,7 +4401,9 @@ function renderDeviceTable(){
     const parts = d.parts || [];
     const total = parts.reduce((sum,p)=> sum + lineGross(p), 0);
     const paid = (d.payments||[]).reduce((sum,p)=> sum + (parseFloat(p.amount)||0), 0);
-    const unpaidDelivered = d.status === 'DELIVERED' && (total - paid) > 0.01;
+    // Bayiye ait cihazlarda odeme veresiye hesabindan takip edilir, musteri bazli
+    // "Odeme Hatirlat" uyarisi sadece bayisiz (dogrudan musteri) cihazlarda gosterilir.
+    const unpaidDelivered = !d.dealerId && d.status === 'DELIVERED' && (total - paid) > 0.01;
     return `
     <tr class="row-click" onclick="openDevice('${d.id}')">
       <td onclick="event.stopPropagation()"><input type="checkbox" class="device-row-check" data-id="${d.id}" ${selectedDeviceIds.has(d.id)?'checked':''} onchange="toggleDeviceSelect('${d.id}', this.checked)"></td>
