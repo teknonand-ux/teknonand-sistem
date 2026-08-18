@@ -786,9 +786,15 @@
         <button class="primary" onclick="addSupplier()">Toptancı Ekle</button>
       </div>
       <div class="card">
-        <table><thead><tr><th>Toptancı</th><th>Telefon</th><th>Bakiye</th><th></th></tr></thead>
+        <table><thead><tr><th>Toptancı</th><th>Telefon</th><th>Bakiye</th></tr></thead>
           <tbody id="supplierTable"></tbody></table>
       </div>
+    </div>
+
+    <!-- SUPPLIER DETAIL -->
+    <div class="view" id="view-supplier-detail">
+      <button class="ghost" onclick="switchView('suppliers')">← Toptancılara Dön</button>
+      <div id="supplierDetailContent"></div>
     </div>
     <!-- EMPLOYEES -->
     <div class="view" id="view-employees">
@@ -3469,6 +3475,80 @@ function renderDealerDetail(){
   renderDealerDeviceList();
 }
 
+let currentSupplierId = null;
+
+function openSupplier(id){
+  currentSupplierId = id;
+  switchView('supplier-detail');
+  renderSupplierDetail();
+}
+
+function renderSupplierDetail(){
+  const s = suppliers.find(x=>x.id===currentSupplierId);
+  const box = document.getElementById('supplierDetailContent');
+  if(!s){ box.innerHTML = '<p class="empty">Toptancı bulunamadı</p>'; return; }
+  const txs = s.transactions || [];
+  const balanceTry = parseFloat(s.currentBalance) || 0;
+  const balanceUsd = parseFloat(s.currentBalanceUsd) || 0;
+  const stockItems = stock.filter(item=>item.supplierId===s.id);
+
+  box.innerHTML = `
+    <div class="detail-head">
+      <div>
+        <div class="detail-title">${esc(s.name)}</div>
+        <div class="detail-code">${esc(s.phone) || '—'}</div>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="num" style="color:${balanceTry>0?'var(--red)':'var(--green)'}">₺${balanceTry.toFixed(2)}</div><div class="lbl">Borç (₺)</div></div>
+      <div class="stat"><div class="num" style="color:${balanceUsd>0?'var(--red)':'var(--green)'}">$${balanceUsd.toFixed(2)}</div><div class="lbl">Borç ($)</div></div>
+      <div class="stat"><div class="num">${stockItems.length}</div><div class="lbl">Bu Toptancıdan Alınan Kalem</div></div>
+    </div>
+
+    <div class="card">
+      <h3>Borç / Ödeme Hareketi Ekle</h3>
+      ${txs.length ? `<div class="dealer-tx mini-list">${txs.map(t=>`
+        <div class="dealer-tx-line"><span style="color:${t.type==='ALIM'?'var(--red)':'var(--green)'}; font-weight:600;">${t.type==='ALIM'?'Borç (Alım)':'Ödeme'}</span><span>${t.currency==='USD'?'$':'₺'}${(parseFloat(t.amount)||0).toFixed(2)} · ${new Date(t.createdAt).toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})}${t.description?` · ${esc(t.description)}`:''}</span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
+      <div class="dealer-form" style="margin-top:12px;">
+        <div class="field"><label>Tür</label>
+          <select id="stx-type-${s.id}"><option value="ODEME">Ödeme</option><option value="ALIM">Borç (Alım)</option></select>
+        </div>
+        <div class="field"><label>Para Birimi</label>
+          <select id="stx-currency-${s.id}"><option value="TRY">₺ TL</option><option value="USD">$ USD</option></select>
+        </div>
+        <div class="field"><label>Tutar</label><input id="stx-amount-${s.id}" type="number" placeholder="500"></div>
+        <button class="primary" style="margin-top:0;" onclick="addSupplierTx('${s.id}')">Ekle</button>
+      </div>
+      <button class="ghost" style="margin-top:12px;" onclick="removeItem('suppliers','${s.id}'); switchView('suppliers');">Toptancıyı Sil</button>
+    </div>
+
+    <div class="card">
+      <h3>Bu Toptancıdan Alınan Stok Kalemleri</h3>
+      <table><thead><tr><th>Parça</th><th>Adet</th><th>Maliyet</th></tr></thead>
+        <tbody>${stockItems.length ? stockItems.map(item=>`
+          <tr><td>${esc(item.name)}</td><td>${item.quantity}</td>
+          <td>₺${(parseFloat(item.unitCostTry)||0).toFixed(2)}${item.unitCostUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(item.unitCostUsd).toFixed(2)})</span>`:''}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Bu toptancıdan henüz stok girişi yok</td></tr>`}</tbody></table>
+    </div>
+  `;
+}
+
+async function addSupplierTx(id){
+  const amount = parseFloat(document.getElementById('stx-amount-'+id).value);
+  const type = document.getElementById('stx-type-'+id).value;
+  const currency = document.getElementById('stx-currency-'+id).value;
+  if(isNaN(amount) || amount<=0){ toast('Geçerli bir tutar girin'); return; }
+  const supplier = await apiFetch(`/suppliers/${id}/transactions`, {
+    method: 'POST',
+    body: JSON.stringify({ type, currency, amount })
+  });
+  const idx = suppliers.findIndex(x=>x.id===id);
+  if(idx>=0) suppliers[idx] = supplier;
+  toast(type==='ALIM' ? 'Borç eklendi' : 'Ödeme kaydedildi');
+  renderSupplierDetail();
+  renderAll();
+}
+
 async function resetDealerPassword(id){
   const dl = dealers.find(x=>x.id===id);
   if(!dl) return;
@@ -4129,9 +4209,8 @@ function renderAll(){
 
   // Suppliers table
   document.getElementById('supplierTable').innerHTML = suppliers.length ? suppliers.map(s=>`
-    <tr><td>${esc(s.name)}</td><td>${esc(s.phone)||'—'}</td>
-    <td>₺${(parseFloat(s.currentBalance)||0).toFixed(2)}${parseFloat(s.currentBalanceUsd)?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(s.currentBalanceUsd).toFixed(2)})</span>`:''}</td>
-    <td><button class="ghost" onclick="removeItem('suppliers','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz toptancı eklenmedi</td></tr>`;
+    <tr class="row-click" onclick="openSupplier('${s.id}')"><td>${esc(s.name)}</td><td>${esc(s.phone)||'—'}</td>
+    <td>₺${(parseFloat(s.currentBalance)||0).toFixed(2)}${parseFloat(s.currentBalanceUsd)?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(s.currentBalanceUsd).toFixed(2)})</span>`:''}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Henüz toptancı eklenmedi</td></tr>`;
 
   // Stok Ekle formundaki toptancı seçim listesi
   const stockSupplierSel = document.getElementById('s-supplier');

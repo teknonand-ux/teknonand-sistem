@@ -41,14 +41,26 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// POST /api/suppliers/:id/payment — toptancıya ödeme (borç azalır)
-router.post('/:id/payment', async (req, res, next) => {
+// POST /api/suppliers/:id/transactions — borç ekle (ALIM) veya ödeme (ODEME), TL veya USD
+router.post('/:id/transactions', async (req, res, next) => {
   try {
-    const { amount, description } = z.object({ amount: z.number().positive(), description: z.string().optional() }).parse(req.body);
-    const [supplier] = await prisma.$transaction([
-      prisma.supplier.update({ where: { id: req.params.id }, data: { currentBalance: { decrement: amount } } }),
-      prisma.supplierTransaction.create({ data: { supplierId: req.params.id, type: 'ODEME', amount, description } }),
+    const schema = z.object({
+      type: z.enum(['ALIM', 'ODEME']),
+      currency: z.enum(['TRY', 'USD']).default('TRY'),
+      amount: z.number().positive(),
+      description: z.string().optional(),
+    });
+    const { type, currency, amount, description } = schema.parse(req.body);
+    const delta = type === 'ALIM' ? amount : -amount;
+    const balanceField = currency === 'USD' ? 'currentBalanceUsd' : 'currentBalance';
+    await prisma.$transaction([
+      prisma.supplier.update({ where: { id: req.params.id }, data: { [balanceField]: { increment: delta } } }),
+      prisma.supplierTransaction.create({ data: { supplierId: req.params.id, type, currency, amount, description } }),
     ]);
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: req.params.id },
+      include: { transactions: { orderBy: { createdAt: 'desc' } } },
+    });
     res.json(supplier);
   } catch (e) {
     next(e);
