@@ -2049,6 +2049,15 @@ function toggleCustomerEdit(){
   renderDeviceDetail();
 }
 
+function onCustomerEditDealerChange(){
+  const dealerId = document.getElementById('ce-dealer').value;
+  if(!dealerId) return;
+  const dealer = dealers.find(dl=>dl.id===dealerId);
+  if(!dealer) return;
+  document.getElementById('ce-name').value = dealer.name || '';
+  document.getElementById('ce-phone').value = dealer.phone || '';
+}
+
 async function saveCustomerEdit(customerId, deviceId){
   const fullName = document.getElementById('ce-name').value.trim();
   const phone = document.getElementById('ce-phone').value.trim();
@@ -2076,6 +2085,20 @@ async function saveCustomerEdit(customerId, deviceId){
       device.dealerId = newDealerId;
       device.dealer = newDealerId ? dealers.find(dl=>dl.id===newDealerId) : null;
       dealerMsg = newDealerId ? ` — ${device.dealer.name} bayisine aktarıldı` : ' — bayi bağlantısı kaldırıldı';
+
+      if(newDealerId){
+        const grossTotal = (device.parts||[]).reduce((s,p)=>s+lineGross(p), 0);
+        if(grossTotal > 0){
+          const updatedDealer = await apiFetch(`/dealers/${newDealerId}/transactions`, {
+            method: 'POST',
+            body: JSON.stringify({ type: 'VERESIYE_SATIS', amount: grossTotal, description: `${device.trackingCode} — ${device.model}` })
+          });
+          const dlIdx = dealers.findIndex(dl=>dl.id===newDealerId);
+          if(dlIdx>=0) dealers[dlIdx] = updatedDealer;
+          device.dealer = updatedDealer;
+          dealerMsg += `, ₺${grossTotal.toFixed(2)} veresiye hesabına eklendi`;
+        }
+      }
     }
   }
 
@@ -2178,13 +2201,13 @@ function renderDeviceDetail(){
         <div class="field"><label>E-posta</label><input id="ce-email" value="${esc(d.customer.email)}"></div>
         <div class="field">
           <label>Bayi</label>
-          <select id="ce-dealer">
+          <select id="ce-dealer" onchange="onCustomerEditDealerChange()">
             <option value="">— Bayi Yok —</option>
             ${dealers.map(dl=>`<option value="${dl.id}" ${d.dealerId===dl.id?'selected':''}>${esc(dl.name)}</option>`).join('')}
           </select>
         </div>
       </div>
-      <div class="login-hint" style="margin-top:0;">Bayi seçimini değiştirirseniz bu cihaz kaydı o bayinin hesabına (Bayiler sayfası ve bayi portalı) taşınır.</div>
+      <div class="login-hint" style="margin-top:0;">Bayi seçimini değiştirirseniz bu cihaz kaydı o bayinin hesabına (Bayiler sayfası ve bayi portalı) taşınır, ad soyad/telefon bayinin kayıtlı bilgileriyle doldurulur ve cihazın genel toplamı bayinin veresiye hesabına eklenir.</div>
       <div style="display:flex; gap:8px;">
         <button class="primary" style="margin-top:0;" onclick="saveCustomerEdit('${d.customer.id}','${d.id}')">Kaydet</button>
         <button class="ghost" onclick="toggleCustomerEdit()">Vazgeç</button>
