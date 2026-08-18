@@ -470,7 +470,7 @@
           </table>
           <button class="ghost" style="margin-top:12px;" onclick="addBulkRow()">+ Satır Ekle</button>
         </div>
-        <button class="primary" onclick="createBulkDevices()">Toplu Kaydı Oluştur</button>
+        <button class="primary" id="bulk-submit-btn" onclick="createBulkDevices()">Toplu Kaydı Oluştur</button>
       </div>
 
       <datalist id="iphone-models">
@@ -1890,6 +1890,8 @@ function addBulkRow(){
 }
 
 async function createBulkDevices(){
+  const submitBtn = document.getElementById('bulk-submit-btn');
+  if(submitBtn.disabled) return; // ikinci tıklama isteği tekrar göndermesin (mükerrer takip kodu çakışması)
   const dealerId = document.getElementById('bulk-dealer').value;
   if(!dealerId){ toast('Bir bayi seçin'); return; }
   const dealer = dealers.find(d=>d.id===dealerId);
@@ -1914,17 +1916,22 @@ async function createBulkDevices(){
 
   if(!rows.length){ toast('En az bir satıra model girin'); return; }
 
-  const created = await apiFetch('/devices/bulk', {
-    method: 'POST',
-    body: JSON.stringify({ dealerId, receivedAt, rows })
-  });
-  devices = [...created, ...devices];
-  document.getElementById('bulk-rows').innerHTML = '';
-  addBulkRow(); addBulkRow();
-  document.getElementById('bulk-dealer').value = '';
-  toast(`${dealer.name} için ${created.length} cihaz kaydı oluşturuldu`);
-  renderAll();
-  switchView('devices');
+  submitBtn.disabled = true;
+  try{
+    const created = await apiFetch('/devices/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ dealerId, receivedAt, rows })
+    });
+    devices = [...created, ...devices];
+    document.getElementById('bulk-rows').innerHTML = '';
+    addBulkRow(); addBulkRow();
+    document.getElementById('bulk-dealer').value = '';
+    toast(`${dealer.name} için ${created.length} cihaz kaydı oluşturuldu`);
+    renderAll();
+    switchView('devices');
+  } finally {
+    submitBtn.disabled = false;
+  }
 }
 
 function toggleAccordion(id){

@@ -142,29 +142,41 @@ async function createOneDevice(input, employeeId) {
         data: { fullName: input.customerName, phone: input.customerPhone, backupPhone: input.backupPhone },
       });
 
-  const trackingCode = await nextTrackingCode();
-
-  const device = await prisma.device.create({
-    data: {
-      customerId: customerRecord.id,
-      dealerId: input.dealerId || null,
-      assignedEmployeeId: input.assignedEmployeeId || employeeId || null,
-      trackingCode,
-      brand: input.brand || 'Apple',
-      model: input.model,
-      imeiSerial: input.imeiSerial,
-      devicePassword: input.devicePassword,
-      backupPhone: input.backupPhone,
-      deviceOff: !!input.deviceOff,
-      isCargo: !!input.isCargo,
-      cargoAddress: input.cargoAddress || null,
-      intakeImages: input.intakeImages || [],
-      issueDescription: input.issueDescription,
-      receivedAt: input.receivedAt ? new Date(input.receivedAt) : new Date(),
-      status: 'RECEIVED',
-    },
-    include: { customer: true },
-  });
+  // nextTrackingCode() cihaz sayisina bakarak kod uretiyor; iki kayit neredeyse
+  // ayni anda gelirse (ör. cift tiklama) ayni kodu uretebilir ve ikincisi
+  // trackingCode'un @unique kisitina takilir (P2002) -- bu durumda kodu
+  // yeniden uretip tekrar deniyoruz.
+  let device;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const trackingCode = await nextTrackingCode();
+    try {
+      device = await prisma.device.create({
+        data: {
+          customerId: customerRecord.id,
+          dealerId: input.dealerId || null,
+          assignedEmployeeId: input.assignedEmployeeId || employeeId || null,
+          trackingCode,
+          brand: input.brand || 'Apple',
+          model: input.model,
+          imeiSerial: input.imeiSerial,
+          devicePassword: input.devicePassword,
+          backupPhone: input.backupPhone,
+          deviceOff: !!input.deviceOff,
+          isCargo: !!input.isCargo,
+          cargoAddress: input.cargoAddress || null,
+          intakeImages: input.intakeImages || [],
+          issueDescription: input.issueDescription,
+          receivedAt: input.receivedAt ? new Date(input.receivedAt) : new Date(),
+          status: 'RECEIVED',
+        },
+        include: { customer: true },
+      });
+      break;
+    } catch (e) {
+      if (e.code === 'P2002' && attempt < 5) continue;
+      throw e;
+    }
+  }
 
   await prisma.deviceStatusHistory.create({
     data: { deviceId: device.id, status: 'RECEIVED', changedByEmployeeId: employeeId, note: 'Cihaz kabul edildi' },
