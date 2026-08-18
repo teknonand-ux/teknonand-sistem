@@ -3557,10 +3557,12 @@ function renderSupplierDetail(){
 
     <div class="card">
       <h3>Bu Toptancıdan Alınan Stok Kalemleri</h3>
-      <table><thead><tr><th>Parça</th><th>Adet</th><th>Maliyet</th></tr></thead>
+      <p class="login-hint" style="margin-top:0;">Yanlış girilmiş veya toptancıya iade edilen bir kalemi silerseniz, bu kalemin eklenmesiyle oluşan borç da otomatik geri alınır.</p>
+      <table><thead><tr><th>Parça</th><th>Adet</th><th>Maliyet</th><th></th></tr></thead>
         <tbody>${stockItems.length ? stockItems.map(item=>`
           <tr><td>${esc(item.name)}</td><td>${item.quantity}</td>
-          <td>₺${(parseFloat(item.unitCostTry)||0).toFixed(2)}${item.unitCostUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(item.unitCostUsd).toFixed(2)})</span>`:''}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Bu toptancıdan henüz stok girişi yok</td></tr>`}</tbody></table>
+          <td>₺${(parseFloat(item.unitCostTry)||0).toFixed(2)}${item.unitCostUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(item.unitCostUsd).toFixed(2)})</span>`:''}</td>
+          <td><button class="ghost" onclick="removeSupplierStockItem('${item.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="4" class="empty">Bu toptancıdan henüz stok girişi yok</td></tr>`}</tbody></table>
     </div>
   `;
 }
@@ -3579,6 +3581,15 @@ async function addSupplierTx(id){
   toast(type==='ALIM' ? 'Borç eklendi' : 'Ödeme kaydedildi');
   renderSupplierDetail();
   renderAll();
+}
+
+async function removeSupplierStockItem(stockItemId){
+  const item = stock.find(x=>x.id===stockItemId);
+  if(!item) return;
+  if(!confirm(`"${item.name}" kalemini silmek istediğinize emin misiniz? Bu kalemin eklenmesiyle oluşan toptancı borcu varsa o da geri alınacak.`)) return;
+  await removeItem('stock', stockItemId);
+  if(!stock.find(x=>x.id===stockItemId)) toast('Stok kalemi silindi');
+  renderSupplierDetail();
 }
 
 async function resetDealerPassword(id){
@@ -4275,7 +4286,14 @@ async function removeItem(type, id){
   try{
     await apiFetch(pathFn(id), { method: 'DELETE' });
   }catch(e){ toast(e.message || 'Silinemedi'); return; }
-  if(type==='stock') stock = stock.filter(x=>x.id!==id);
+  if(type==='stock'){
+    stock = stock.filter(x=>x.id!==id);
+    // Stok kaleminin toptancıya bir borcu vardıysa, silindiğinde geri alınmış
+    // olabilir — bakiyeleri güncel tutmak için toptancı listesini tazele.
+    const freshSuppliers = await apiFetch('/suppliers');
+    suppliers.length = 0;
+    suppliers.push(...freshSuppliers);
+  }
   if(type==='suppliers') suppliers = suppliers.filter(x=>x.id!==id);
   if(type==='employees') employees = employees.filter(x=>x.id!==id);
   if(type==='dealers') dealers = dealers.filter(x=>x.id!==id);

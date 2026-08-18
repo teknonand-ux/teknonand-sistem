@@ -279,6 +279,7 @@ model StockItem {
 
   movements  StockMovement[]
   usedInParts DevicePart[]
+  supplierTransactions SupplierTransaction[]
 
   @@map("stock_items")
 }
@@ -333,6 +334,8 @@ model SupplierTransaction {
   id          String              @id @default(uuid())
   supplierId  String
   supplier    Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  stockItemId String? // stok kaleminden otomatik olusan borc kaydi icin -- kalem silinirse geri alinabilmesi icin
+  stockItem   StockItem?          @relation(fields: [stockItemId], references: [id], onDelete: SetNull)
   type        SupplierTxType
   currency    SupplierTxCurrency  @default(TRY)
   amount      Decimal             @db.Decimal(12, 2)

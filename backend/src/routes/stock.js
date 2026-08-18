@@ -51,6 +51,7 @@ router.post('/', async (req, res, next) => {
           await tx.supplierTransaction.create({
             data: {
               supplierId: created.supplierId,
+              stockItemId: created.id,
               type: 'ALIM',
               currency,
               amount: total,
@@ -105,9 +106,25 @@ router.patch('/:id/adjust', async (req, res, next) => {
   }
 });
 
+// DELETE /api/stock/:id — yanlış girilmiş veya toptancıya iade edilen stok
+// kalemini siler; bu kalemin eklenmesiyle bir toptancı borcu oluştuysa
+// (bkz. POST /) o borç da geri alınır.
 router.delete('/:id', async (req, res, next) => {
   try {
-    await prisma.stockItem.delete({ where: { id: req.params.id } });
+    await prisma.$transaction(async (tx) => {
+      const linkedTxs = await tx.supplierTransaction.findMany({
+        where: { stockItemId: req.params.id, type: 'ALIM' },
+      });
+      for (const t of linkedTxs) {
+        const balanceField = t.currency === 'USD' ? 'currentBalanceUsd' : 'currentBalance';
+        await tx.supplier.update({
+          where: { id: t.supplierId },
+          data: { [balanceField]: { decrement: t.amount } },
+        });
+      }
+      await tx.supplierTransaction.deleteMany({ where: { stockItemId: req.params.id, type: 'ALIM' } });
+      await tx.stockItem.delete({ where: { id: req.params.id } });
+    });
     res.status(204).end();
   } catch (e) {
     next(e);
