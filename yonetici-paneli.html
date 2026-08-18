@@ -2753,6 +2753,20 @@ Son Hareketler:
 {hareket_listesi}
 
 Bilgilerinize sunarız.`
+  },
+  paymentReminder: {
+    label: 'Ödeme Hatırlatması (Teslim Edilmiş, Tahsilat Eksik)',
+    placeholders: ['takip_kodu','musteri_adi','cihaz_modeli','toplam_tutar','odenen_tutar','kalan_tutar'],
+    text: `Teknonand — Ödeme Hatırlatması
+Kayıt No: {takip_kodu}
+Sayın {musteri_adi},
+Cihazınızı ({cihaz_modeli}) teslim aldınız, ancak hesabımızda tahsilatınız tamamlanmamış görünüyor:
+
+Toplam: ₺{toplam_tutar}
+Ödenen: ₺{odenen_tutar}
+Kalan: ₺{kalan_tutar}
+
+Kalan tutarı en kısa sürede tarafımıza iletmenizi rica ederiz. Anlayışınız için teşekkür ederiz.`
   }
 };
 let whatsappTemplates = JSON.parse(JSON.stringify(WHATSAPP_TEMPLATES_DEFAULT));
@@ -3432,6 +3446,24 @@ function sendTrackingLinkWhatsApp(id){
     cihaz_modeli: d.model,
     takip_kodu: d.trackingCode,
     takip_linki: TRACK_PORTAL_URL
+  }));
+  const number = d.customer.phone ? toWhatsAppNumber(d.customer.phone) : '';
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
+function sendPaymentReminderWhatsApp(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  const total = (d.parts||[]).reduce((s,p)=>s+lineGross(p), 0);
+  const paid = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0), 0);
+  const remaining = total - paid;
+  const text = encodeURIComponent(fillTemplate(whatsappTemplates.paymentReminder.text, {
+    takip_kodu: d.trackingCode,
+    musteri_adi: d.customer.fullName,
+    cihaz_modeli: d.model,
+    toplam_tutar: total.toFixed(2),
+    odenen_tutar: paid.toFixed(2),
+    kalan_tutar: remaining.toFixed(2)
   }));
   const number = d.customer.phone ? toWhatsAppNumber(d.customer.phone) : '';
   window.open(`https://wa.me/${number}?text=${text}`, '_blank');
@@ -4368,6 +4400,8 @@ function renderDeviceTable(){
   tbody.innerHTML = pageList.length ? pageList.map(d=>{
     const parts = d.parts || [];
     const total = parts.reduce((sum,p)=> sum + lineGross(p), 0);
+    const paid = (d.payments||[]).reduce((sum,p)=> sum + (parseFloat(p.amount)||0), 0);
+    const unpaidDelivered = d.status === 'DELIVERED' && (total - paid) > 0.01;
     return `
     <tr class="row-click" onclick="openDevice('${d.id}')">
       <td onclick="event.stopPropagation()"><input type="checkbox" class="device-row-check" data-id="${d.id}" ${selectedDeviceIds.has(d.id)?'checked':''} onchange="toggleDeviceSelect('${d.id}', this.checked)"></td>
@@ -4378,8 +4412,11 @@ function renderDeviceTable(){
       <td>${esc(d.customer.fullName)}<br><span style="color:var(--ink-soft); font-size:11.5px;">${esc(d.customer.phone)||''}</span>${d.backupPhone?`<br><span style="color:var(--ink-soft); font-size:11px;">Yedek: ${esc(d.backupPhone)}</span>`:''}</td>
       <td>${d.assignedEmployee ? esc(d.assignedEmployee.name) : '<span style="color:var(--ink-soft);">Atanmadı</span>'}</td>
       <td onclick="event.stopPropagation()">${pill(d.status)}</td>
-      <td>${parts.length} kalem · ₺${total.toFixed(0)}</td>
-      <td onclick="event.stopPropagation()"><button class="ghost" onclick="printDeviceLabel('${d.id}')">Etiket Bas</button></td>
+      <td>${parts.length} kalem · ₺${total.toFixed(0)}${unpaidDelivered ? `<br><span style="color:var(--red); font-size:11px; font-weight:600;">⚠ Kalan ₺${(total-paid).toFixed(0)}</span>` : ''}</td>
+      <td onclick="event.stopPropagation()">
+        <button class="ghost" onclick="printDeviceLabel('${d.id}')">Etiket Bas</button>
+        ${unpaidDelivered ? `<button class="ghost" style="color:var(--red); border-color:var(--red); margin-top:4px;" onclick="sendPaymentReminderWhatsApp('${d.id}')">Ödeme Hatırlat</button>` : ''}
+      </td>
     </tr>`;
   }).join('') : ((query || statusFilter) ? `<tr><td colspan="10" class="empty">Eşleşen kayıt bulunamadı</td></tr>` : `<tr><td colspan="10" class="empty">Henüz cihaz kaydı yok — "Cihaz Kabul"tan ekleyin</td></tr>`);
 
