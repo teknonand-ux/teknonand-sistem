@@ -14,6 +14,7 @@
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js" defer></script>
 <style>
   :root{
     --paper:#F6F5F1; --ink:#17181C; --ink-soft:#5A5C66;
@@ -681,6 +682,7 @@
             <tr><td>Arıza</td><td><input id="ld-size-issue" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-issue" onchange="onLabelDesignChange()"></td></tr>
             <tr><td>Cihaz Şifresi</td><td><input id="ld-size-pass" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-pass" onchange="onLabelDesignChange()"></td></tr>
             <tr><td>IMEI / Seri No</td><td><input id="ld-size-imei" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-imei" onchange="onLabelDesignChange()"></td></tr>
+            <tr><td>Karekod (boyut px)</td><td><input id="ld-size-qr" type="number" min="30" max="120" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-qr" onchange="onLabelDesignChange()"></td></tr>
           </tbody>
         </table>
       </div>
@@ -701,6 +703,7 @@
             <span class="lbl-pass" id="ldp-pass">Şifre: 2468</span>
           </div>
           <div class="lbl-imei" id="ldp-imei">IMEI: 351234567891234</div>
+          <div id="ldp-qr"></div>
         </div>
         <div style="display:flex; gap:8px; justify-content:center; margin-top:6px;">
           <button class="primary" onclick="saveLabelDesign()">Tasarımı Kaydet</button>
@@ -975,6 +978,7 @@
     <span id="pl-pass" style="font-size:10.5px; color:#5A5C66;"></span>
   </div>
   <div id="pl-imei" style="font-size:10px; color:#5A5C66; font-family:'JetBrains Mono',monospace;"></div>
+  <div id="pl-qr"></div>
 </div>
 <div id="printForm" class="form-preview"></div>
 <div class="lightbox" id="lightbox" onclick="closeLightbox()"><img src=""></div>
@@ -1052,7 +1056,8 @@ const DEFAULT_LABEL_SETTINGS = {
   phone:{size:11, show:true},
   issue:{size:10.5, show:true},
   pass:{size:10.5, show:true},
-  imei:{size:10, show:true}
+  imei:{size:10, show:true},
+  qr:{size:60, show:true}
 };
 let labelSettings = JSON.parse(JSON.stringify(DEFAULT_LABEL_SETTINGS));
 
@@ -2488,6 +2493,7 @@ function renderDeviceDetail(){
           <span class="lbl-pass" id="lp-pass"></span>
         </div>
         <div class="lbl-imei" id="lp-imei"></div>
+        <div id="lp-qr"></div>
       </div>
       <button class="primary" onclick="printLabel()">Etiketi Yazdır</button>
     </div>
@@ -2618,6 +2624,8 @@ function updateLabelPreview(){
 
   applyLabelSettings('lp');
   applyLabelSettings('pl');
+  renderLabelQr('lp', code);
+  renderLabelQr('pl', code);
   const previewBox = document.getElementById('labelPreview');
   if(previewBox){
     previewBox.style.width = (labelSettings.widthCm*37.8)+'px';
@@ -2922,6 +2930,7 @@ function printLabelNow(labelData){
   document.getElementById('pl-imei').textContent = labelData.imeiSerial ? 'IMEI: ' + labelData.imeiSerial : '';
   document.getElementById('pl-code').textContent = labelData.trackingCode || '';
   applyLabelSettings('pl');
+  renderLabelQr('pl', labelData.trackingCode);
   const printBox = document.getElementById('printLabel');
   printBox.style.width = labelSettings.widthCm + 'cm';
   printBox.style.height = labelSettings.heightCm + 'cm';
@@ -3280,6 +3289,18 @@ async function startSession(user){
   if(!lastView || !RESTORABLE_VIEWS.has(lastView) || !switchView(lastView)){
     switchView('dashboard');
   }
+  openDeviceFromQrLink();
+}
+
+// Etiketteki karekod ?takip=<takip kodu> ile panele geliyor -- personel giriş
+// yaptıktan (veya oturumu zaten açıkken) sonra doğrudan o cihazın sayfasını açar.
+function openDeviceFromQrLink(){
+  const code = new URLSearchParams(location.search).get('takip');
+  if(!code) return;
+  history.replaceState(null, '', location.pathname);
+  const target = devices.find(d => d.trackingCode === code.toUpperCase());
+  if(target) openDevice(target.id);
+  else toast('Takip kodu bulunamadı: ' + code);
 }
 
 function doLogout(){
@@ -3388,6 +3409,7 @@ let currentDealerId = null;
 let pendingDealerCredentials = null; // az önce oluşturulan/sıfırlanan bayi şifresi (WhatsApp ile göndermek için, hash'ten geri alınamaz)
 const DEALER_PORTAL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/bayi-portali.html';
 const TRACK_PORTAL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/takip-portali.html';
+const PANEL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/yonetici-paneli.html';
 
 function sendDealerCredentialsWhatsApp(){
   const dl = dealers.find(x=>x.id===currentDealerId);
@@ -4040,7 +4062,9 @@ async function saveExchangeRate(){
 async function loadLabelDesign(){
   try{
     const data = await apiFetch('/settings/labelDesign');
-    if(data) labelSettings = data;
+    // Eski kayitli tasarimlarda henuz olmayan alanlar (ör. yeni eklenen karekod)
+    // varsayilanla tamamlanir, aksi halde o alan icin undefined kalir.
+    if(data) labelSettings = { ...JSON.parse(JSON.stringify(DEFAULT_LABEL_SETTINGS)), ...data };
   }catch(e){ /* saved design yok, varsayılan kullanılır */ }
   try{
     const name = await apiFetch('/settings/labelPrinterName');
@@ -4063,7 +4087,7 @@ function populateLabelDesignForm(){
   document.getElementById('label-printer-name').value = labelPrinterName;
   document.getElementById('ld-width').value = labelSettings.widthCm;
   document.getElementById('ld-height').value = labelSettings.heightCm;
-  ['shop','code','name','phone','issue','pass','imei'].forEach(key=>{
+  ['shop','code','name','phone','issue','pass','imei','qr'].forEach(key=>{
     document.getElementById('ld-size-'+key).value = labelSettings[key].size;
     document.getElementById('ld-show-'+key).checked = labelSettings[key].show;
   });
@@ -4073,7 +4097,7 @@ function populateLabelDesignForm(){
 function onLabelDesignChange(){
   labelSettings.widthCm = parseFloat(document.getElementById('ld-width').value) || DEFAULT_LABEL_SETTINGS.widthCm;
   labelSettings.heightCm = parseFloat(document.getElementById('ld-height').value) || DEFAULT_LABEL_SETTINGS.heightCm;
-  ['shop','code','name','phone','issue','pass','imei'].forEach(key=>{
+  ['shop','code','name','phone','issue','pass','imei','qr'].forEach(key=>{
     const size = parseFloat(document.getElementById('ld-size-'+key).value) || DEFAULT_LABEL_SETTINGS[key].size;
     const show = document.getElementById('ld-show-'+key).checked;
     labelSettings[key] = {size, show};
@@ -4087,6 +4111,7 @@ function renderDesignPreview(){
   box.style.width = (labelSettings.widthCm*37.8)+'px';
   box.style.height = (labelSettings.heightCm*37.8)+'px';
   applyLabelSettings('ldp');
+  renderLabelQr('ldp', 'TKN-2026-0342');
 }
 
 async function saveLabelDesign(){
@@ -4109,6 +4134,28 @@ function applyLabelSettings(prefix){
     el.style.fontSize = cfg.size + 'px';
     el.style.display = cfg.show ? '' : 'none';
   });
+}
+
+// Personel etiketteki karekodu telefon kamerasıyla okuttuğunda doğrudan bu
+// cihazın yönetici panelindeki sayfasına yönlensin diye panel adresine
+// takip kodunu ekleyip kodluyoruz — panel girişi gerektirdiği için müşteri/
+// bayi bu linki açsa bile cihaz bilgisine ulaşamaz, önce personel girişi ister.
+function renderLabelQr(prefix, trackingCode){
+  const box = document.getElementById(prefix+'-qr');
+  if(!box) return;
+  const cfg = labelSettings.qr || DEFAULT_LABEL_SETTINGS.qr;
+  if(!cfg.show || !trackingCode || typeof qrcode !== 'function'){
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.style.display = '';
+  try{
+    const qr = qrcode(0, 'M');
+    qr.addData(`${PANEL_URL}?takip=${encodeURIComponent(trackingCode)}`);
+    qr.make();
+    box.innerHTML = `<img src="${qr.createDataURL(4,2)}" style="width:${cfg.size}px; height:${cfg.size}px; display:block;">`;
+  }catch(e){ box.innerHTML = ''; }
 }
 
 async function loadCompanyDesign(){
