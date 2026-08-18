@@ -15,6 +15,7 @@ const stockSchema = z.object({
   unitCostTry: z.number().nonnegative(),
   unitCostUsd: z.number().nonnegative().optional(),
   supplierId: z.string().uuid().optional().nullable(),
+  supplierCostCurrency: z.enum(['TRY', 'USD']).optional(),
 });
 
 router.get('/', async (req, res, next) => {
@@ -28,13 +29,38 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const data = stockSchema.parse(req.body);
-    const item = await prisma.stockItem.create({ data });
-    if (item.quantity > 0) {
-      await prisma.stockMovement.create({
-        data: { stockItemId: item.id, quantityChange: item.quantity, reason: 'ALIM' },
-      });
-    }
+    const { supplierCostCurrency, ...data } = stockSchema.parse(req.body);
+    const item = await prisma.$transaction(async (tx) => {
+      const created = await tx.stockItem.create({ data, include: { supplier: true } });
+      if (created.quantity > 0) {
+        await tx.stockMovement.create({
+          data: { stockItemId: created.id, quantityChange: created.quantity, reason: 'ALIM' },
+        });
+      }
+      // Toptancı seçildiyse, girilen parti tutarı o toptancının cari hesabına
+      // (girilen para birimi neyse o hesaba — TL veya USD) borç olarak işlenir.
+      if (created.supplierId && created.quantity > 0) {
+        const currency = supplierCostCurrency === 'USD' ? 'USD' : 'TRY';
+        const unitCost = currency === 'USD' ? Number(created.unitCostUsd) : Number(created.unitCostTry);
+        const total = unitCost * created.quantity;
+        if (total > 0) {
+          await tx.supplier.update({
+            where: { id: created.supplierId },
+            data: currency === 'USD' ? { currentBalanceUsd: { increment: total } } : { currentBalance: { increment: total } },
+          });
+          await tx.supplierTransaction.create({
+            data: {
+              supplierId: created.supplierId,
+              type: 'ALIM',
+              currency,
+              amount: total,
+              description: `${created.name} x${created.quantity}`,
+            },
+          });
+        }
+      }
+      return created;
+    });
     res.status(201).json(item);
   } catch (e) {
     next(e);

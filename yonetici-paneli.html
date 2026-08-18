@@ -761,11 +761,15 @@
           <div class="field"><label>Kritik Seviye</label><input id="s-min" type="number" placeholder="3"></div>
           <div class="field"><label>Maliyet (₺)</label><input id="s-cost-try" type="number" placeholder="850" oninput="syncCostFromTry()"></div>
           <div class="field"><label>Maliyet ($)</label><input id="s-cost-usd" type="number" placeholder="18" oninput="syncCostFromUsd()"></div>
+          <div class="field"><label>Toptancı (opsiyonel)</label>
+            <select id="s-supplier"><option value="">— Seçilmedi —</option></select>
+          </div>
         </div>
+        <div class="login-hint" style="margin-top:0;">Toptancı seçilirse, girilen tutar (hangi para biriminde girildiyse — ₺ veya $) o toptancının cari hesabına borç olarak eklenir.</div>
         <button class="primary" onclick="addStock()">Parça Ekle</button>
       </div>
       <div class="card">
-        <table><thead><tr><th>Parça</th><th>Stok</th><th>Kritik</th><th>Maliyet</th><th></th></tr></thead>
+        <table><thead><tr><th>Parça</th><th>Stok</th><th>Kritik</th><th>Maliyet</th><th>Toptancı</th><th></th></tr></thead>
           <tbody id="stockTable"></tbody></table>
       </div>
     </div>
@@ -782,7 +786,7 @@
         <button class="primary" onclick="addSupplier()">Toptancı Ekle</button>
       </div>
       <div class="card">
-        <table><thead><tr><th>Toptancı</th><th>Telefon</th><th>Bakiye (₺)</th><th></th></tr></thead>
+        <table><thead><tr><th>Toptancı</th><th>Telefon</th><th>Bakiye</th><th></th></tr></thead>
           <tbody id="supplierTable"></tbody></table>
       </div>
     </div>
@@ -3615,29 +3619,44 @@ function renderProfit(){
     <td style="color:${r.profit>=0?'var(--green)':'var(--red)'}">₺${r.profit.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz veri yok</td></tr>`;
 }
 
+let lastStockCostCurrency = 'TRY';
+
 async function addStock(){
   const name = document.getElementById('s-name').value.trim();
   const quantity = parseInt(document.getElementById('s-qty').value) || 0;
   const minThreshold = parseInt(document.getElementById('s-min').value) || 0;
   const costTry = parseFloat(document.getElementById('s-cost-try').value) || 0;
   const costUsd = parseFloat(document.getElementById('s-cost-usd').value) || 0;
+  const supplierId = document.getElementById('s-supplier').value || undefined;
   if(!name){ toast('Parça adı gerekli'); return; }
   const unitCostTry = costTry > 0 ? costTry : (costUsd * exchangeRate);
   const item = await apiFetch('/stock', {
     method: 'POST',
-    body: JSON.stringify({ name, quantity, minThreshold, unitCostTry, unitCostUsd: costUsd || undefined })
+    body: JSON.stringify({
+      name, quantity, minThreshold, unitCostTry, unitCostUsd: costUsd || undefined,
+      supplierId, supplierCostCurrency: supplierId ? lastStockCostCurrency : undefined
+    })
   });
   stock.unshift(item);
   ['s-name','s-qty','s-min','s-cost-try','s-cost-usd'].forEach(id=>document.getElementById(id).value='');
-  toast('Parça eklendi');
+  document.getElementById('s-supplier').value = '';
+  lastStockCostCurrency = 'TRY';
+  toast('Parça eklendi' + (supplierId ? ' — tutar toptancı hesabına eklendi' : ''));
+  if(supplierId){
+    const freshSuppliers = await apiFetch('/suppliers');
+    suppliers.length = 0;
+    suppliers.push(...freshSuppliers);
+  }
   renderAll();
 }
 
 function syncCostFromTry(){
+  lastStockCostCurrency = 'TRY';
   const tl = parseFloat(document.getElementById('s-cost-try').value);
   if(!isNaN(tl) && exchangeRate>0) document.getElementById('s-cost-usd').value = (tl / exchangeRate).toFixed(2);
 }
 function syncCostFromUsd(){
+  lastStockCostCurrency = 'USD';
   const usd = parseFloat(document.getElementById('s-cost-usd').value);
   if(!isNaN(usd)) document.getElementById('s-cost-try').value = (usd * exchangeRate).toFixed(2);
 }
@@ -4098,12 +4117,22 @@ function renderAll(){
     <tr><td>${esc(s.name)}</td>
     <td style="color:${s.quantity<=s.minThreshold?'var(--red)':'var(--ink)'}">${s.quantity}</td>
     <td>${s.minThreshold}</td><td>₺${(parseFloat(s.unitCostTry)||0).toFixed(2)}${s.unitCostUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(s.unitCostUsd).toFixed(2)})</span>`:''}</td>
-    <td><button class="ghost" onclick="removeItem('stock','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz parça eklenmedi</td></tr>`;
+    <td>${s.supplier ? esc(s.supplier.name) : '—'}</td>
+    <td><button class="ghost" onclick="removeItem('stock','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="6" class="empty">Henüz parça eklenmedi</td></tr>`;
 
   // Suppliers table
   document.getElementById('supplierTable').innerHTML = suppliers.length ? suppliers.map(s=>`
-    <tr><td>${esc(s.name)}</td><td>${esc(s.phone)||'—'}</td><td>₺${(parseFloat(s.currentBalance)||0).toFixed(2)}</td>
+    <tr><td>${esc(s.name)}</td><td>${esc(s.phone)||'—'}</td>
+    <td>₺${(parseFloat(s.currentBalance)||0).toFixed(2)}${parseFloat(s.currentBalanceUsd)?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(s.currentBalanceUsd).toFixed(2)})</span>`:''}</td>
     <td><button class="ghost" onclick="removeItem('suppliers','${s.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz toptancı eklenmedi</td></tr>`;
+
+  // Stok Ekle formundaki toptancı seçim listesi
+  const stockSupplierSel = document.getElementById('s-supplier');
+  if(stockSupplierSel){
+    const currentSel = stockSupplierSel.value;
+    stockSupplierSel.innerHTML = '<option value="">— Seçilmedi —</option>' + suppliers.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    stockSupplierSel.value = currentSel;
+  }
 
   renderAppointments();
   renderEmployees();
