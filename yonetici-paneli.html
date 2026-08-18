@@ -985,13 +985,13 @@ const API_BASE = 'https://backend-production-a04d.up.railway.app/api';
 const STATUS_LABELS = {
   RECEIVED:'Alındı', DIAGNOSING:'İnceleniyor', DIAGNOSIS_DONE:'Arıza Tespiti Bitti',
   AWAITING_PARTS:'Parça Bekleniyor', APPROVED:'Fiyat Onaylandı - Onarılıyor', IN_REPAIR:'Tamir Ediliyor',
-  TESTING:'Test Ediliyor', READY:'Teslime Hazır', DELIVERED:'Teslim Edildi',
+  TESTING:'Test Ediliyor', READY:'Teslime Hazır', SHIPPED:'Kargoya Verildi', DELIVERED:'Teslim Edildi',
   RETURN_REQUESTED:'İade İstendi', RETURNED:'İade Edildi', CANCELLED:'İptal Edildi'
 };
 const STATUS_COLORS = {
   RECEIVED:['#5A5C66','#EEEDE7'], DIAGNOSING:['#2F5EFF','#E9EEFF'], DIAGNOSIS_DONE:['#E8A33D','#FBF0DD'],
   AWAITING_PARTS:['#8B5CF6','#F0EBFD'], APPROVED:['#0D9488','#DFF5F2'], IN_REPAIR:['#6366F1','#E9E9FD'],
-  TESTING:['#0EA5E9','#E0F4FE'], READY:['#65A30D','#EEF5DC'], DELIVERED:['#2E9E6D','#E4F3EC'],
+  TESTING:['#0EA5E9','#E0F4FE'], READY:['#65A30D','#EEF5DC'], SHIPPED:['#0369A1','#DFF0FB'], DELIVERED:['#2E9E6D','#E4F3EC'],
   RETURN_REQUESTED:['#EA580C','#FDEAD9'], RETURNED:['#C1442A','#FBEAE6'], CANCELLED:['#BE185D','#FCE4EF']
 };
 {
@@ -2287,6 +2287,7 @@ function renderDeviceDetail(){
         <div><span>Bayi</span>${d.dealer ? esc(d.dealer.name) : '—'}</div>
         <div><span>Kabul Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
         ${d.isCargo ? `<div><span>📦 Kargo</span>Kargo ile geldi${d.cargoAddress?` — ${esc(d.cargoAddress)}`:''}</div>` : ''}
+        ${d.cargoTrackingNumber ? `<div><span>📦 Yurtiçi Kargo Takip No</span>${esc(d.cargoTrackingNumber)}</div>` : ''}
       </div>
       ${(d.intakeImages && d.intakeImages.length) ? `<div><span style="color:var(--ink-soft); font-size:11.5px;">Cihaz Alındı Görselleri</span><div class="img-gallery">${d.intakeImages.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}</div></div>` : ''}
       <div style="display:flex; gap:8px; margin-top:10px;">
@@ -2338,6 +2339,12 @@ function renderDeviceDetail(){
           <label>IMEI / Seri No (Teslime Hazır için zorunlu)</label>
           <input id="st-ready-imei" placeholder="Cihazın IMEI/Seri numarasını girin">
         </div>` : ''}
+      </div>
+      <div id="st-shipped-fields" style="display:none;">
+        <div class="field">
+          <label>Yurtiçi Kargo Takip No (zorunlu)</label>
+          <input id="st-cargo-tracking" placeholder="örn. 1234567890123" value="${esc(d.cargoTrackingNumber)}">
+        </div>
       </div>
       <div id="st-delivery-fields" style="display:none;">
         <div class="field"><label>Teslim Şekli</label>
@@ -2532,13 +2539,13 @@ function renderDeviceDetail(){
 
     <div class="card">
       <h3>Cihaz Teslim Formu</h3>
-      ${(d.status === 'READY' || d.status === 'DELIVERED') ? `
+      ${(d.status === 'READY' || d.status === 'SHIPPED' || d.status === 'DELIVERED') ? `
         <div class="form-preview" id="deliveryFormPreview">${buildDeliveryFormHTML(d)}</div>
         <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
           <button class="primary" style="margin-top:0;" onclick="printDeliveryForm('${d.id}')">Formu Yazdır</button>
           ${d.status === 'DELIVERED' ? `<button class="ghost" onclick="sendDeliveryFormWhatsApp('${d.id}')">WhatsApp ile PDF Gönder</button>` : ''}
         </div>
-        ${d.status === 'READY'
+        ${d.status !== 'DELIVERED'
           ? `<p class="login-hint" style="margin-top:8px; margin-bottom:0;">Cihaz henüz teslim edilmedi — bu form, müşteri teslim alırken imzalatmak üzere şimdiden yazdırılabilir. "WhatsApp ile PDF Gönder" cihaz "Teslim Edildi" durumuna alındığında burada görünür.</p>`
           : `<p class="login-hint" style="margin-top:8px; margin-bottom:0;">Butona bastığınızda bu form PDF olarak oluşturulup müşteriye doğrudan WhatsApp belgesi olarak gönderilir (onaylı şablon üzerinden) — otomatik gönderim yapılmaz, yalnızca bu butona bastığınızda çalışır.</p>`}
       ` : `<p class="empty">Cihaz "Teslime Hazır" veya "Teslim Edildi" durumuna alındığında teslim formu burada otomatik oluşur.</p>`}
@@ -2964,6 +2971,7 @@ function onStatusFieldChange(){
   document.getElementById('st-return-fields').style.display = (status === 'RETURNED' || status === 'RETURN_REQUESTED') ? 'block' : 'none';
   document.getElementById('st-delivery-fields').style.display = status === 'DELIVERED' ? 'block' : 'none';
   document.getElementById('st-ready-fields').style.display = status === 'READY' ? 'block' : 'none';
+  document.getElementById('st-shipped-fields').style.display = status === 'SHIPPED' ? 'block' : 'none';
 }
 
 let tempImages = {diagnosis:[], return:[], delivery:[], intake:[]};
@@ -3076,6 +3084,15 @@ async function addStatusEntry(){
     }
     payload.imeiSerial = enteredImei;
   }
+  if(status === 'SHIPPED'){
+    const trackingInput = document.getElementById('st-cargo-tracking');
+    const trackingNumber = trackingInput ? trackingInput.value.trim() : '';
+    if(!trackingNumber){
+      toast('Kargoya Verildi yapmadan önce Yurtiçi Kargo takip numarası girilmelidir');
+      return;
+    }
+    payload.cargoTrackingNumber = trackingNumber;
+  }
   if(status === 'DELIVERED'){
     if(!d.imeiSerial){
       const imeiInput = document.getElementById('st-delivery-imei');
@@ -3097,7 +3114,7 @@ async function addStatusEntry(){
 
   // Yalnızca bu durumların onaylı WhatsApp şablonu var (bkz. backend whatsapp.js
   // TEMPLATES) — diğer durumlarda zaten mesaj gitmeyeceği için sormaya gerek yok.
-  const WHATSAPP_TEMPLATED_STATUSES = ['RECEIVED', 'DIAGNOSIS_DONE', 'AWAITING_PARTS', 'READY', 'DELIVERED'];
+  const WHATSAPP_TEMPLATED_STATUSES = ['RECEIVED', 'DIAGNOSIS_DONE', 'AWAITING_PARTS', 'READY', 'SHIPPED', 'DELIVERED'];
   let sendWhatsapp = true;
   if (WHATSAPP_TEMPLATED_STATUSES.includes(status)) {
     sendWhatsapp = confirm(`${d.customer.fullName} adlı müşteriye "${STATUS_LABELS[status]}" bildirimi WhatsApp'tan gönderilsin mi?`);

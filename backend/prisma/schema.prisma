@@ -105,6 +105,7 @@ enum DeviceStatus {
   IN_REPAIR // tamir ediliyor
   TESTING // test ediliyor
   READY // teslime hazır
+  SHIPPED // kargoya verildi (Yurtiçi Kargo takip numarasıyla)
   DELIVERED // teslim edildi
   RETURN_REQUESTED // müşteri/bayi iade istedi — henüz fiilen iade edilmedi
   RETURNED // iade edildi
@@ -148,6 +149,7 @@ model Device {
   deliveryMethod String?
   deliveryNote   String?
   deliveryImages Json    @default("[]")
+  cargoTrackingNumber String? // durum SHIPPED'e (kargoya verildi) geçerken girilen Yurtiçi Kargo takip numarası
 
   invoicePdf       String?   // fatura, base64 data URL (data:application/pdf;base64,...)
   invoiceUploadedAt DateTime?

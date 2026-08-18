@@ -155,6 +155,7 @@ const STATUS_STEPS = [
   {key:'APPROVED', label:'Fiyat Onaylandı - Onarılıyor'},
   {key:'TESTING', label:'Test Ediliyor'},
   {key:'READY', label:'Teslime Hazır'},
+  {key:'SHIPPED', label:'Kargoya Verildi'},
   {key:'DELIVERED', label:'Teslim Edildi'}
 ];
 const STEP_ALIAS = { AWAITING_PARTS: 'APPROVED', IN_REPAIR: 'APPROVED' };
@@ -189,6 +190,13 @@ function openLightbox(src){
 }
 function closeLightbox(){
   document.getElementById('lightbox').classList.remove('show');
+}
+
+function openCargoTracking(code){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(code).catch(()=>{});
+  }
+  window.open(`https://www.yurticikargo.com/tr/online-servisler/gonderi-sorgula?code=${encodeURIComponent(code)}`, '_blank');
 }
 
 function lineGross(p){
@@ -252,6 +260,7 @@ function render(d){
       if(s.key === 'APPROVED' && d.status === 'AWAITING_PARTS') note = 'Parça bekleniyor';
       if(s.key === 'APPROVED' && d.status === 'IN_REPAIR') note = 'Tamir ediliyor';
       if(s.key === 'DELIVERED' && d.deliveryMethod) note = esc(d.deliveryMethod);
+      if(s.key === 'SHIPPED' && d.cargoTrackingNumber) note = `Takip No: ${esc(d.cargoTrackingNumber)}`;
     }
     stepsHtml += `
       <div class="step ${i > currentIndex ? 'pending' : ''}">
@@ -336,6 +345,11 @@ function render(d){
       ${stepsHtml}
     </div>
     ${approveHtml}
+    ${d.cargoTrackingNumber ? `
+      <div class="invoice-box">
+        <div class="invoice-title">📦 Yurtiçi Kargo Takip No: ${esc(d.cargoTrackingNumber)}</div>
+        <button onclick="openCargoTracking('${esc(d.cargoTrackingNumber)}')" style="background:var(--accent); color:#fff; padding:8px 14px; border-radius:8px; font-size:12.5px; font-weight:600; border:none; cursor:pointer; font-family:'Inter',sans-serif;">Kargo Sorgula</button>
+      </div>` : ''}
     ${d.invoicePdf ? `
       <div class="invoice-box">
         <div class="invoice-title">🧾 Faturanız Hazır</div>

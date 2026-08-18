@@ -31,6 +31,7 @@ const PUBLIC_DEVICE_SELECT = {
   returnImages: true,
   deliveryImages: true,
   deliveryMethod: true,
+  cargoTrackingNumber: true,
   receivedAt: true,
   createdAt: true,
   customer: { select: { fullName: true } },

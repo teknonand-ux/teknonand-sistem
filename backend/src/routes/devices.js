@@ -251,7 +251,7 @@ router.post('/bulk', async (req, res, next) => {
 
 const DEVICE_STATUS_VALUES = [
   'RECEIVED', 'DIAGNOSING', 'DIAGNOSIS_DONE', 'AWAITING_PARTS', 'APPROVED',
-  'IN_REPAIR', 'TESTING', 'READY', 'DELIVERED', 'RETURN_REQUESTED', 'RETURNED', 'CANCELLED',
+  'IN_REPAIR', 'TESTING', 'READY', 'SHIPPED', 'DELIVERED', 'RETURN_REQUESTED', 'RETURNED', 'CANCELLED',
 ];
 
 const bulkImportRowSchema = z.object({
@@ -358,7 +358,7 @@ router.patch('/:id/status', async (req, res, next) => {
     const schema = z.object({
       status: z.enum([
         'RECEIVED', 'DIAGNOSING', 'DIAGNOSIS_DONE', 'AWAITING_PARTS', 'APPROVED',
-        'IN_REPAIR', 'TESTING', 'READY', 'DELIVERED', 'RETURN_REQUESTED', 'RETURNED', 'CANCELLED',
+        'IN_REPAIR', 'TESTING', 'READY', 'SHIPPED', 'DELIVERED', 'RETURN_REQUESTED', 'RETURNED', 'CANCELLED',
       ]),
       note: z.string().optional(),
       changedAt: z.string().datetime().optional(),
@@ -376,6 +376,7 @@ router.patch('/:id/status', async (req, res, next) => {
       deliveryMethod: z.string().optional(),
       deliveryNote: z.string().optional(),
       deliveryImages: z.array(dataUrlImage).max(4).optional(),
+      cargoTrackingNumber: z.string().optional(), // durum SHIPPED'e geçerken girilen Yurtiçi Kargo takip numarası
       imeiSerial: z.string().optional(), // cihaz kapalı kabul edilmişse teslimde girilir
       sendWhatsapp: z.boolean().optional(), // panelde personelin onayı — bkz. aşağıdaki kullanım
     });

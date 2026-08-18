@@ -12,6 +12,7 @@ const TEMPLATES = {
   DIAGNOSIS_DONE: (d) => `Sayın ${d.customerName}, cihazınızın arıza tespiti tamamlandı. Tahmini tutar: ₺${d.estimatedPrice ?? '-'}. Onay için takip kodunuzla portalı ziyaret edebilirsiniz.`,
   AWAITING_PARTS: (d) => `Sayın ${d.customerName}, cihazınız için parça bekleniyor.`,
   READY: (d) => `Sayın ${d.customerName}, cihazınız (${d.model}) teslime hazır.`,
+  SHIPPED: (d) => `Sayın ${d.customerName}, cihazınız (${d.model}) Yurtiçi Kargo ile gönderildi. Takip No: ${d.cargoTrackingNumber || '-'}`,
   DELIVERED: (d) => `Sayın ${d.customerName}, cihazınızı teslim aldığınız için teşekkür ederiz.`,
 };
 
@@ -22,6 +23,7 @@ const CLOUD_API_TEMPLATES = {
   DIAGNOSIS_DONE: { envKey: 'WHATSAPP_TEMPLATE_DIAGNOSIS_DONE', params: (d) => [d.customerName, d.model, String(d.estimatedPrice ?? '-')] },
   AWAITING_PARTS: { envKey: 'WHATSAPP_TEMPLATE_AWAITING_PARTS', params: (d) => [d.customerName, d.model] },
   READY: { envKey: 'WHATSAPP_TEMPLATE_READY', params: (d) => [d.customerName, d.model] },
+  SHIPPED: { envKey: 'WHATSAPP_TEMPLATE_SHIPPED', params: (d) => [d.customerName, d.model, d.cargoTrackingNumber || '-'] },
   DELIVERED: { envKey: 'WHATSAPP_TEMPLATE_DELIVERED', params: (d) => [d.customerName] },
 };
 
@@ -204,7 +206,7 @@ async function sendStatusWhatsapp(device, customer, status) {
   const templateFn = TEMPLATES[status];
   if (!templateFn) return null;
 
-  const data = { customerName: customer.fullName, model: device.model, trackingCode: device.trackingCode, estimatedPrice: device.estimatedPrice };
+  const data = { customerName: customer.fullName, model: device.model, trackingCode: device.trackingCode, estimatedPrice: device.estimatedPrice, cargoTrackingNumber: device.cargoTrackingNumber };
   const content = templateFn(data);
 
   let status_ = 'GONDERILDI';
