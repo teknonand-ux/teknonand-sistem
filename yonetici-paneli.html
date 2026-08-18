@@ -240,6 +240,8 @@
     font-family:'Inter',sans-serif; background:#fff;
   }
   .lbl-header{display:flex; align-items:flex-start; justify-content:space-between; gap:8px; width:100%;}
+  .portrait .lbl-header{flex-direction:column; align-items:center; justify-content:center; gap:6px;}
+  .orient-btn{flex:1;}
   .lbl-row{display:flex; align-items:baseline; justify-content:center; gap:10px; flex-wrap:wrap;}
   .lbl-name{font-size:12px; font-weight:600;}
   .lbl-phone{font-size:11px; color:var(--ink-soft);}
@@ -670,6 +672,13 @@
 
       <div class="card">
         <h3>Etiket Boyutu</h3>
+        <div class="field" style="margin-bottom:12px;">
+          <label>Yön</label>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="ghost orient-btn" id="ld-orient-landscape" onclick="setLabelOrientation('landscape')">Yatay</button>
+            <button type="button" class="ghost orient-btn" id="ld-orient-portrait" onclick="setLabelOrientation('portrait')">Dikey</button>
+          </div>
+        </div>
         <div class="form-grid">
           <div class="field"><label>Genişlik (cm)</label><input id="ld-width" type="number" step="0.5" min="2" oninput="onLabelDesignChange()"></div>
           <div class="field"><label>Yükseklik (cm)</label><input id="ld-height" type="number" step="0.5" min="2" oninput="onLabelDesignChange()"></div>
@@ -969,7 +978,7 @@
 </div>
 <div class="toast" id="toast"></div>
 <div id="printLabel" style="flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; font-family:'Inter',sans-serif; box-sizing:border-box; padding:10px;">
-  <div style="display:flex; align-items:flex-start; justify-content:space-between; width:100%;">
+  <div class="lbl-header">
     <img id="pl-logo" src="logo.png" style="display:block;">
     <div id="pl-qr"></div>
   </div>
@@ -1058,6 +1067,7 @@ let labelPrintJobsProcessing = false;
 let labelPrinterName = '';
 
 const DEFAULT_LABEL_SETTINGS = {
+  orientation:'landscape',
   widthCm:6, heightCm:4,
   logo:{size:90, show:true},
   name:{size:12, show:true},
@@ -2542,7 +2552,7 @@ function renderDeviceDetail(){
     </div>
 
     <div class="card">
-      <h3>Etiket Yazdır (6cm × 4cm)</h3>
+      <h3 id="lbl-print-title">Etiket Yazdır (6cm × 4cm)</h3>
       <div class="label-editor">
         <div class="field"><label>Müşteri Adı Soyadı</label><input id="lbl-name" oninput="updateLabelPreview()"></div>
         <div class="field"><label>Telefon</label><input id="lbl-phone" oninput="updateLabelPreview()"></div>
@@ -2695,6 +2705,8 @@ function updateLabelPreview(){
   applyLabelSettings('pl');
   applyLabelLogo('lp');
   applyLabelLogo('pl');
+  applyLabelOrientation('lp');
+  applyLabelOrientation('pl');
   renderLabelQr('lp', code);
   renderLabelQr('pl', code);
   const previewBox = document.getElementById('labelPreview');
@@ -2702,6 +2714,8 @@ function updateLabelPreview(){
     previewBox.style.width = (labelSettings.widthCm*37.8)+'px';
     previewBox.style.height = (labelSettings.heightCm*37.8)+'px';
   }
+  const titleEl = document.getElementById('lbl-print-title');
+  if(titleEl) titleEl.textContent = `Etiket Yazdır (${labelSettings.widthCm}cm × ${labelSettings.heightCm}cm)`;
 }
 
 function setPrintPage(size, margin){
@@ -3001,6 +3015,7 @@ function printLabelNow(labelData){
   document.getElementById('pl-imei').textContent = labelData.imeiSerial ? 'IMEI: ' + labelData.imeiSerial : '';
   applyLabelSettings('pl');
   applyLabelLogo('pl');
+  applyLabelOrientation('pl');
   renderLabelQr('pl', labelData.trackingCode);
   const printBox = document.getElementById('printLabel');
   printBox.style.width = labelSettings.widthCm + 'cm';
@@ -4162,7 +4177,37 @@ function populateLabelDesignForm(){
     document.getElementById('ld-size-'+key).value = labelSettings[key].size;
     document.getElementById('ld-show-'+key).checked = labelSettings[key].show;
   });
+  updateOrientationButtons();
   renderDesignPreview();
+}
+
+// Etiketi yatay (mevcut) / dikey tasarım arasında geçiş — her ikisi de aynı
+// labelSettings üzerinde tutulur, "Tasarımı Kaydet" ile kalıcı olur; beğenilmezse
+// tek tıkla eski (yatay) tasarıma geri dönülebilir.
+function setLabelOrientation(o){
+  labelSettings.orientation = o;
+  labelSettings.widthCm = o === 'portrait' ? 4 : 6;
+  labelSettings.heightCm = o === 'portrait' ? 6 : 4;
+  document.getElementById('ld-width').value = labelSettings.widthCm;
+  document.getElementById('ld-height').value = labelSettings.heightCm;
+  updateOrientationButtons();
+  renderDesignPreview();
+}
+
+function updateOrientationButtons(){
+  const landscapeBtn = document.getElementById('ld-orient-landscape');
+  const portraitBtn = document.getElementById('ld-orient-portrait');
+  if(!landscapeBtn || !portraitBtn) return;
+  const isPortrait = labelSettings.orientation === 'portrait';
+  landscapeBtn.classList.toggle('active', !isPortrait);
+  portraitBtn.classList.toggle('active', isPortrait);
+}
+
+function applyLabelOrientation(prefix){
+  const containerId = { lp:'labelPreview', pl:'printLabel', ldp:'designPreview' }[prefix];
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  el.classList.toggle('portrait', labelSettings.orientation === 'portrait');
 }
 
 function onLabelDesignChange(){
@@ -4183,6 +4228,7 @@ function renderDesignPreview(){
   box.style.height = (labelSettings.heightCm*37.8)+'px';
   applyLabelSettings('ldp');
   applyLabelLogo('ldp');
+  applyLabelOrientation('ldp');
   renderLabelQr('ldp', 'TKN-2026-0342');
 }
 
