@@ -2532,14 +2532,16 @@ function renderDeviceDetail(){
 
     <div class="card">
       <h3>Cihaz Teslim Formu</h3>
-      ${d.status === 'DELIVERED' ? `
+      ${(d.status === 'READY' || d.status === 'DELIVERED') ? `
         <div class="form-preview" id="deliveryFormPreview">${buildDeliveryFormHTML(d)}</div>
-        <div style="display:flex; gap:8px; margin-top:14px;">
+        <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
           <button class="primary" style="margin-top:0;" onclick="printDeliveryForm('${d.id}')">Formu Yazdır</button>
-          <button class="ghost" onclick="sendDeliveryFormWhatsApp('${d.id}')">WhatsApp ile PDF Gönder</button>
+          ${d.status === 'DELIVERED' ? `<button class="ghost" onclick="sendDeliveryFormWhatsApp('${d.id}')">WhatsApp ile PDF Gönder</button>` : ''}
         </div>
-        <p class="login-hint" style="margin-top:8px; margin-bottom:0;">Butona bastığınızda bu form PDF olarak oluşturulup müşteriye doğrudan WhatsApp belgesi olarak gönderilir (onaylı şablon üzerinden) — otomatik gönderim yapılmaz, yalnızca bu butona bastığınızda çalışır.</p>
-      ` : `<p class="empty">Cihaz "Teslim Edildi" durumuna alındığında teslim formu burada otomatik oluşur.</p>`}
+        ${d.status === 'READY'
+          ? `<p class="login-hint" style="margin-top:8px; margin-bottom:0;">Cihaz henüz teslim edilmedi — bu form, müşteri teslim alırken imzalatmak üzere şimdiden yazdırılabilir. "WhatsApp ile PDF Gönder" cihaz "Teslim Edildi" durumuna alındığında burada görünür.</p>`
+          : `<p class="login-hint" style="margin-top:8px; margin-bottom:0;">Butona bastığınızda bu form PDF olarak oluşturulup müşteriye doğrudan WhatsApp belgesi olarak gönderilir (onaylı şablon üzerinden) — otomatik gönderim yapılmaz, yalnızca bu butona bastığınızda çalışır.</p>`}
+      ` : `<p class="empty">Cihaz "Teslime Hazır" veya "Teslim Edildi" durumuna alındığında teslim formu burada otomatik oluşur.</p>`}
     </div>
 
     <div class="card">
