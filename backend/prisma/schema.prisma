@@ -37,6 +37,7 @@ model Employee {
   repairs         Repair[]
   whatsappChatMessages WhatsappChatMessage[]
   instagramChatMessages InstagramChatMessage[]
+  labelPrintJobs  LabelPrintJob[]
 
   @@map("employees")
 }
@@ -487,4 +488,32 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 
   @@map("app_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Uzaktan etiket yazdırma kuyruğu — personel mobil/kendi bilgisayarından
+// "Etiketi Yazdır"a basınca istek burada kuyruğa girer; "ana yazıcı" olarak
+// işaretlenmiş bilgisayardaki panel bu kuyruğu yoklayıp otomatik yazdırır.
+// ---------------------------------------------------------------------------
+
+enum LabelPrintJobStatus {
+  PENDING
+  PRINTED
+}
+
+model LabelPrintJob {
+  id                    String              @id @default(uuid())
+  trackingCode          String
+  customerName          String
+  customerPhone         String?
+  issueDescription      String?
+  devicePassword        String?
+  imeiSerial            String?
+  status                LabelPrintJobStatus @default(PENDING)
+  requestedByEmployeeId String?
+  requestedByEmployee   Employee?           @relation(fields: [requestedByEmployeeId], references: [id])
+  createdAt             DateTime            @default(now())
+  printedAt             DateTime?
+
+  @@map("label_print_jobs")
 }

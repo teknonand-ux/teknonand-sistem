@@ -18,6 +18,7 @@ const settingsRoutes = require('./routes/settings');
 const reportRoutes = require('./routes/reports');
 const whatsappInboxRoutes = require('./routes/whatsappInbox');
 const instagramInboxRoutes = require('./routes/instagramInbox');
+const labelPrintJobRoutes = require('./routes/labelPrintJobs');
 const { startExchangeRateScheduler } = require('./services/exchangeRateScheduler');
 
 const app = express();
@@ -58,6 +59,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/whatsapp', whatsappInboxRoutes);
 app.use('/api/instagram', instagramInboxRoutes);
+app.use('/api/label-print-jobs', labelPrintJobRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Uç nokta bulunamadı' }));
 app.use(errorHandler);

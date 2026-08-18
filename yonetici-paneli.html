@@ -644,6 +644,15 @@
       <p class="subtitle">Etiket boyutunu, yazı tiplerini ve hangi bilgilerin görüneceğini buradan ayarlayın — "Etiketi Yazdır" her zaman bu tasarımı kullanır</p>
 
       <div class="card">
+        <h3>Uzaktan Etiket Yazdırma</h3>
+        <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; cursor:pointer;">
+          <input type="checkbox" id="printer-pc-toggle" onchange="onPrinterPcToggle()" style="width:auto;">
+          Bu bilgisayar etiket yazıcısına bağlı
+        </label>
+        <p class="login-hint" style="margin-top:8px;">İşaretlerseniz, personelin mobil veya kendi bilgisayarından "Etiketi Yazdır"a basması bu bilgisayarda otomatik olarak yazdırma penceresi açar — panel bu tarayıcıda açık kaldığı sürece istekleri birkaç saniyede bir kontrol eder. Bu ayar sadece bu bilgisayarda/tarayıcıda geçerlidir.</p>
+      </div>
+
+      <div class="card">
         <h3>Etiket Boyutu</h3>
         <div class="form-grid">
           <div class="field"><label>Genişlik (cm)</label><input id="ld-width" type="number" step="0.5" min="2" oninput="onLabelDesignChange()"></div>
@@ -1021,6 +1030,10 @@ let igPollTimer = null;
 let igLoaded = false;
 let inboxChannel = 'whatsapp';
 
+let isPrinterPC = localStorage.getItem('teknonand_is_printer_pc') === '1';
+let labelPrintPollTimer = null;
+let labelPrintJobsProcessing = false;
+
 const DEFAULT_LABEL_SETTINGS = {
   widthCm:6, heightCm:4,
   shop:{size:16, show:true},
@@ -1081,6 +1094,7 @@ async function loadAll(){
   renderAll();
   setDefaultReceivedTime();
   setDefaultApptTime();
+  updatePrinterPolling();
 }
 
 function toast(msg){
@@ -2840,12 +2854,30 @@ function sendNetPriceWhatsApp(id){
 function printDeviceLabel(id){
   const d = devices.find(x=>x.id===id);
   if(!d) return;
-  document.getElementById('pl-name').textContent = d.customer.fullName || '';
-  document.getElementById('pl-phone').textContent = d.customer.phone ? '· ' + d.customer.phone : '';
-  document.getElementById('pl-issue').textContent = d.issueDescription ? 'Arıza: ' + d.issueDescription : '';
-  document.getElementById('pl-pass').textContent = d.devicePassword ? 'Şifre: ' + d.devicePassword : '';
-  document.getElementById('pl-imei').textContent = d.imeiSerial ? 'IMEI: ' + d.imeiSerial : '';
-  document.getElementById('pl-code').textContent = d.trackingCode;
+  handleLabelPrint({
+    trackingCode: d.trackingCode,
+    customerName: d.customer.fullName || '',
+    customerPhone: d.customer.phone || '',
+    issueDescription: d.issueDescription || '',
+    devicePassword: d.devicePassword || '',
+    imeiSerial: d.imeiSerial || '',
+  });
+}
+
+// Bu bilgisayar "ana yazıcı" olarak işaretliyse doğrudan yazdırır; değilse
+// isteği kuyruğa (ana yazıcı bilgisayarın yokladığı) gönderir.
+function handleLabelPrint(labelData){
+  if(isPrinterPC) printLabelNow(labelData);
+  else requestRemoteLabelPrint(labelData);
+}
+
+function printLabelNow(labelData){
+  document.getElementById('pl-name').textContent = labelData.customerName || '';
+  document.getElementById('pl-phone').textContent = labelData.customerPhone ? '· ' + labelData.customerPhone : '';
+  document.getElementById('pl-issue').textContent = labelData.issueDescription ? 'Arıza: ' + labelData.issueDescription : '';
+  document.getElementById('pl-pass').textContent = labelData.devicePassword ? 'Şifre: ' + labelData.devicePassword : '';
+  document.getElementById('pl-imei').textContent = labelData.imeiSerial ? 'IMEI: ' + labelData.imeiSerial : '';
+  document.getElementById('pl-code').textContent = labelData.trackingCode || '';
   applyLabelSettings('pl');
   const printBox = document.getElementById('printLabel');
   printBox.style.width = labelSettings.widthCm + 'cm';
@@ -2856,15 +2888,62 @@ function printDeviceLabel(id){
   document.body.classList.remove('printing-label');
 }
 
+async function requestRemoteLabelPrint(labelData){
+  try{
+    await apiFetch('/label-print-jobs', { method: 'POST', body: JSON.stringify(labelData) });
+    toast(`Etiket yazdırma isteği ana bilgisayara gönderildi — ${labelData.trackingCode}`);
+  }catch(e){ toast(e.message || 'İstek gönderilemedi'); }
+}
+
+function onPrinterPcToggle(){
+  isPrinterPC = document.getElementById('printer-pc-toggle').checked;
+  localStorage.setItem('teknonand_is_printer_pc', isPrinterPC ? '1' : '0');
+  updatePrinterPolling();
+  toast(isPrinterPC ? 'Bu bilgisayar artık etiket yazdırma isteklerini otomatik yakalayacak' : 'Otomatik etiket yazdırma kapatıldı');
+}
+
+function updatePrinterPolling(){
+  if(labelPrintPollTimer){ clearInterval(labelPrintPollTimer); labelPrintPollTimer = null; }
+  if(isPrinterPC){
+    checkPendingLabelPrintJobs();
+    labelPrintPollTimer = setInterval(checkPendingLabelPrintJobs, 6000);
+  }
+}
+
+async function checkPendingLabelPrintJobs(){
+  if(labelPrintJobsProcessing) return;
+  labelPrintJobsProcessing = true;
+  try{
+    const jobs = await apiFetch('/label-print-jobs/pending');
+    for(const job of jobs){
+      printLabelNow({
+        trackingCode: job.trackingCode,
+        customerName: job.customerName,
+        customerPhone: job.customerPhone,
+        issueDescription: job.issueDescription,
+        devicePassword: job.devicePassword,
+        imeiSerial: job.imeiSerial,
+      });
+      try{
+        await apiFetch(`/label-print-jobs/${job.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'PRINTED' }) });
+      }catch(e){}
+    }
+  }catch(e){
+    // sessizce geç — bir sonraki yoklamada tekrar denenir
+  }
+  labelPrintJobsProcessing = false;
+}
+
 function printLabel(){
   updateLabelPreview();
-  const printBox = document.getElementById('printLabel');
-  printBox.style.width = labelSettings.widthCm + 'cm';
-  printBox.style.height = labelSettings.heightCm + 'cm';
-  setPrintPage(`${labelSettings.widthCm}cm ${labelSettings.heightCm}cm`, '0');
-  document.body.classList.add('printing-label');
-  window.print();
-  document.body.classList.remove('printing-label');
+  handleLabelPrint({
+    trackingCode: document.getElementById('lbl-code').value,
+    customerName: document.getElementById('lbl-name').value,
+    customerPhone: document.getElementById('lbl-phone').value,
+    issueDescription: document.getElementById('lbl-issue').value,
+    devicePassword: document.getElementById('lbl-pass').value,
+    imeiSerial: document.getElementById('lbl-imei').value,
+  });
 }
 
 function onStatusFieldChange(){
@@ -3846,6 +3925,7 @@ async function loadLabelDesign(){
 function populateLabelDesignForm(){
   const widthEl = document.getElementById('ld-width');
   if(!widthEl) return;
+  document.getElementById('printer-pc-toggle').checked = isPrinterPC;
   document.getElementById('ld-width').value = labelSettings.widthCm;
   document.getElementById('ld-height').value = labelSettings.heightCm;
   ['shop','code','name','phone','issue','pass','imei'].forEach(key=>{
