@@ -593,6 +593,7 @@
       <div style="display:flex; gap:8px; margin-bottom:14px;">
         <button class="ghost" id="inbox-tab-whatsapp" onclick="switchInboxChannel('whatsapp')">WhatsApp</button>
         <button class="ghost" id="inbox-tab-instagram" onclick="switchInboxChannel('instagram')">Instagram</button>
+        <button class="ghost" id="inbox-tab-whatsappweb" onclick="switchInboxChannel('whatsappweb')">WhatsApp Web (Diğer Hat)</button>
       </div>
       <div class="wa-inbox" id="wa-inbox-panel">
         <div class="wa-conv-list" id="waConvList"></div>
@@ -605,6 +606,16 @@
         <div class="wa-thread" id="igThread">
           <div class="wa-thread-empty">Bir sohbet seçin</div>
         </div>
+      </div>
+      <div class="card" id="wa-web-panel" style="display:none; text-align:center; padding:40px 24px;">
+        <h3 style="margin-top:0;">Başka Numaradan WhatsApp Web</h3>
+        <p class="subtitle" style="max-width:480px; margin-left:auto; margin-right:auto;">
+          WhatsApp, güvenlik nedeniyle web.whatsapp.com'un başka sitelerin içine (iframe) gömülmesine izin vermiyor —
+          bu yüzden aşağıdaki butonla ayrı bir pencerede açılır. Açılan pencerede telefonunuzdaki
+          <b>WhatsApp &gt; Bağlı Cihazlar</b> menüsünden QR kod okutarak farklı bir hattı bu bilgisayara bağlayabilirsiniz.
+        </p>
+        <button class="primary" onclick="openWhatsAppWeb()" style="margin-top:8px;">WhatsApp Web'i Aç</button>
+        <p class="login-hint" style="margin-top:14px;">Not: Bir kez QR ile bağladıktan sonra tarayıcı oturumu açık kaldığı sürece tekrar QR okutmanız gerekmez.</p>
       </div>
     </div>
 
@@ -1211,13 +1222,19 @@ function switchInboxChannel(channel){
   inboxChannel = channel;
   document.getElementById('inbox-tab-whatsapp').classList.toggle('active', channel==='whatsapp');
   document.getElementById('inbox-tab-instagram').classList.toggle('active', channel==='instagram');
+  document.getElementById('inbox-tab-whatsappweb').classList.toggle('active', channel==='whatsappweb');
   document.getElementById('wa-inbox-panel').style.display = channel==='whatsapp' ? 'grid' : 'none';
   document.getElementById('ig-inbox-panel').style.display = channel==='instagram' ? 'grid' : 'none';
+  document.getElementById('wa-web-panel').style.display = channel==='whatsappweb' ? 'block' : 'none';
   if(channel==='whatsapp'){
     loadWhatsappConversations().catch(()=>{});
-  } else {
+  } else if(channel==='instagram'){
     loadInstagramConversations().catch(()=>{});
   }
+}
+
+function openWhatsAppWeb(){
+  window.open('https://web.whatsapp.com/', 'teknonandWhatsAppWeb', 'width=1200,height=800,noopener,noreferrer');
 }
 
 async function loadInstagramConversations(){
