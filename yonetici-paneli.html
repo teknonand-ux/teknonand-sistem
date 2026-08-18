@@ -3670,7 +3670,7 @@ function renderSupplierDetail(){
     <div class="card">
       <h3>Borç / Ödeme Hareketi Ekle</h3>
       ${txs.length ? `<div class="dealer-tx mini-list">${txs.map(t=>`
-        <div class="dealer-tx-line"><span style="color:${t.type==='ALIM'?'var(--red)':'var(--green)'}; font-weight:600;">${t.type==='ALIM'?'Borç (Alım)':'Ödeme'}</span><span>${t.currency==='USD'?'$':'₺'}${(parseFloat(t.amount)||0).toFixed(2)} · ${new Date(t.createdAt).toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})}${t.description?` · ${esc(t.description)}`:''}</span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
+        <div class="dealer-tx-line"><span style="color:${t.type==='ALIM'?'var(--red)':'var(--green)'}; font-weight:600;">${t.type==='ALIM'?'Borç (Alım)':'Ödeme'}</span><span>${t.currency==='USD'?'$':'₺'}${(parseFloat(t.amount)||0).toFixed(2)} · ${new Date(t.createdAt).toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})}${t.description?` · ${esc(t.description)}`:''} <button class="ghost" style="padding:2px 7px; margin-left:6px;" onclick="removeSupplierTx('${s.id}','${t.id}')">Sil</button></span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
       <div class="dealer-form" style="margin-top:12px;">
         <div class="field"><label>Tür</label>
           <select id="stx-type-${s.id}"><option value="ODEME">Ödeme</option><option value="ALIM">Borç (Alım)</option></select>
@@ -3708,6 +3708,16 @@ async function addSupplierTx(id){
   const idx = suppliers.findIndex(x=>x.id===id);
   if(idx>=0) suppliers[idx] = supplier;
   toast(type==='ALIM' ? 'Borç eklendi' : 'Ödeme kaydedildi');
+  renderSupplierDetail();
+  renderAll();
+}
+
+async function removeSupplierTx(supplierId, txId){
+  if(!confirm('Bu hareketi silmek istediğinize emin misiniz? Bakiye buna göre geri alınacak.')) return;
+  const supplier = await apiFetch(`/suppliers/${supplierId}/transactions/${txId}`, { method: 'DELETE' });
+  const idx = suppliers.findIndex(x=>x.id===supplierId);
+  if(idx>=0) suppliers[idx] = supplier;
+  toast('Hareket silindi');
   renderSupplierDetail();
   renderAll();
 }

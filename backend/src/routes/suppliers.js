@@ -80,6 +80,27 @@ router.post('/:id/transactions', async (req, res, next) => {
   }
 });
 
+// DELETE /api/suppliers/:id/transactions/:txId — hareketi sil, bakiyeyi geri al
+router.delete('/:id/transactions/:txId', async (req, res, next) => {
+  try {
+    const tx = await prisma.supplierTransaction.findUnique({ where: { id: req.params.txId } });
+    if (!tx || tx.supplierId !== req.params.id) return res.status(404).json({ error: 'Hareket bulunamadı' });
+    const delta = tx.type === 'ALIM' ? -Number(tx.amount) : Number(tx.amount);
+    const balanceField = tx.currency === 'USD' ? 'currentBalanceUsd' : 'currentBalance';
+    await prisma.$transaction([
+      prisma.supplier.update({ where: { id: req.params.id }, data: { [balanceField]: { increment: delta } } }),
+      prisma.supplierTransaction.delete({ where: { id: req.params.txId } }),
+    ]);
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: req.params.id },
+      include: { transactions: { orderBy: { createdAt: 'desc' } } },
+    });
+    res.json(supplier);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     await prisma.supplier.delete({ where: { id: req.params.id } });
