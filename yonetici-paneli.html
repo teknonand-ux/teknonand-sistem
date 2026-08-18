@@ -4596,7 +4596,7 @@ function renderDeviceTable(){
     <tr class="row-click" onclick="openDevice('${d.id}')">
       <td onclick="event.stopPropagation()"><input type="checkbox" class="device-row-check" data-id="${d.id}" ${selectedDeviceIds.has(d.id)?'checked':''} onchange="toggleDeviceSelect('${d.id}', this.checked)"></td>
       <td class="code">${esc(d.trackingCode)}</td>
-      <td>${new Date(d.createdAt).toLocaleDateString('tr-TR')}<br><span style="color:var(--ink-soft); font-size:11px;">${new Date(d.createdAt).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}</span></td>
+      <td>${regDatePill(d.createdAt)}<br><span style="color:var(--ink-soft); font-size:11px;">${new Date(d.createdAt).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}</span></td>
       <td>${esc(d.model)}${d.devicePassword?`<br><span style="color:var(--ink-soft); font-size:11px;">Şifre: ${esc(d.devicePassword)}</span>`:''}</td>
       <td>${esc(d.issueDescription)||'—'}</td>
       <td>${esc(d.customer.fullName)}<br><span style="color:var(--ink-soft); font-size:11.5px;">${esc(d.customer.phone)||''}</span>${d.backupPhone?`<br><span style="color:var(--ink-soft); font-size:11px;">Yedek: ${esc(d.backupPhone)}</span>`:''}</td>
@@ -4701,6 +4701,21 @@ async function removeItem(type, id){
 function pill(status){
   const [c,bg] = STATUS_COLORS[status];
   return `<span class="pill" style="color:${c}; background:${bg};">${STATUS_LABELS[status]}</span>`;
+}
+
+// Cihazlar listesindeki "Kayıt Tarihi" sütununu, kaç gün önce alındığına göre
+// renklendirir: bugün turuncu, dün mavi, daha eskisi yeşil — günleri ayırt etmek için.
+function regDatePill(dateStr){
+  const d = new Date(dateStr);
+  const dOnly = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const now = new Date();
+  const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((nowOnly - dOnly) / 86400000);
+  let c, bg;
+  if(diffDays <= 0){ c='#E8A33D'; bg='#FBF0DD'; }
+  else if(diffDays === 1){ c='#2F5EFF'; bg='#E9EEFF'; }
+  else { c='#2E9E6D'; bg='#E4F3EC'; }
+  return `<span class="pill" style="color:${c}; background:${bg};">${d.toLocaleDateString('tr-TR')}</span>`;
 }
 
 function onGlobalSearchInput(){
