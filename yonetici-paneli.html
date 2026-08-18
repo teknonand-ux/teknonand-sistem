@@ -2264,6 +2264,13 @@ function renderDeviceDetail(){
           <div class="img-thumb-row" id="st-return-images-preview"></div>
         </div>
       </div>
+      <div id="st-ready-fields" style="display:none;">
+        ${!d.imeiSerial ? `
+        <div class="field">
+          <label>IMEI / Seri No (Teslime Hazır için zorunlu)</label>
+          <input id="st-ready-imei" placeholder="Cihazın IMEI/Seri numarasını girin">
+        </div>` : ''}
+      </div>
       <div id="st-delivery-fields" style="display:none;">
         <div class="field"><label>Teslim Şekli</label>
           <select id="st-delivery-method"><option value="Elden Teslim">Elden Teslim</option><option value="Kargo ile Teslim">Kargo ile Teslim</option></select>
@@ -2816,6 +2823,7 @@ function onStatusFieldChange(){
   document.getElementById('st-diagnosis-fields').style.display = status === 'DIAGNOSIS_DONE' ? 'block' : 'none';
   document.getElementById('st-return-fields').style.display = (status === 'RETURNED' || status === 'RETURN_REQUESTED') ? 'block' : 'none';
   document.getElementById('st-delivery-fields').style.display = status === 'DELIVERED' ? 'block' : 'none';
+  document.getElementById('st-ready-fields').style.display = status === 'READY' ? 'block' : 'none';
 }
 
 let tempImages = {diagnosis:[], return:[], delivery:[], intake:[]};
@@ -2918,6 +2926,15 @@ async function addStatusEntry(){
     payload.returnReason = returnReason;
     payload.returnImages = tempImages.return.slice(0,4);
     payload.note = note || `İade sebebi: ${returnReason}`;
+  }
+  if(status === 'READY' && !d.imeiSerial){
+    const imeiInput = document.getElementById('st-ready-imei');
+    const enteredImei = imeiInput ? imeiInput.value.trim() : '';
+    if(!enteredImei){
+      toast('Teslime Hazır yapmadan önce IMEI / Seri No girilmelidir');
+      return;
+    }
+    payload.imeiSerial = enteredImei;
   }
   if(status === 'DELIVERED'){
     if(!d.imeiSerial){
