@@ -379,7 +379,18 @@ function renderDevices(){
         <div class="d-line"><span>IMEI / Seri No</span>${esc(d.imeiSerial) || '—'}</div>
         <div class="d-line"><span>Arıza</span>${esc(d.issueDescription) || '—'}</div>
         <div class="d-line"><span>Kayıt Tarihi</span>${new Date(d.createdAt).toLocaleString('tr-TR')}</div>
-        ${total>0 ? `<div class="d-line"><span>Tutar</span>₺${total.toFixed(2)}</div>` : ''}
+        ${parts.length ? `
+        <div class="d-line" style="margin-top:8px;">
+          <span>Yapılan İşlemler</span>
+          <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
+            ${parts.map(p=>{
+              const price = parseFloat(p.price)||0;
+              const gross = p.vatMode==='HARIC' ? price*1.2 : price;
+              return `<div style="display:flex; justify-content:space-between; gap:8px; font-size:13px; color:var(--ink);"><span>${esc(p.name)}</span><span style="white-space:nowrap;">₺${gross.toFixed(2)}</span></div>`;
+            }).join('')}
+          </div>
+        </div>
+        <div class="d-line" style="margin-top:8px; display:flex; justify-content:space-between; align-items:baseline;"><span>Genel Toplam</span><b style="font-size:14px; color:var(--ink);">₺${total.toFixed(2)}</b></div>` : ''}
         ${(!d.diagnosisItems || !d.diagnosisItems.length) && d.diagnosisText ? `<div class="d-line"><span>Arıza Tespiti</span>${esc(d.diagnosisText)}</div>` : ''}
         ${(!d.diagnosisItems || !d.diagnosisItems.length) && d.estimatedPrice ? `<div class="d-line"><span>Tahmini Fiyat</span>₺${d.estimatedPrice}</div>` : ''}
         ${imgGallery(d.diagnosisImages, 'Arıza Tespiti Görselleri')}

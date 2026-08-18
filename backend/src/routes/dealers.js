@@ -114,7 +114,12 @@ router.get('/me/devices', requireAuth, requireDealer, async (req, res, next) => 
     const devices = await prisma.device.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: { parts: true, diagnosisItems: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        // Bayiye maliyet/toptancı gibi iç bilgiler değil, yalnızca işlem adı ve
+        // (KDV'ye göre hesaplanacak) satış fiyatı gösterilir.
+        parts: { select: { id: true, name: true, price: true, vatMode: true, warrantyMonths: true } },
+        diagnosisItems: { orderBy: { createdAt: 'asc' } },
+      },
     });
     res.json(devices);
   } catch (e) {
