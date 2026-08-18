@@ -56,10 +56,15 @@ function lineGross(part) {
   return part.vatMode === 'HARIC' ? price * 1.2 : price;
 }
 
+// Not: cihaz sayisi (count) ile en yuksek kullanilan takip numarasi ayni sey
+// degil -- eski sistemden aktarilan kayitlarda numaralar satir sayisiyla
+// orantili degil (aralarda bosluklar var). Bu yuzden count() yerine o ana
+// kadar kullanilmis en yuksek numarayi bulup bir arttiriyoruz.
 async function nextTrackingCode() {
   const year = new Date().getFullYear();
-  const count = await prisma.device.count();
-  return `TKN-${year}-${String(300 + count).padStart(4, '0')}`;
+  const result = await prisma.$queryRaw`SELECT MAX(SUBSTRING("trackingCode" FROM '[0-9]+$')::int) AS maxnum FROM devices`;
+  const maxNum = Number(result[0]?.maxnum) || 0;
+  return `TKN-${year}-${String(maxNum + 1).padStart(4, '0')}`;
 }
 
 const deviceCreateSchema = z.object({
