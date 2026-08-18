@@ -3599,11 +3599,35 @@ function renderDealerDetail(){
 }
 
 let currentSupplierId = null;
+let supplierEditOpen = false;
 
 function openSupplier(id){
   currentSupplierId = id;
+  supplierEditOpen = false;
   switchView('supplier-detail');
   renderSupplierDetail();
+}
+
+function toggleSupplierEdit(){
+  supplierEditOpen = !supplierEditOpen;
+  renderSupplierDetail();
+}
+
+async function saveSupplierEdit(id){
+  const name = document.getElementById('sup-edit-name').value.trim();
+  const phone = document.getElementById('sup-edit-phone').value.trim();
+  const contactPerson = document.getElementById('sup-edit-contact').value.trim();
+  if(!name){ toast('Toptancı adı gerekli'); return; }
+  const updated = await apiFetch(`/suppliers/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name, phone: phone || undefined, contactPerson: contactPerson || undefined })
+  });
+  const idx = suppliers.findIndex(x=>x.id===id);
+  if(idx>=0) suppliers[idx] = { ...suppliers[idx], ...updated };
+  supplierEditOpen = false;
+  toast('Toptancı bilgileri güncellendi');
+  renderSupplierDetail();
+  renderAll();
 }
 
 function renderSupplierDetail(){
@@ -3619,8 +3643,22 @@ function renderSupplierDetail(){
     <div class="detail-head">
       <div>
         <div class="detail-title">${esc(s.name)}</div>
-        <div class="detail-code">${esc(s.phone) || '—'}</div>
+        <div class="detail-code">${esc(s.phone) || '—'}${s.contactPerson ? ` · ${esc(s.contactPerson)}` : ''}</div>
       </div>
+    </div>
+
+    <div class="card">
+      ${supplierEditOpen ? `
+      <div class="form-grid">
+        <div class="field"><label>Toptancı Adı</label><input id="sup-edit-name" value="${esc(s.name)}"></div>
+        <div class="field"><label>Telefon</label><input id="sup-edit-phone" value="${esc(s.phone)}"></div>
+        <div class="field"><label>İlgili Kişi (opsiyonel)</label><input id="sup-edit-contact" value="${esc(s.contactPerson)}"></div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="primary" style="margin-top:0;" onclick="saveSupplierEdit('${s.id}')">Kaydet</button>
+        <button class="ghost" onclick="toggleSupplierEdit()">Vazgeç</button>
+      </div>
+      ` : `<button class="ghost" onclick="toggleSupplierEdit()">Toptancı Bilgilerini Düzenle</button>`}
     </div>
 
     <div class="stat-grid">

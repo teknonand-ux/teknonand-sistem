@@ -41,6 +41,19 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+// PATCH /api/suppliers/:id — toptancı bilgilerini düzenle (ad, telefon, ilgili kişi)
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const data = z
+      .object({ name: z.string().min(1).optional(), phone: z.string().optional(), contactPerson: z.string().optional() })
+      .parse(req.body);
+    const supplier = await prisma.supplier.update({ where: { id: req.params.id }, data });
+    res.json(supplier);
+  } catch (e) {
+    next(e);
+  }
+});
+
 // POST /api/suppliers/:id/transactions — borç ekle (ALIM) veya ödeme (ODEME), TL veya USD
 router.post('/:id/transactions', async (req, res, next) => {
   try {
