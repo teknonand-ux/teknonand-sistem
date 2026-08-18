@@ -239,9 +239,7 @@
     gap:6px; text-align:center;
     font-family:'Inter',sans-serif; background:#fff;
   }
-  .lbl-header{display:flex; align-items:baseline; justify-content:center; gap:8px; flex-wrap:wrap;}
-  .lbl-shop{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;}
-  .lbl-code{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px; color:var(--ink-soft);}
+  .lbl-header{display:flex; align-items:flex-start; justify-content:space-between; gap:8px; width:100%;}
   .lbl-row{display:flex; align-items:baseline; justify-content:center; gap:10px; flex-wrap:wrap;}
   .lbl-name{font-size:12px; font-weight:600;}
   .lbl-phone{font-size:11px; color:var(--ink-soft);}
@@ -683,8 +681,7 @@
         <table>
           <thead><tr><th>Alan</th><th>Yazı Boyutu (px)</th><th>Etikette Göster</th></tr></thead>
           <tbody>
-            <tr><td>"Teknonand" Başlığı</td><td><input id="ld-size-shop" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-shop" onchange="onLabelDesignChange()"></td></tr>
-            <tr><td>Takip Kodu</td><td><input id="ld-size-code" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-code" onchange="onLabelDesignChange()"></td></tr>
+            <tr><td>Logo (boyut px)</td><td><input id="ld-size-logo" type="number" min="20" max="120" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-logo" onchange="onLabelDesignChange()"></td></tr>
             <tr><td>Müşteri Adı</td><td><input id="ld-size-name" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-name" onchange="onLabelDesignChange()"></td></tr>
             <tr><td>Telefon</td><td><input id="ld-size-phone" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-phone" onchange="onLabelDesignChange()"></td></tr>
             <tr><td>Arıza</td><td><input id="ld-size-issue" type="number" min="6" max="30" oninput="onLabelDesignChange()"></td><td><input type="checkbox" id="ld-show-issue" onchange="onLabelDesignChange()"></td></tr>
@@ -699,8 +696,8 @@
         <h3>Önizleme</h3>
         <div class="label-preview" id="designPreview" style="margin-left:auto; margin-right:auto;">
           <div class="lbl-header">
-            <span class="lbl-shop" id="ldp-shop">Teknonand</span>
-            <span class="lbl-code" id="ldp-code">TKN-2026-0342</span>
+            <img id="ldp-logo" src="logo-icon.png" style="display:block;">
+            <div id="ldp-qr"></div>
           </div>
           <div class="lbl-row">
             <span class="lbl-name" id="ldp-name">Ahmet Yılmaz</span>
@@ -711,7 +708,6 @@
             <span class="lbl-pass" id="ldp-pass">Şifre: 2468</span>
           </div>
           <div class="lbl-imei" id="ldp-imei">IMEI: 351234567891234</div>
-          <div id="ldp-qr"></div>
         </div>
         <div style="display:flex; gap:8px; justify-content:center; margin-top:6px;">
           <button class="primary" onclick="saveLabelDesign()">Tasarımı Kaydet</button>
@@ -973,9 +969,9 @@
 </div>
 <div class="toast" id="toast"></div>
 <div id="printLabel" style="flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; font-family:'Inter',sans-serif; box-sizing:border-box; padding:10px;">
-  <div style="display:flex; align-items:baseline; justify-content:center; gap:8px; flex-wrap:wrap;">
-    <span id="pl-shop" style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;">Teknonand</span>
-    <span id="pl-code" style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px; color:#5A5C66;"></span>
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; width:100%;">
+    <img id="pl-logo" src="logo-icon.png" style="display:block;">
+    <div id="pl-qr"></div>
   </div>
   <div style="display:flex; align-items:baseline; justify-content:center; gap:10px; flex-wrap:wrap;">
     <span id="pl-name" style="font-size:12px; font-weight:600;"></span>
@@ -986,7 +982,6 @@
     <span id="pl-pass" style="font-size:10.5px; color:#5A5C66;"></span>
   </div>
   <div id="pl-imei" style="font-size:10px; color:#5A5C66; font-family:'JetBrains Mono',monospace;"></div>
-  <div id="pl-qr"></div>
 </div>
 <div id="printForm" class="form-preview"></div>
 <div class="lightbox" id="lightbox" onclick="closeLightbox()"><img src=""></div>
@@ -1064,8 +1059,7 @@ let labelPrinterName = '';
 
 const DEFAULT_LABEL_SETTINGS = {
   widthCm:6, heightCm:4,
-  shop:{size:16, show:true},
-  code:{size:12, show:true},
+  logo:{size:40, show:true},
   name:{size:12, show:true},
   phone:{size:11, show:true},
   issue:{size:10.5, show:true},
@@ -2559,8 +2553,8 @@ function renderDeviceDetail(){
       </div>
       <div class="label-preview" id="labelPreview">
         <div class="lbl-header">
-          <span class="lbl-shop" id="lp-shop">Teknonand</span>
-          <span class="lbl-code" id="lp-code"></span>
+          <img id="lp-logo" src="logo-icon.png" style="display:block;">
+          <div id="lp-qr"></div>
         </div>
         <div class="lbl-row">
           <span class="lbl-name" id="lp-name"></span>
@@ -2571,7 +2565,6 @@ function renderDeviceDetail(){
           <span class="lbl-pass" id="lp-pass"></span>
         </div>
         <div class="lbl-imei" id="lp-imei"></div>
-        <div id="lp-qr"></div>
       </div>
       <button class="primary" onclick="printLabel()">Etiketi Yazdır</button>
     </div>
@@ -2691,17 +2684,17 @@ function updateLabelPreview(){
   document.getElementById('lp-issue').textContent = issue ? 'Arıza: ' + issue : '';
   document.getElementById('lp-pass').textContent = pass ? 'Şifre: ' + pass : '';
   document.getElementById('lp-imei').textContent = imei ? 'IMEI: ' + imei : '';
-  document.getElementById('lp-code').textContent = code;
 
   document.getElementById('pl-name').textContent = name;
   document.getElementById('pl-phone').textContent = phone ? '· ' + phone : '';
   document.getElementById('pl-issue').textContent = issue ? 'Arıza: ' + issue : '';
   document.getElementById('pl-pass').textContent = pass ? 'Şifre: ' + pass : '';
   document.getElementById('pl-imei').textContent = imei ? 'IMEI: ' + imei : '';
-  document.getElementById('pl-code').textContent = code;
 
   applyLabelSettings('lp');
   applyLabelSettings('pl');
+  applyLabelLogo('lp');
+  applyLabelLogo('pl');
   renderLabelQr('lp', code);
   renderLabelQr('pl', code);
   const previewBox = document.getElementById('labelPreview');
@@ -3006,8 +2999,8 @@ function printLabelNow(labelData){
   document.getElementById('pl-issue').textContent = labelData.issueDescription ? 'Arıza: ' + labelData.issueDescription : '';
   document.getElementById('pl-pass').textContent = labelData.devicePassword ? 'Şifre: ' + labelData.devicePassword : '';
   document.getElementById('pl-imei').textContent = labelData.imeiSerial ? 'IMEI: ' + labelData.imeiSerial : '';
-  document.getElementById('pl-code').textContent = labelData.trackingCode || '';
   applyLabelSettings('pl');
+  applyLabelLogo('pl');
   renderLabelQr('pl', labelData.trackingCode);
   const printBox = document.getElementById('printLabel');
   printBox.style.width = labelSettings.widthCm + 'cm';
@@ -4165,7 +4158,7 @@ function populateLabelDesignForm(){
   document.getElementById('label-printer-name').value = labelPrinterName;
   document.getElementById('ld-width').value = labelSettings.widthCm;
   document.getElementById('ld-height').value = labelSettings.heightCm;
-  ['shop','code','name','phone','issue','pass','imei','qr'].forEach(key=>{
+  ['logo','name','phone','issue','pass','imei','qr'].forEach(key=>{
     document.getElementById('ld-size-'+key).value = labelSettings[key].size;
     document.getElementById('ld-show-'+key).checked = labelSettings[key].show;
   });
@@ -4175,7 +4168,7 @@ function populateLabelDesignForm(){
 function onLabelDesignChange(){
   labelSettings.widthCm = parseFloat(document.getElementById('ld-width').value) || DEFAULT_LABEL_SETTINGS.widthCm;
   labelSettings.heightCm = parseFloat(document.getElementById('ld-height').value) || DEFAULT_LABEL_SETTINGS.heightCm;
-  ['shop','code','name','phone','issue','pass','imei','qr'].forEach(key=>{
+  ['logo','name','phone','issue','pass','imei','qr'].forEach(key=>{
     const size = parseFloat(document.getElementById('ld-size-'+key).value) || DEFAULT_LABEL_SETTINGS[key].size;
     const show = document.getElementById('ld-show-'+key).checked;
     labelSettings[key] = {size, show};
@@ -4189,6 +4182,7 @@ function renderDesignPreview(){
   box.style.width = (labelSettings.widthCm*37.8)+'px';
   box.style.height = (labelSettings.heightCm*37.8)+'px';
   applyLabelSettings('ldp');
+  applyLabelLogo('ldp');
   renderLabelQr('ldp', 'TKN-2026-0342');
 }
 
@@ -4205,7 +4199,7 @@ async function resetLabelDesign(){
 }
 
 function applyLabelSettings(prefix){
-  ['shop','code','name','phone','issue','pass','imei'].forEach(key=>{
+  ['name','phone','issue','pass','imei'].forEach(key=>{
     const el = document.getElementById(prefix+'-'+key);
     if(!el) return;
     const cfg = labelSettings[key] || DEFAULT_LABEL_SETTINGS[key];
@@ -4234,6 +4228,15 @@ function renderLabelQr(prefix, trackingCode){
     qr.make();
     box.innerHTML = `<img src="${qr.createDataURL(4,2)}" style="width:${cfg.size}px; height:${cfg.size}px; display:block;">`;
   }catch(e){ box.innerHTML = ''; }
+}
+
+function applyLabelLogo(prefix){
+  const img = document.getElementById(prefix+'-logo');
+  if(!img) return;
+  const cfg = labelSettings.logo || DEFAULT_LABEL_SETTINGS.logo;
+  img.style.width = cfg.size + 'px';
+  img.style.height = 'auto';
+  img.style.display = cfg.show ? 'block' : 'none';
 }
 
 async function loadCompanyDesign(){
