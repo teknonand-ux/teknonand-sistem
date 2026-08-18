@@ -362,6 +362,7 @@ router.patch('/:id/status', async (req, res, next) => {
       ]),
       note: z.string().optional(),
       changedAt: z.string().datetime().optional(),
+      diagnosingImages: z.array(dataUrlImage).max(4).optional(),
       diagnosisText: z.string().optional(),
       estimatedPrice: z.number().optional(),
       diagnosisImages: z.array(dataUrlImage).max(4).optional(),

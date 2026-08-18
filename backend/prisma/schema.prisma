@@ -135,6 +135,8 @@ model Device {
   issueDescription String
   status           DeviceStatus @default(RECEIVED)
 
+  diagnosingImages Json    @default("[]") // İnceleniyor aşamasında eklenen görseller (opsiyonel, en fazla 4)
+
   diagnosisText   String?
   estimatedPrice  Decimal? @db.Decimal(12, 2)
   diagnosisImages Json     @default("[]") // base64 dataURL dizisi (en fazla 4)

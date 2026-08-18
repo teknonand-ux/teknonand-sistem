@@ -2290,6 +2290,7 @@ function renderDeviceDetail(){
         ${d.cargoTrackingNumber ? `<div><span>📦 Yurtiçi Kargo Takip No</span>${esc(d.cargoTrackingNumber)}</div>` : ''}
       </div>
       ${(d.intakeImages && d.intakeImages.length) ? `<div><span style="color:var(--ink-soft); font-size:11.5px;">Cihaz Alındı Görselleri</span><div class="img-gallery">${d.intakeImages.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}</div></div>` : ''}
+      ${(d.diagnosingImages && d.diagnosingImages.length) ? `<div><span style="color:var(--ink-soft); font-size:11.5px;">İnceleme Görselleri</span><div class="img-gallery">${d.diagnosingImages.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}</div></div>` : ''}
       <div style="display:flex; gap:8px; margin-top:10px;">
         <button class="ghost" onclick="toggleCustomerEdit()">Müşteri Bilgilerini Düzenle</button>
         <button class="ghost" onclick="sendTrackingLinkWhatsApp('${d.id}')">WhatsApp ile Takip Linki Gönder</button>
@@ -2309,6 +2310,13 @@ function renderDeviceDetail(){
           <select id="st-status" onchange="onStatusFieldChange()">${Object.keys(STATUS_LABELS).map(k=>`<option value="${k}" ${k===d.status?'selected':''}>${STATUS_LABELS[k]}</option>`).join('')}</select>
         </div>
         <div class="field"><label>Tarih / Saat</label><input id="st-datetime" type="datetime-local"></div>
+      </div>
+      <div id="st-diagnosing-fields" style="display:none;">
+        <div class="field">
+          <label>Görsel Ekle (opsiyonel, en fazla 4)</label>
+          <input type="file" id="st-diagnosing-images-input" accept="image/*" multiple onchange="handleImageSelect(event,'diagnosing','st-diagnosing-images-preview')">
+          <div class="img-thumb-row" id="st-diagnosing-images-preview"></div>
+        </div>
       </div>
       <div id="st-diagnosis-fields" style="display:none;">
         <label>Arıza Kalemleri</label>
@@ -2563,9 +2571,11 @@ function renderDeviceDetail(){
   document.getElementById('st-datetime').value = toLocalInputValue(new Date());
   onStatusFieldChange();
 
+  tempImages.diagnosing = (d.diagnosingImages || []).slice();
   tempImages.diagnosis = (d.diagnosisImages || []).slice();
   tempImages.return = (d.returnImages || []).slice();
   tempImages.delivery = (d.deliveryImages || []).slice();
+  renderImageThumbs(tempImages.diagnosing, 'st-diagnosing-images-preview', 'diagnosing');
   renderImageThumbs(tempImages.diagnosis, 'st-diagnosis-images-preview', 'diagnosis');
   renderImageThumbs(tempImages.return, 'st-return-images-preview', 'return');
   renderImageThumbs(tempImages.delivery, 'st-delivery-images-preview', 'delivery');
@@ -2981,6 +2991,7 @@ function printLabel(){
 
 function onStatusFieldChange(){
   const status = document.getElementById('st-status').value;
+  document.getElementById('st-diagnosing-fields').style.display = status === 'DIAGNOSING' ? 'block' : 'none';
   document.getElementById('st-diagnosis-fields').style.display = status === 'DIAGNOSIS_DONE' ? 'block' : 'none';
   document.getElementById('st-return-fields').style.display = (status === 'RETURNED' || status === 'RETURN_REQUESTED') ? 'block' : 'none';
   document.getElementById('st-delivery-fields').style.display = status === 'DELIVERED' ? 'block' : 'none';
@@ -2988,7 +2999,7 @@ function onStatusFieldChange(){
   document.getElementById('st-shipped-fields').style.display = status === 'SHIPPED' ? 'block' : 'none';
 }
 
-let tempImages = {diagnosis:[], return:[], delivery:[], intake:[]};
+let tempImages = {diagnosing:[], diagnosis:[], return:[], delivery:[], intake:[]};
 let tempDiagnosisItems = [];
 
 function renderDiagnosisItemsList(){
@@ -3073,6 +3084,9 @@ async function addStatusEntry(){
   const payload = { status, note: note || undefined, changedAt };
   let newImeiSerial = null;
 
+  if(status === 'DIAGNOSING'){
+    payload.diagnosingImages = tempImages.diagnosing.slice(0,4);
+  }
   if(status === 'DIAGNOSIS_DONE'){
     if(!tempDiagnosisItems.length){
       toast('En az bir arıza kalemi ekleyin');

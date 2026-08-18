@@ -327,6 +327,7 @@ function render(d){
       </div>`;
   }
 
+  const diagnosingGallery = imgGallery(d.diagnosingImages, 'İnceleme Görselleri');
   const diagnosisGallery = imgGallery(d.diagnosisImages, 'Arıza Tespiti Görselleri');
   const returnGallery = d.status === 'RETURNED' ? imgGallery(d.returnImages, 'İade Görselleri') : '';
   const deliveryGallery = d.status === 'DELIVERED' ? imgGallery(d.deliveryImages, 'Teslim Görselleri') : '';
@@ -355,6 +356,7 @@ function render(d){
         <div class="invoice-title">🧾 Faturanız Hazır</div>
         <a href="${d.invoicePdf}" target="_blank" download="Fatura-${esc(d.trackingCode)}.pdf">Faturayı İndir</a>
       </div>` : ''}
+    ${diagnosingGallery}
     ${diagnosisGallery}
     ${partsHtml}
     ${returnGallery}
