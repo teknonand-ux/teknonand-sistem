@@ -224,7 +224,10 @@ router.post('/me/devices/:id/diagnosis-items/:itemId/respond', requireAuth, requ
 
     const updatedDevice = await prisma.device.findUnique({
       where: { id: device.id },
-      include: { parts: true, diagnosisItems: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        parts: { select: { id: true, name: true, price: true, vatMode: true, warrantyMonths: true } },
+        diagnosisItems: { orderBy: { createdAt: 'asc' } },
+      },
     });
     res.json(updatedDevice);
   } catch (e) {

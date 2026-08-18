@@ -2303,7 +2303,7 @@ function renderDeviceDetail(){
       ${(d.statusHistory||[]).map(h=>`
         <div class="note-item">
           ${pill(h.status)} ${h.note ? '— '+esc(h.note) : ''}
-          <div class="note-time">${new Date(h.changedAt).toLocaleString('tr-TR')}</div>
+          <div class="note-time">${new Date(h.changedAt).toLocaleString('tr-TR')}${h.changedByEmployee ? ` · ${esc(h.changedByEmployee.name)}` : ''}</div>
         </div>`).join('')}
       <div class="form-grid" style="margin-top:12px;">
         <div class="field"><label>Yeni Durum</label>
@@ -2423,7 +2423,7 @@ function renderDeviceDetail(){
           ${parts.length ? parts.map((p)=>`
             <tr>
               <td>${esc(p.name)}</td>
-              <td>${p.stockItemId ? 'Stok' : 'Manuel'}${p.supplier ? ` · ${esc(p.supplier.name)}` : ''}</td>
+              <td>${p.stockItemId ? 'Stok' : 'Manuel'}${p.supplier ? ` · ${esc(p.supplier.name)}` : ''}${p.addedByEmployee ? `<br><span style="color:var(--ink-soft); font-size:11px;">${esc(p.addedByEmployee.name)}</span>` : ''}</td>
               <td><span class="badge vat">%20 KDV ${p.vatMode==='HARIC'?'Hariç':'Dahil'}</span></td>
               <td><span class="badge ${p.warrantyMonths>0?'warranty':'no-warranty'}">${WARRANTY_LABELS[p.warrantyMonths]}</span></td>
               <td class="code">₺${lineGross(p).toFixed(2)}</td>

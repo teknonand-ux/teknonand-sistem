@@ -103,8 +103,10 @@ router.get('/', async (req, res, next) => {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        customer: true, dealer: true, assignedEmployee: true, parts: { include: { supplier: true } }, payments: true,
-        statusHistory: { orderBy: { changedAt: 'desc' } },
+        customer: true, dealer: true, assignedEmployee: true,
+        parts: { include: { supplier: true, addedByEmployee: true } },
+        payments: true,
+        statusHistory: { orderBy: { changedAt: 'desc' }, include: { changedByEmployee: true } },
         diagnosisItems: { orderBy: { createdAt: 'asc' } },
       },
     });
@@ -122,7 +124,7 @@ router.get('/:id', async (req, res, next) => {
         customer: true,
         dealer: true,
         assignedEmployee: true,
-        parts: { include: { supplier: true } },
+        parts: { include: { supplier: true, addedByEmployee: true } },
         payments: true,
         statusHistory: { orderBy: { changedAt: 'desc' }, include: { changedByEmployee: true } },
         diagnosisItems: { orderBy: { createdAt: 'asc' } },
@@ -598,8 +600,8 @@ router.post('/:id/parts', async (req, res, next) => {
 
     const part = await prisma.$transaction(async (tx) => {
       const created = await tx.devicePart.create({
-        data: { deviceId: req.params.id, ...input },
-        include: { supplier: true },
+        data: { deviceId: req.params.id, ...input, addedByEmployeeId: req.user.sub },
+        include: { supplier: true, addedByEmployee: true },
       });
       if (input.stockItemId) {
         await tx.stockItem.update({

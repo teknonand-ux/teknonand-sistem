@@ -34,6 +34,7 @@ model Employee {
 
   assignedDevices Device[]             @relation("AssignedEmployee")
   statusChanges   DeviceStatusHistory[]
+  addedDeviceParts DevicePart[]
   repairs         Repair[]
   whatsappChatMessages WhatsappChatMessage[]
   instagramChatMessages InstagramChatMessage[]
@@ -235,6 +236,8 @@ model DevicePart {
   stockItem      StockItem? @relation(fields: [stockItemId], references: [id])
   supplierId     String?
   supplier       Supplier? @relation(fields: [supplierId], references: [id])
+  addedByEmployeeId String? // ekleyen personel -- sadece yonetici panelinde gosterilir, musteri/bayi portallarina hic gonderilmez
+  addedByEmployee   Employee? @relation(fields: [addedByEmployeeId], references: [id])
   name           String
   price          Decimal  @db.Decimal(12, 2) // satış fiyatı
   cost           Decimal  @default(0) @db.Decimal(12, 2) // maliyet (kâr/zarar hesaplamasında kullanılır)
