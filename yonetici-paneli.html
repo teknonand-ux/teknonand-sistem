@@ -653,6 +653,15 @@
       </div>
 
       <div class="card">
+        <h3>Yazıcı</h3>
+        <div class="form-grid">
+          <div class="field"><label>Yazıcı Adı / Modeli</label><input id="label-printer-name" placeholder="örn. Xprinter XP-365B"></div>
+          <div class="field"><label>&nbsp;</label><button class="primary" style="width:100%;" onclick="saveLabelPrinterName()">Kaydet</button></div>
+        </div>
+        <p class="login-hint" style="margin-top:0;">Bu alan sadece hangi yazıcının kullanıldığını hatırlamak için bir nottur — panel bunu otomatik seçemez, tarayıcılar bir web sayfasının sistemdeki yazıcıları görmesine izin vermez. Onaysız/otomatik yazdırmanın gerçekten çalışması için ana bilgisayarda bu yazıcının Windows'ta <b>varsayılan yazıcı</b> olarak ayarlı olması ve Chrome'un <code>--kiosk-printing</code> ile açılmış olması gerekir.</p>
+      </div>
+
+      <div class="card">
         <h3>Etiket Boyutu</h3>
         <div class="form-grid">
           <div class="field"><label>Genişlik (cm)</label><input id="ld-width" type="number" step="0.5" min="2" oninput="onLabelDesignChange()"></div>
@@ -1033,6 +1042,7 @@ let inboxChannel = 'whatsapp';
 let isPrinterPC = localStorage.getItem('teknonand_is_printer_pc') === '1';
 let labelPrintPollTimer = null;
 let labelPrintJobsProcessing = false;
+let labelPrinterName = '';
 
 const DEFAULT_LABEL_SETTINGS = {
   widthCm:6, heightCm:4,
@@ -3919,13 +3929,25 @@ async function loadLabelDesign(){
     const data = await apiFetch('/settings/labelDesign');
     if(data) labelSettings = data;
   }catch(e){ /* saved design yok, varsayılan kullanılır */ }
+  try{
+    const name = await apiFetch('/settings/labelPrinterName');
+    if(name) labelPrinterName = name;
+  }catch(e){ /* kayıtlı yazıcı adı yok */ }
   populateLabelDesignForm();
+}
+
+async function saveLabelPrinterName(){
+  const val = document.getElementById('label-printer-name').value.trim();
+  await apiFetch('/settings/labelPrinterName', { method: 'PUT', body: JSON.stringify(val) });
+  labelPrinterName = val;
+  toast('Yazıcı adı kaydedildi');
 }
 
 function populateLabelDesignForm(){
   const widthEl = document.getElementById('ld-width');
   if(!widthEl) return;
   document.getElementById('printer-pc-toggle').checked = isPrinterPC;
+  document.getElementById('label-printer-name').value = labelPrinterName;
   document.getElementById('ld-width').value = labelSettings.widthCm;
   document.getElementById('ld-height').value = labelSettings.heightCm;
   ['shop','code','name','phone','issue','pass','imei'].forEach(key=>{

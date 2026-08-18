@@ -6,9 +6,9 @@ const { fetchUsdTryRate } = require('../services/exchangeRate');
 
 const router = express.Router();
 
-const ALLOWED_KEYS = ['exchangeRate', 'labelDesign', 'companyInfo', 'companyLogo', 'whatsappTemplates'];
+const ALLOWED_KEYS = ['exchangeRate', 'labelDesign', 'companyInfo', 'companyLogo', 'whatsappTemplates', 'labelPrinterName'];
 // exchangeRate (Stok sayfası) kısıtlı personele de açık; belge/etiket tasarımı ve WhatsApp şablonları yönetici-özel
-const ADMIN_ONLY_KEYS = ['labelDesign', 'companyInfo', 'companyLogo', 'whatsappTemplates'];
+const ADMIN_ONLY_KEYS = ['labelDesign', 'companyInfo', 'companyLogo', 'whatsappTemplates', 'labelPrinterName'];
 
 // GET /api/settings/:key — panel + gerektiğinde herkese açık şablonlar için de kullanılabilir
 router.get('/:key', requireAuth, requireEmployee, async (req, res, next) => {
