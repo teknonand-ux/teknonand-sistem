@@ -13,7 +13,9 @@ const customerSchema = z.object({
   email: z.string().email().optional().or(z.literal('')),
 });
 
-// GET /api/customers?query=  — isim/telefon autocomplete (Cihaz Kabul ekranı)
+// GET /api/customers?query=  — verilmezse Müşteriler sayfası için TÜM kayıtları
+// döner (bkz. /devices — bu uygulamada listeler client-side filtrelenir);
+// verilirse Cihaz Kabul ekranındaki canlı isim/telefon araması içindir (en fazla 8 sonuç).
 router.get('/', async (req, res, next) => {
   try {
     const query = (req.query.query || '').toString().trim();
@@ -28,7 +30,7 @@ router.get('/', async (req, res, next) => {
     const customers = await prisma.customer.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: query ? 8 : 100,
+      ...(query ? { take: 8 } : {}),
       include: { _count: { select: { devices: true } } },
     });
     res.json(customers);
@@ -59,6 +61,54 @@ router.patch('/:id', async (req, res, next) => {
     const data = customerSchema.partial().parse(req.body);
     const customer = await prisma.customer.update({ where: { id: req.params.id }, data });
     res.json(customer);
+  } catch (e) {
+    next(e);
+  }
+});
+
+const normPhone = (p) => (p || '').replace(/\s|-/g, '');
+const normName = (n) => (n || '').trim().replace(/\s+/g, ' ').toLocaleUpperCase('tr-TR');
+
+// POST /api/customers/merge-duplicates — aynı isim soyisim VE telefon numarasına
+// sahip müşteri kayıtlarını (biçim farkları — boşluk/tire, büyük/küçük harf —
+// yok sayılarak) tek kayda birleştirir: en çok cihazı olan kayıt hayatta kalır
+// (eşitlikte en eski kayıt), diğerlerinin cihazları ve WhatsApp/Instagram
+// sohbetleri ona aktarılıp kopya kayıtlar silinir. Cihaz/işlem geçmişi kaybolmaz.
+router.post('/merge-duplicates', requireAdmin, async (req, res, next) => {
+  try {
+    const all = await prisma.customer.findMany({ include: { _count: { select: { devices: true } } } });
+    const groups = new Map();
+    for (const c of all) {
+      const key = `${normName(c.fullName)}|${normPhone(c.phone)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(c);
+    }
+
+    let mergedGroups = 0;
+    let mergedCustomers = 0;
+    for (const list of groups.values()) {
+      if (list.length < 2) continue;
+      list.sort((a, b) => b._count.devices - a._count.devices || new Date(a.createdAt) - new Date(b.createdAt));
+      const [survivor, ...duplicates] = list;
+      const backupPhone = survivor.backupPhone || duplicates.map((d) => d.backupPhone).find(Boolean);
+      const email = survivor.email || duplicates.map((d) => d.email).find(Boolean);
+
+      await prisma.$transaction(async (tx) => {
+        for (const dup of duplicates) {
+          await tx.device.updateMany({ where: { customerId: dup.id }, data: { customerId: survivor.id } });
+          await tx.whatsappConversation.updateMany({ where: { customerId: dup.id }, data: { customerId: survivor.id } });
+          await tx.instagramConversation.updateMany({ where: { customerId: dup.id }, data: { customerId: survivor.id } });
+          await tx.customer.delete({ where: { id: dup.id } });
+        }
+        if (backupPhone !== survivor.backupPhone || email !== survivor.email) {
+          await tx.customer.update({ where: { id: survivor.id }, data: { backupPhone, email } });
+        }
+      });
+      mergedGroups++;
+      mergedCustomers += duplicates.length;
+    }
+
+    res.json({ mergedGroups, mergedCustomers });
   } catch (e) {
     next(e);
   }

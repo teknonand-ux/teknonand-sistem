@@ -585,14 +585,22 @@
         <button class="primary" onclick="addCustomerManual()">Müşteri Ekle</button>
       </div>
       <div class="card">
-        <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+          <input id="customer-search-input" placeholder="🔍 Ad soyad ile ara..." autocomplete="off" style="flex:1; min-width:200px;" oninput="renderCustomers()">
           <button class="ghost" onclick="exportCustomers()">Dışa Aktar (CSV)</button>
           <button class="ghost" onclick="document.getElementById('customer-import-file').click()">İçe Aktar (CSV)</button>
           <input type="file" id="customer-import-file" accept=".csv" style="display:none;" onchange="importCustomers(event)">
+          <button class="ghost admin-only" onclick="mergeDuplicateCustomers()">Tekrar Eden Kayıtları Birleştir</button>
         </div>
         <table><thead><tr><th>Ad Soyad</th><th>Telefon</th><th>Yedek Telefon</th><th>Cihaz Sayısı</th><th></th></tr></thead>
           <tbody id="customerTable"></tbody></table>
       </div>
+    </div>
+
+    <!-- CUSTOMER DETAIL -->
+    <div class="view" id="view-customer-detail">
+      <button class="ghost" onclick="switchView('customers')">← Müşterilere Dön</button>
+      <div id="customerDetailContent"></div>
     </div>
 
     <!-- WHATSAPP INBOX -->
@@ -1524,11 +1532,86 @@ async function addCustomerManual(){
 function renderCustomers(){
   const tbody = document.getElementById('customerTable');
   if(!tbody) return;
-  tbody.innerHTML = customers.length ? customers.map(c=>{
+  const searchEl = document.getElementById('customer-search-input');
+  const q = searchEl ? searchEl.value.trim().toLocaleLowerCase('tr-TR') : '';
+  const list = q ? customers.filter(c=>(c.fullName||'').toLocaleLowerCase('tr-TR').includes(q)) : customers;
+  tbody.innerHTML = list.length ? list.map(c=>{
     const count = devices.filter(d=>d.customerId===c.id).length;
-    return `<tr><td>${esc(c.fullName)}</td><td>${esc(c.phone)}</td><td>${esc(c.backupPhone)||'—'}</td><td>${count}</td>
-    <td><button class="ghost admin-only" onclick="removeItem('customers','${c.id}')">Sil</button></td></tr>`;
-  }).join('') : `<tr><td colspan="5" class="empty">Henüz müşteri kaydı yok</td></tr>`;
+    return `<tr class="row-click" onclick="openCustomer('${c.id}')"><td>${esc(c.fullName)}</td><td>${esc(c.phone)}</td><td>${esc(c.backupPhone)||'—'}</td><td>${count}</td>
+    <td onclick="event.stopPropagation()"><button class="ghost admin-only" onclick="removeItem('customers','${c.id}')">Sil</button></td></tr>`;
+  }).join('') : `<tr><td colspan="5" class="empty">${q?'Eşleşen müşteri bulunamadı':'Henüz müşteri kaydı yok'}</td></tr>`;
+}
+
+let currentCustomerId = null;
+
+function openCustomer(id){
+  currentCustomerId = id;
+  switchView('customer-detail');
+  renderCustomerDetail();
+}
+
+function renderCustomerDetail(){
+  const c = customers.find(x=>x.id===currentCustomerId);
+  const box = document.getElementById('customerDetailContent');
+  if(!c){ box.innerHTML = '<p class="empty">Müşteri bulunamadı</p>'; return; }
+  const list = devices.filter(d=>d.customerId===c.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  const totalAmount = list.reduce((s,d)=>s+(d.parts||[]).reduce((ss,p)=>ss+lineGross(p),0), 0);
+  const totalPaid = list.reduce((s,d)=>s+(d.payments||[]).reduce((ss,p)=>ss+(parseFloat(p.amount)||0),0), 0);
+  const remaining = totalAmount - totalPaid;
+
+  box.innerHTML = `
+    <div class="detail-head">
+      <div>
+        <div class="detail-title">${esc(c.fullName)}</div>
+        <div class="detail-code">${esc(c.phone)||'—'}${c.backupPhone ? ` · Yedek: ${esc(c.backupPhone)}` : ''}${c.email ? ` · ${esc(c.email)}` : ''}</div>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${list.length}</div><div class="lbl">Toplam Cihaz</div></div>
+      <div class="stat"><div class="num">₺${totalAmount.toFixed(2)}</div><div class="lbl">Toplam Tutar</div></div>
+      <div class="stat"><div class="num" style="color:${remaining>0.01?'var(--red)':'var(--green)'}">₺${remaining.toFixed(2)}</div><div class="lbl">Kalan Bakiye</div></div>
+    </div>
+
+    <div class="card">
+      <h3>Geçmiş Cihazlar / İşlemler</h3>
+      <table><thead><tr><th>Kod</th><th>Tarih</th><th>Cihaz</th><th>Arıza</th><th>Durum</th><th>Tutar</th></tr></thead>
+        <tbody>${list.length ? list.map(d=>{
+          const total = (d.parts||[]).reduce((s,p)=>s+lineGross(p),0);
+          return `<tr class="row-click" onclick="openDevice('${d.id}')">
+            <td class="code">${esc(d.trackingCode)}</td>
+            <td>${new Date(d.createdAt).toLocaleDateString('tr-TR')}</td>
+            <td>${esc(d.model)}</td>
+            <td>${esc(d.issueDescription)||'—'}</td>
+            <td>${pill(d.status)}</td>
+            <td class="code">₺${total.toFixed(2)}</td>
+          </tr>`;
+        }).join('') : `<tr><td colspan="6" class="empty">Bu müşteriye ait cihaz kaydı yok</td></tr>`}</tbody></table>
+    </div>
+  `;
+}
+
+function findDuplicateCustomerGroups(){
+  const key = c => `${normPhone(c.phone)}|${(c.fullName||'').trim().replace(/\s+/g,' ').toLocaleUpperCase('tr-TR')}`;
+  const groups = new Map();
+  customers.forEach(c=>{
+    const k = key(c);
+    if(!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(c);
+  });
+  return [...groups.values()].filter(g=>g.length>1);
+}
+
+async function mergeDuplicateCustomers(){
+  const dupGroups = findDuplicateCustomerGroups();
+  if(!dupGroups.length){ toast('Tekrar eden müşteri kaydı bulunamadı'); return; }
+  const dupCount = dupGroups.reduce((s,g)=>s+g.length-1, 0);
+  if(!confirm(`${dupGroups.length} grupta toplam ${dupCount} tekrar eden müşteri kaydı bulundu. Bunlar birleştirilecek — cihaz/işlem geçmişleri korunur, yalnızca kopya kayıtlar silinir. Devam edilsin mi?`)) return;
+  let result;
+  try{ result = await apiFetch('/customers/merge-duplicates', { method: 'POST' }); }
+  catch(e){ toast(e.message || 'Birleştirme başarısız'); return; }
+  toast(`${result.mergedGroups} grup birleştirildi, ${result.mergedCustomers} kopya kayıt silindi`);
+  await refreshViewData('customers');
 }
 
 function csvEscape(val){
