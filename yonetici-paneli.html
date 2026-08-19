@@ -1442,22 +1442,37 @@ function revealField(key){
 
 function normPhone(p){ return (p||'').replace(/\s|-/g,''); }
 
+let customerSuggestTimer = null;
+let customerSuggestSeq = 0;
+// Not: sayfa açılışında önbelleğe alınan `customers` dizisi yalnızca en son eklenen
+// 100 kaydı içerir (bkz. loadAll) — burada onun yerine backend'in canlı arama uç
+// noktası (GET /customers?query=) kullanılır ki eski/önbellek dışı müşteriler de
+// (ör. eski sistemden aktarılmış kayıtlar) Cihaz Kabul'de bulunabilsin.
 function customerSuggest(field){
-  const nameVal = document.getElementById('f-name').value.trim().toLowerCase();
+  const nameVal = document.getElementById('f-name').value.trim();
   const phoneVal = normPhone(document.getElementById('f-phone').value);
   const box = document.getElementById('f-'+field+'-suggest');
-  let matches = [];
-  if(field==='name' && nameVal.length>=2){
-    matches = customers.filter(c=>c.fullName.toLowerCase().includes(nameVal));
-  } else if(field==='phone' && phoneVal.length>=3){
-    matches = customers.filter(c=>normPhone(c.phone).includes(phoneVal));
-  }
-  if(!matches.length){ box.classList.remove('show'); box.innerHTML=''; return; }
-  box.innerHTML = matches.slice(0,6).map(c=>`
-    <div class="suggest-item" onclick='pickCustomer(${JSON.stringify(c.id)})'>
-      <div class="s-name">${esc(c.fullName)}</div><div class="s-sub">${esc(c.phone)}</div>
-    </div>`).join('');
-  box.classList.add('show');
+  const query = field==='name' ? nameVal : phoneVal;
+  const minLen = field==='name' ? 2 : 3;
+  clearTimeout(customerSuggestTimer);
+  if(query.length < minLen){ box.classList.remove('show'); box.innerHTML=''; return; }
+  const seq = ++customerSuggestSeq;
+  customerSuggestTimer = setTimeout(async () => {
+    let matches;
+    try{ matches = await apiFetch('/customers?query=' + encodeURIComponent(query)); }
+    catch(e){ return; }
+    if(seq !== customerSuggestSeq) return; // bu sirada daha yeni bir arama baslamis, sonucu yoksay
+    matches.forEach(c=>{
+      const idx = customers.findIndex(x=>x.id===c.id);
+      if(idx>=0) customers[idx] = c; else customers.push(c);
+    });
+    if(!matches.length){ box.classList.remove('show'); box.innerHTML=''; return; }
+    box.innerHTML = matches.slice(0,6).map(c=>`
+      <div class="suggest-item" onclick='pickCustomer(${JSON.stringify(c.id)})'>
+        <div class="s-name">${esc(c.fullName)}</div><div class="s-sub">${esc(c.phone)}</div>
+      </div>`).join('');
+    box.classList.add('show');
+  }, 220);
 }
 
 function onDealerPick(){
