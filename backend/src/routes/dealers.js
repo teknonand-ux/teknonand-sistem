@@ -60,6 +60,26 @@ router.post('/:id/transactions', requireAuth, requireEmployee, async (req, res, 
   }
 });
 
+// DELETE /api/dealers/:id/transactions/:txId — hareketi sil, bakiyeyi geri al
+router.delete('/:id/transactions/:txId', requireAuth, requireEmployee, async (req, res, next) => {
+  try {
+    const tx = await prisma.dealerTransaction.findUnique({ where: { id: req.params.txId } });
+    if (!tx || tx.dealerId !== req.params.id) return res.status(404).json({ error: 'Hareket bulunamadı' });
+    const delta = tx.type === 'VERESIYE_SATIS' ? -Number(tx.amount) : Number(tx.amount);
+    await prisma.$transaction([
+      prisma.dealer.update({ where: { id: req.params.id }, data: { balance: { increment: delta } } }),
+      prisma.dealerTransaction.delete({ where: { id: req.params.txId } }),
+    ]);
+    const dealer = await prisma.dealer.findUnique({
+      where: { id: req.params.id },
+      include: { transactions: { orderBy: { createdAt: 'desc' } } },
+    });
+    res.json(dealer);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.patch('/:id', requireAuth, requireEmployee, async (req, res, next) => {
   try {
     const { password, phone } = z

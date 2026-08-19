@@ -3575,6 +3575,16 @@ async function addDealerTx(id){
   if(currentDealerId===id) renderDealerDetail();
 }
 
+async function removeDealerTx(dealerId, txId){
+  if(!confirm('Bu hareketi silmek istediğinize emin misiniz? Bakiye buna göre geri alınacak.')) return;
+  const dealer = await apiFetch(`/dealers/${dealerId}/transactions/${txId}`, { method: 'DELETE' });
+  const idx = dealers.findIndex(d=>d.id===dealerId);
+  if(idx>=0) dealers[idx] = dealer;
+  toast('Hareket silindi');
+  renderDealers();
+  if(currentDealerId===dealerId) renderDealerDetail();
+}
+
 function renderDealers(){
   const box = document.getElementById('dealerList');
   if(!box) return;
@@ -3853,7 +3863,7 @@ function renderDealerDetail(){
     <div class="card">
       <h3>Veresiye / Tahsilat Hareketi Ekle</h3>
       ${txs.length ? `<div class="dealer-tx mini-list">${txs.map(t=>`
-        <div class="dealer-tx-line"><span style="color:${t.type==='VERESIYE_SATIS'?'var(--red)':'var(--green)'}; font-weight:600;">${t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat'}</span><span>₺${(parseFloat(t.amount)||0).toFixed(2)} · ${new Date(t.createdAt).toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})}</span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
+        <div class="dealer-tx-line"><span style="color:${t.type==='VERESIYE_SATIS'?'var(--red)':'var(--green)'}; font-weight:600;">${t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat'}</span><span>₺${(parseFloat(t.amount)||0).toFixed(2)} · ${new Date(t.createdAt).toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})} <button class="ghost" style="padding:2px 7px; margin-left:6px;" onclick="removeDealerTx('${dl.id}','${t.id}')">Sil</button></span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
       <div class="dealer-form" style="margin-top:12px;">
         <div class="field"><label>Tür</label>
           <select id="dtx-type-${dl.id}"><option value="VERESIYE_SATIS">Veresiye Satış</option><option value="TAHSILAT">Tahsilat</option></select>
