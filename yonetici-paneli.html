@@ -1591,10 +1591,17 @@ function renderCustomerDetail(){
   `;
 }
 
+// Eski/toplu aktarilan kayitlarda telefon alaninda gercek numara yerine "belirtilmedi",
+// "Numara Yok #123" gibi yer tutucular ya da bos deger bulunabiliyor -- bunlar farkli
+// gercek musterileri ayni sanip yanlislikla birlestirmemek icin eslemede yok sayilir.
+function isRealPhone(p){
+  return /^0?5\d{9}$/.test(normPhone(p));
+}
 function findDuplicateCustomerGroups(){
   const key = c => `${normPhone(c.phone)}|${(c.fullName||'').trim().replace(/\s+/g,' ').toLocaleUpperCase('tr-TR')}`;
   const groups = new Map();
   customers.forEach(c=>{
+    if(!isRealPhone(c.phone)) return;
     const k = key(c);
     if(!groups.has(k)) groups.set(k, []);
     groups.get(k).push(c);

@@ -68,9 +68,13 @@ router.patch('/:id', async (req, res, next) => {
 
 const normPhone = (p) => (p || '').replace(/\s|-/g, '');
 const normName = (n) => (n || '').trim().replace(/\s+/g, ' ').toLocaleUpperCase('tr-TR');
+// Eski/toplu aktarilan kayitlarda telefon alaninda gercek numara yerine "belirtilmedi",
+// "Numara Yok #123" gibi yer tutucular ya da bos deger bulunabiliyor -- bunlar birbirinden
+// farkli gercek musterileri ayni sanip yanlislikla birlestirmemek icin eslemede yok sayilir.
+const isRealPhone = (p) => /^0?5\d{9}$/.test(normPhone(p));
 
-// POST /api/customers/merge-duplicates — aynı isim soyisim VE telefon numarasına
-// sahip müşteri kayıtlarını (biçim farkları — boşluk/tire, büyük/küçük harf —
+// POST /api/customers/merge-duplicates — aynı isim soyisim VE GEÇERLİ (gerçek) telefon
+// numarasına sahip müşteri kayıtlarını (biçim farkları — boşluk/tire, büyük/küçük harf —
 // yok sayılarak) tek kayda birleştirir: en çok cihazı olan kayıt hayatta kalır
 // (eşitlikte en eski kayıt), diğerlerinin cihazları ve WhatsApp/Instagram
 // sohbetleri ona aktarılıp kopya kayıtlar silinir. Cihaz/işlem geçmişi kaybolmaz.
@@ -79,6 +83,7 @@ router.post('/merge-duplicates', requireAdmin, async (req, res, next) => {
     const all = await prisma.customer.findMany({ include: { _count: { select: { devices: true } } } });
     const groups = new Map();
     for (const c of all) {
+      if (!isRealPhone(c.phone)) continue;
       const key = `${normName(c.fullName)}|${normPhone(c.phone)}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(c);
