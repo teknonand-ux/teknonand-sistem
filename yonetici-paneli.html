@@ -360,7 +360,7 @@
     <nav>
       <button data-view="dashboard" class="active">Panel</button>
       <button data-view="new-device">Cihaz Kabul</button>
-      <button data-view="devices">Cihazlar</button>
+      <button data-view="devices">Cihazlar<span id="devicesNavBadge" class="wa-unread-badge" style="display:none;"></span></button>
       <button data-view="customers">Müşteriler</button>
       <button data-view="whatsapp-inbox">Mesajlar<span id="waNavBadge" class="wa-unread-badge" style="display:none;"></span><span id="igNavBadge" class="wa-unread-badge" style="display:none;"></span></button>
       <button data-view="appointments">Randevular</button>
@@ -2211,11 +2211,18 @@ function lineNet(p){
   return p.vatMode === 'HARIC' ? price : price / 1.2;
 }
 
-function openDevice(id){
+async function openDevice(id){
   currentDeviceId = id;
   customerEditOpen = false;
   switchView('device-detail');
   renderDeviceDetail();
+  const d = devices.find(x=>x.id===id);
+  if(d && d.approvalSeenByStaff === false){
+    d.approvalSeenByStaff = true;
+    updateDevicesNavBadge();
+    try{ await apiFetch(`/devices/${id}/mark-approval-seen`, { method: 'POST' }); }
+    catch(e){ /* rozet zaten yerelde kapatildi, sunucu hatasi kritik degil */ }
+  }
 }
 
 let qrScanStream = null;
@@ -4731,7 +4738,16 @@ function renderDeviceTable(){
   updateBulkDeleteButton();
 }
 
+function updateDevicesNavBadge(){
+  const total = devices.filter(d=>d.approvalSeenByStaff===false).length;
+  const badge = document.getElementById('devicesNavBadge');
+  if(!badge) return;
+  if(total > 0){ badge.style.display = 'inline-block'; badge.textContent = total > 99 ? '99+' : String(total); }
+  else badge.style.display = 'none';
+}
+
 function renderAll(){
+  updateDevicesNavBadge();
   // Dashboard stats
   const activeCount = devices.filter(d=>d.status!=='DELIVERED' && d.status!=='SHIPPED').length;
   const testingCount = devices.filter(d=>d.status==='TESTING').length;

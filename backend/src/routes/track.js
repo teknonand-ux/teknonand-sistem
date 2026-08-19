@@ -102,7 +102,7 @@ router.post('/:code/approve', async (req, res, next) => {
 
     const updated = await prisma.device.update({
       where: { id: device.id },
-      data: { customerApproved: true, status: 'APPROVED', approvalNote: note, approvedAt: new Date() },
+      data: { customerApproved: true, status: 'APPROVED', approvalNote: note, approvedAt: new Date(), approvalSeenByStaff: false },
       select: PUBLIC_DEVICE_SELECT,
     });
     await prisma.deviceStatusHistory.create({
@@ -138,6 +138,7 @@ router.post('/:code/request-return', async (req, res, next) => {
       data: {
         status: 'RETURN_REQUESTED',
         returnReason: note || 'Müşteri onarımı onaylamayıp cihazın iadesini istedi',
+        approvalSeenByStaff: false,
       },
       select: PUBLIC_DEVICE_SELECT,
     });
@@ -171,8 +172,8 @@ async function advanceStatusIfAllItemsResponded(deviceId, respondedByLabel, send
   // varmışsa tekrar geçmiş kaydı/bildirim oluşturmuyoruz.
   if (device?.status === newStatus) return null;
   const data = anyApproved
-    ? { status: 'APPROVED', approvedAt: new Date() }
-    : { status: 'RETURN_REQUESTED', returnReason: `${respondedByLabel} tüm arızaları reddetti, cihazın iadesini istedi` };
+    ? { status: 'APPROVED', approvedAt: new Date(), approvalSeenByStaff: false }
+    : { status: 'RETURN_REQUESTED', returnReason: `${respondedByLabel} tüm arızaları reddetti, cihazın iadesini istedi`, approvalSeenByStaff: false };
 
   const updated = await prisma.device.update({
     where: { id: deviceId },

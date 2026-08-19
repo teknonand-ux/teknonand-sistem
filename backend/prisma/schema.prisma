@@ -157,6 +157,12 @@ model Device {
   invoicePdf       String?   // fatura, base64 data URL (data:application/pdf;base64,...)
   invoiceUploadedAt DateTime?
 
+  // Musteri/bayi kendi panelinden ariza tespitini onaylayip/reddettiginde veya iade
+  // istediginde false olur (bkz. track.js, dealers.js); yonetici panelde cihaz
+  // acildiginda tekrar true olur. Yonetici paneli "Cihazlar" basliginin yanindaki
+  // bildirim rozetinde false olan kayit sayisi gosterilir.
+  approvalSeenByStaff Boolean @default(true)
+
   receivedAt DateTime @default(now())
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

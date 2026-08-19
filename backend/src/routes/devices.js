@@ -554,6 +554,21 @@ router.post('/:id/send-delivery-form-whatsapp', async (req, res, next) => {
   }
 });
 
+// POST /api/devices/:id/mark-approval-seen — yönetici paneli cihazı açtığında çağrılır;
+// müşteri/bayinin arıza onayı/reddi ya da iade isteği sonrası "Cihazlar" başlığının
+// yanındaki bildirim rozetini bu cihaz için kapatır (bkz. approvalSeenByStaff).
+router.post('/:id/mark-approval-seen', async (req, res, next) => {
+  try {
+    const device = await prisma.device.update({
+      where: { id: req.params.id },
+      data: { approvalSeenByStaff: true },
+    });
+    res.json({ id: device.id, approvalSeenByStaff: device.approvalSeenByStaff });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // PATCH /api/devices/:id/assign — personel devri
 router.patch('/:id/assign', async (req, res, next) => {
   try {

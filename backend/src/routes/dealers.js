@@ -136,7 +136,7 @@ router.post('/me/devices/:id/approve', requireAuth, requireDealer, async (req, r
 
     const updated = await prisma.device.update({
       where: { id: device.id },
-      data: { dealerApproved: true, status: 'APPROVED', approvalNote: note, approvedAt: new Date() },
+      data: { dealerApproved: true, status: 'APPROVED', approvalNote: note, approvedAt: new Date(), approvalSeenByStaff: false },
     });
     await prisma.deviceStatusHistory.create({
       data: {
@@ -163,6 +163,7 @@ router.post('/me/devices/:id/request-return', requireAuth, requireDealer, async 
       data: {
         status: 'RETURN_REQUESTED',
         returnReason: note || 'Bayi onarımı onaylamayıp cihazın iadesini istedi',
+        approvalSeenByStaff: false,
       },
     });
     await prisma.deviceStatusHistory.create({
@@ -187,8 +188,8 @@ async function advanceStatusIfAllItemsResponded(deviceId, respondedByLabel) {
   const anyApproved = items.some((it) => it.approved === true);
   const newStatus = anyApproved ? 'APPROVED' : 'RETURN_REQUESTED';
   const data = anyApproved
-    ? { status: 'APPROVED', approvedAt: new Date() }
-    : { status: 'RETURN_REQUESTED', returnReason: `${respondedByLabel} tüm arızaları reddetti, cihazın iadesini istedi` };
+    ? { status: 'APPROVED', approvedAt: new Date(), approvalSeenByStaff: false }
+    : { status: 'RETURN_REQUESTED', returnReason: `${respondedByLabel} tüm arızaları reddetti, cihazın iadesini istedi`, approvalSeenByStaff: false };
 
   const updated = await prisma.device.update({ where: { id: deviceId }, data, include: { customer: true } });
   await prisma.deviceStatusHistory.create({
