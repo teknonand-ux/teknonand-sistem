@@ -310,7 +310,7 @@ async function loadAndRenderAll(){
 }
 
 function renderAll(){
-  const activeCount = devices.filter(d=>d.status!=='DELIVERED').length;
+  const activeCount = devices.filter(d=>d.status!=='DELIVERED' && d.status!=='SHIPPED').length;
   const balance = parseFloat(currentDealer.balance) || 0;
 
   document.getElementById('statGrid').innerHTML = `

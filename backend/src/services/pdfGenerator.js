@@ -80,7 +80,9 @@ function buildDeliveryFormPdfBuffer(device, companyInfo, companyLogoDataUrl) {
       const total = parts.reduce((s, p) => s + lineGross(p), 0);
       const paid = (device.payments || []).reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
       const remaining = total - paid;
-      const deliveredEntry = (device.statusHistory || []).find((h) => h.status === 'DELIVERED');
+      // SHIPPED (kargoya verildi) fiilen teslim sayılır — DELIVERED yoksa ona bakılır.
+      const deliveredEntries = (device.statusHistory || []).filter((h) => h.status === 'DELIVERED' || h.status === 'SHIPPED');
+      const deliveredEntry = deliveredEntries.sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
       const deliveredAt = deliveredEntry ? new Date(deliveredEntry.changedAt).toLocaleString('tr-TR') : '—';
       const exclusions = detectWarrantyExclusions(parts);
 

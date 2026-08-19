@@ -24,12 +24,13 @@ const dataUrlPdf = z
 
 // Bayiye ait bir cihazın parça/işlem tutarını bayinin veresiye hesabına ekler
 // (bir cihaz için yalnızca bir kez) — cihaz Teslime Hazır (READY) durumuna
-// geldiği anda işlenir; bir cihaz READY'yi atlayıp doğrudan DELIVERED olursa
-// (ör. hızlı teslim) orada da devreye girer. Zaten DELIVERED/READY olan bir
-// cihaz sonradan bir bayiye atandığında (ör. Müşteri Bilgilerini Düzenle'den)
-// da çağrılır.
+// geldiği anda işlenir; bir cihaz READY'yi atlayıp doğrudan SHIPPED/DELIVERED
+// olursa (ör. hızlı teslim, kargo) orada da devreye girer. SHIPPED (kargoya
+// verildi) fiilen teslim sayıldığı için DELIVERED ile aynı muameleyi görür.
+// Zaten SHIPPED/DELIVERED/READY olan bir cihaz sonradan bir bayiye
+// atandığında (ör. Müşteri Bilgilerini Düzenle'den) da çağrılır.
 async function creditDealerIfDelivered(device) {
-  if (!['READY', 'DELIVERED'].includes(device.status) || !device.dealerId) return;
+  if (!['READY', 'SHIPPED', 'DELIVERED'].includes(device.status) || !device.dealerId) return;
   const already = await prisma.dealerTransaction.findFirst({
     where: { deviceId: device.id, type: 'VERESIYE_SATIS' },
   });
@@ -518,6 +519,7 @@ router.post('/:id/send-invoice-whatsapp', async (req, res, next) => {
 // POST /api/devices/:id/send-delivery-form-whatsapp — cihaz teslim formunu PDF
 // olarak üretip WhatsApp'tan belge olarak gönderir. Yalnızca panelde bu butona
 // basıldığında tetiklenir, otomatik durum bildirimlerinden bağımsızdır.
+// SHIPPED (kargoya verildi) fiilen teslim sayıldığı için DELIVERED ile birlikte kabul edilir.
 router.post('/:id/send-delivery-form-whatsapp', async (req, res, next) => {
   try {
     const device = await prisma.device.findUnique({
@@ -525,7 +527,7 @@ router.post('/:id/send-delivery-form-whatsapp', async (req, res, next) => {
       include: { customer: true, parts: true, payments: true, statusHistory: true },
     });
     if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
-    if (device.status !== 'DELIVERED') return res.status(400).json({ error: 'Cihaz henüz teslim edilmedi' });
+    if (!['SHIPPED', 'DELIVERED'].includes(device.status)) return res.status(400).json({ error: 'Cihaz henüz teslim edilmedi' });
 
     const [companyInfoSetting, companyLogoSetting] = await Promise.all([
       prisma.appSetting.findUnique({ where: { key: 'companyInfo' } }),
