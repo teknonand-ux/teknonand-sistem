@@ -22,33 +22,46 @@ const dataUrlPdf = z
   .max(7_000_000)
   .regex(/^data:application\/pdf;base64,[A-Za-z0-9+/]+=*$/, 'Geçersiz PDF formatı');
 
-// Bayiye ait bir cihazın parça/işlem tutarını bayinin veresiye hesabına ekler
-// (bir cihaz için yalnızca bir kez) — cihaz Teslime Hazır (READY) durumuna
-// geldiği anda işlenir; bir cihaz READY'yi atlayıp doğrudan SHIPPED/DELIVERED
-// olursa (ör. hızlı teslim, kargo) orada da devreye girer. SHIPPED (kargoya
-// verildi) fiilen teslim sayıldığı için DELIVERED ile aynı muameleyi görür.
-// Zaten SHIPPED/DELIVERED/READY olan bir cihaz sonradan bir bayiye
-// atandığında (ör. Müşteri Bilgilerini Düzenle'den) da çağrılır.
+// Bayiye ait bir cihazın parça/işlem toplamını bayinin veresiye hesabıyla eş
+// zamanlı tutar — cihaz Teslime Hazır (READY) durumuna geldiği anda devreye
+// girer; READY'yi atlayıp doğrudan SHIPPED/DELIVERED olursa (ör. hızlı teslim,
+// kargo) orada da çalışır. SHIPPED (kargoya verildi) fiilen teslim sayıldığı
+// için DELIVERED ile aynı muameleyi görür. Zaten READY/SHIPPED/DELIVERED olan
+// bir cihaza sonradan parça eklenip silindiğinde (bkz. /:id/parts uçları) ya da
+// cihaz sonradan bir bayiye atandığında (Müşteri Bilgilerini Düzenle'den) da
+// çağrılır — cihaz için önceden bir veresiye kaydı varsa tutarı güncel parça
+// toplamına göre düzeltir (fark bayi bakiyesine yansır), yoksa yeni oluşturur.
 async function creditDealerIfDelivered(device) {
   if (!['READY', 'SHIPPED', 'DELIVERED'].includes(device.status) || !device.dealerId) return;
-  const already = await prisma.dealerTransaction.findFirst({
-    where: { deviceId: device.id, type: 'VERESIYE_SATIS' },
-  });
-  if (already) return;
   const parts = await prisma.devicePart.findMany({ where: { deviceId: device.id } });
   const total = parts.reduce((s, p) => s + lineGross(p), 0);
-  if (total <= 0) return;
+
+  const existing = await prisma.dealerTransaction.findFirst({
+    where: { deviceId: device.id, type: 'VERESIYE_SATIS' },
+  });
+
+  if (!existing) {
+    if (total <= 0) return;
+    await prisma.$transaction([
+      prisma.dealer.update({ where: { id: device.dealerId }, data: { balance: { increment: total } } }),
+      prisma.dealerTransaction.create({
+        data: {
+          dealerId: device.dealerId,
+          deviceId: device.id,
+          type: 'VERESIYE_SATIS',
+          amount: total,
+          description: `${device.trackingCode} — otomatik veresiye`,
+        },
+      }),
+    ]);
+    return;
+  }
+
+  const diff = total - Number(existing.amount);
+  if (diff === 0) return;
   await prisma.$transaction([
-    prisma.dealer.update({ where: { id: device.dealerId }, data: { balance: { increment: total } } }),
-    prisma.dealerTransaction.create({
-      data: {
-        dealerId: device.dealerId,
-        deviceId: device.id,
-        type: 'VERESIYE_SATIS',
-        amount: total,
-        description: `${device.trackingCode} — otomatik veresiye`,
-      },
-    }),
+    prisma.dealer.update({ where: { id: device.dealerId }, data: { balance: { increment: diff } } }),
+    prisma.dealerTransaction.update({ where: { id: existing.id }, data: { amount: total } }),
   ]);
 }
 
@@ -679,6 +692,11 @@ router.post('/:id/parts', async (req, res, next) => {
       return created;
     });
 
+    // Cihaz zaten Teslime Hazir/Kargoya Verildi/Teslim Edildi durumundaysa ve bir
+    // bayiye aitse, yeni eklenen parca bayinin veresiye bakiyesine de yansisin.
+    const device = await prisma.device.findUnique({ where: { id: req.params.id } });
+    if (device) await creditDealerIfDelivered(device);
+
     res.status(201).json(part);
   } catch (e) {
     next(e);
@@ -688,6 +706,9 @@ router.post('/:id/parts', async (req, res, next) => {
 router.delete('/:id/parts/:partId', async (req, res, next) => {
   try {
     await prisma.devicePart.delete({ where: { id: req.params.partId } });
+    // Parca silindiginde bayi veresiye tutari da guncel toplama gore duzelsin.
+    const device = await prisma.device.findUnique({ where: { id: req.params.id } });
+    if (device) await creditDealerIfDelivered(device);
     res.status(204).end();
   } catch (e) {
     next(e);

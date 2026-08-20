@@ -2449,6 +2449,15 @@ async function addLine(){
     suppliers.length = 0;
     suppliers.push(...freshSuppliers);
   }
+  // Cihaz bir bayiye ait ve zaten Teslime Hazır/Kargoya Verildi/Teslim Edildi
+  // durumundaysa, backend bu parçayı otomatik olarak bayinin veresiye bakiyesine
+  // ekler (bkz. devices.js creditDealerIfDelivered) — bayi listesini tazeleyip
+  // panelde güncel bakiyeyi göster.
+  if(d.dealerId && ['READY','SHIPPED','DELIVERED'].includes(d.status)){
+    const freshDealers = await apiFetch('/dealers');
+    dealers.length = 0;
+    dealers.push(...freshDealers);
+  }
   renderDeviceDetail();
 }
 
@@ -2456,6 +2465,11 @@ async function removePart(partId){
   const d = devices.find(x=>x.id===currentDeviceId);
   await apiFetch(`/devices/${d.id}/parts/${partId}`, { method: 'DELETE' });
   d.parts = d.parts.filter(p=>p.id!==partId);
+  if(d.dealerId && ['READY','SHIPPED','DELIVERED'].includes(d.status)){
+    const freshDealers = await apiFetch('/dealers');
+    dealers.length = 0;
+    dealers.push(...freshDealers);
+  }
   renderDeviceDetail();
 }
 
