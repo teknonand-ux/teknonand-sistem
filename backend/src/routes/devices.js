@@ -441,6 +441,31 @@ router.patch('/:id/status', async (req, res, next) => {
   }
 });
 
+// PATCH /api/devices/:id/details — durum/geçmiş etkilenmeden cihaza özel bilgileri
+// (şifre, IMEI, kargo adresi vb.) düzenler — bkz. yonetici-paneli.html "Müşteri
+// Bilgilerini Düzenle" kutusu (saveCustomerEdit).
+router.patch('/:id/details', async (req, res, next) => {
+  try {
+    const schema = z.object({
+      backupPhone: z.string().optional(),
+      imeiSerial: z.string().optional(),
+      devicePassword: z.string().optional(),
+      issueDescription: z.string().min(1).optional(),
+      isCargo: z.boolean().optional(),
+      cargoAddress: z.string().optional(),
+    });
+    const data = schema.parse(req.body);
+    const device = await prisma.device.update({
+      where: { id: req.params.id },
+      data,
+      include: { customer: true, diagnosisItems: { orderBy: { createdAt: 'asc' } } },
+    });
+    res.json(device);
+  } catch (e) {
+    next(e);
+  }
+});
+
 // POST /api/devices/:id/notes — durumu değiştirmeden serbest metin not ekler
 router.post('/:id/notes', async (req, res, next) => {
   try {

@@ -2322,6 +2322,31 @@ async function saveCustomerEdit(customerId, deviceId){
   const ci = customers.findIndex(c=>c.id===customerId);
   if(ci>=0) customers[ci] = { ...customers[ci], ...updated };
 
+  if(deviceId){
+    const device = devices.find(d=>d.id===deviceId);
+    const devBackup = document.getElementById('ce-dev-backup').value.trim();
+    const devPassword = document.getElementById('ce-dev-password').value.trim();
+    const devImei = document.getElementById('ce-dev-imei').value.trim();
+    const devIssue = document.getElementById('ce-dev-issue').value.trim();
+    const devIsCargo = document.getElementById('ce-dev-iscargo').checked;
+    const devCargoAddress = document.getElementById('ce-dev-cargo-address').value.trim();
+    if(!devIssue){ toast('Arıza açıklaması boş bırakılamaz'); return; }
+    const deviceUpdated = await apiFetch(`/devices/${deviceId}/details`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        // Bos string kasitli gonderiliyor (undefined degil) — alan boş
+        // bırakılıp kaydedilirse mevcut değer temizlenebilsin (ör. şifre silme).
+        backupPhone: devBackup,
+        devicePassword: devPassword,
+        imeiSerial: devImei,
+        issueDescription: devIssue,
+        isCargo: devIsCargo,
+        cargoAddress: devCargoAddress,
+      })
+    });
+    if(device) Object.assign(device, deviceUpdated);
+  }
+
   let dealerMsg = '';
   if(deviceId && newDealerId !== undefined){
     const device = devices.find(d=>d.id===deviceId);
@@ -2474,7 +2499,19 @@ function renderDeviceDetail(){
         </div>
       </div>
       <div class="login-hint" style="margin-top:0;">Bayi seçimini değiştirirseniz bu cihaz kaydı o bayinin hesabına (Bayiler sayfası ve bayi portalı) taşınır, ad soyad/telefon bayinin kayıtlı bilgileriyle doldurulur ve cihazın genel toplamı bayinin veresiye hesabına eklenir.</div>
-      <div style="display:flex; gap:8px;">
+      <div style="font-weight:600; font-size:13px; margin-top:14px; margin-bottom:6px;">Cihaz Bilgileri</div>
+      <div class="form-grid">
+        <div class="field"><label>Yedek Telefon (Bu Kayıt)</label><input id="ce-dev-backup" value="${esc(d.backupPhone)}"></div>
+        <div class="field"><label>Cihaz Şifresi</label><input id="ce-dev-password" value="${esc(d.devicePassword)}"></div>
+        <div class="field"><label>IMEI / Seri No</label><input id="ce-dev-imei" value="${esc(d.imeiSerial)}"></div>
+      </div>
+      <div class="field"><label>Arıza</label><textarea id="ce-dev-issue" rows="2">${esc(d.issueDescription)}</textarea></div>
+      <div class="field" style="display:flex; align-items:center; gap:8px; margin-top:10px;">
+        <input type="checkbox" id="ce-dev-iscargo" style="width:auto;" ${d.isCargo ? 'checked' : ''}>
+        <label style="margin:0; font-weight:500; color:var(--ink); font-size:13px;" for="ce-dev-iscargo">Bu cihaz kargo ile geldi</label>
+      </div>
+      <div class="field"><label>Kargo Adresi (opsiyonel)</label><textarea id="ce-dev-cargo-address" rows="2">${esc(d.cargoAddress)}</textarea></div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
         <button class="primary" style="margin-top:0;" onclick="saveCustomerEdit('${d.customer.id}','${d.id}')">Kaydet</button>
         <button class="ghost" onclick="toggleCustomerEdit()">Vazgeç</button>
       </div>
