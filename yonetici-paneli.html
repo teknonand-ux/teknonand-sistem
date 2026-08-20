@@ -2594,7 +2594,7 @@ function renderDeviceDetail(){
         </table>
         <div class="detail-meta" style="margin-bottom:10px;">
           ${d.diagnosisItems.some(it=>it.approved!==null && it.approved!==undefined) ? `
-          <div><span>Onaylanan Toplam</span>₺${d.diagnosisItems.filter(it=>it.approved===true).reduce((s,it)=>s+it.price,0)}</div>
+          <div><span>Onaylanan Toplam</span>₺${d.diagnosisItems.filter(it=>it.approved===true).reduce((s,it)=>s+(parseFloat(it.price)||0),0).toFixed(2)}</div>
           ` : `
           <div><span>Toplam Tahmini Fiyat</span>₺${d.estimatedPrice||0}</div>
           `}
