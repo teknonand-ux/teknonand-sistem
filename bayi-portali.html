@@ -419,6 +419,7 @@ function renderDevices(){
           </div>` : ''}
         ${d.dealerApproved ? `<div class="d-line" style="color:var(--green); font-weight:600;">✓ Fiyat onaylandı</div>` : ''}
         ${d.status === 'RETURNED' ? imgGallery(d.returnImages, 'İade Görselleri') : ''}
+        ${['READY','SHIPPED','DELIVERED'].includes(d.status) ? imgGallery(d.readyImages, 'Teslime Hazır Görselleri') : ''}
         ${d.status === 'DELIVERED' ? imgGallery(d.deliveryImages, 'Teslim Görselleri') : ''}
       </div>
     </div>`;

@@ -149,6 +149,8 @@ model Device {
   returnReason  String?
   returnImages  Json    @default("[]")
 
+  readyImages   Json    @default("[]") // Teslime Hazır aşamasında eklenen görseller (opsiyonel, en fazla 4)
+
   deliveryMethod String?
   deliveryNote   String?
   deliveryImages Json    @default("[]")

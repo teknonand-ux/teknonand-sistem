@@ -330,6 +330,7 @@ function render(d){
   const diagnosingGallery = imgGallery(d.diagnosingImages, 'İnceleme Görselleri');
   const diagnosisGallery = imgGallery(d.diagnosisImages, 'Arıza Tespiti Görselleri');
   const returnGallery = d.status === 'RETURNED' ? imgGallery(d.returnImages, 'İade Görselleri') : '';
+  const readyGallery = ['READY','SHIPPED','DELIVERED'].includes(d.status) ? imgGallery(d.readyImages, 'Teslime Hazır Görselleri') : '';
   const deliveryGallery = d.status === 'DELIVERED' ? imgGallery(d.deliveryImages, 'Teslim Görselleri') : '';
 
   document.getElementById('resultCard').innerHTML = `
@@ -360,6 +361,7 @@ function render(d){
     ${diagnosisGallery}
     ${partsHtml}
     ${returnGallery}
+    ${readyGallery}
     ${deliveryGallery}
     <div class="meta">
       <div><b>${new Date(d.receivedAt || d.createdAt).toLocaleDateString('tr-TR')}</b>Kabul Tarihi</div>

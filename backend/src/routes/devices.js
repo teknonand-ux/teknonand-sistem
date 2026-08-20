@@ -377,6 +377,7 @@ router.patch('/:id/status', async (req, res, next) => {
       })).max(20).optional(),
       returnReason: z.string().optional(),
       returnImages: z.array(dataUrlImage).max(4).optional(),
+      readyImages: z.array(dataUrlImage).max(4).optional(),
       deliveryMethod: z.string().optional(),
       deliveryNote: z.string().optional(),
       deliveryImages: z.array(dataUrlImage).max(4).optional(),

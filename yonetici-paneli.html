@@ -2551,6 +2551,11 @@ function renderDeviceDetail(){
           <label>IMEI / Seri No (Teslime Hazır için zorunlu)</label>
           <input id="st-ready-imei" placeholder="Cihazın IMEI/Seri numarasını girin">
         </div>` : ''}
+        <div class="field">
+          <label>Görsel Ekle (opsiyonel, en fazla 4)</label>
+          <input type="file" id="st-ready-images-input" accept="image/*" multiple onchange="handleImageSelect(event,'ready','st-ready-images-preview')">
+          <div class="img-thumb-row" id="st-ready-images-preview"></div>
+        </div>
       </div>
       <div id="st-shipped-fields" style="display:none;">
         <div class="field">
@@ -2603,6 +2608,11 @@ function renderDeviceDetail(){
         <button class="ghost" style="margin-top:10px;" onclick="sendDiagnosisApprovalWhatsApp('${d.id}')">WhatsApp ile Onay İste</button>
       ` : `<p class="empty">Durum "Arıza Tespiti Bitti" olarak güncellendiğinde arıza kalemleri ve tahmini fiyat burada görünür.</p>`}
       ${d.status === 'AWAITING_PARTS' ? `<button class="ghost" style="margin-top:10px;" onclick="sendAwaitingPartsWhatsApp('${d.id}')">WhatsApp ile "Parça Bekleniyor" Bildir</button>` : ''}
+    </div>
+
+    <div class="card">
+      <h3>Teslime Hazır Görselleri</h3>
+      ${(d.readyImages && d.readyImages.length) ? `<div class="img-gallery">${d.readyImages.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}</div>` : `<p class="empty">Cihaz "Teslime Hazır" durumuna alındığında eklenen görseller (varsa) burada görünür.</p>`}
     </div>
 
     <div class="card">
@@ -2782,10 +2792,12 @@ function renderDeviceDetail(){
   tempImages.diagnosing = (d.diagnosingImages || []).slice();
   tempImages.diagnosis = (d.diagnosisImages || []).slice();
   tempImages.return = (d.returnImages || []).slice();
+  tempImages.ready = (d.readyImages || []).slice();
   tempImages.delivery = (d.deliveryImages || []).slice();
   renderImageThumbs(tempImages.diagnosing, 'st-diagnosing-images-preview', 'diagnosing');
   renderImageThumbs(tempImages.diagnosis, 'st-diagnosis-images-preview', 'diagnosis');
   renderImageThumbs(tempImages.return, 'st-return-images-preview', 'return');
+  renderImageThumbs(tempImages.ready, 'st-ready-images-preview', 'ready');
   renderImageThumbs(tempImages.delivery, 'st-delivery-images-preview', 'delivery');
 
   tempDiagnosisItems = (d.diagnosisItems || []).map(it => ({ description: it.description, price: it.price }));
@@ -3216,7 +3228,7 @@ function onStatusFieldChange(){
   document.getElementById('st-shipped-fields').style.display = status === 'SHIPPED' ? 'block' : 'none';
 }
 
-let tempImages = {diagnosing:[], diagnosis:[], return:[], delivery:[], intake:[]};
+let tempImages = {diagnosing:[], diagnosis:[], return:[], ready:[], delivery:[], intake:[]};
 let tempDiagnosisItems = [];
 
 function renderDiagnosisItemsList(){
@@ -3320,14 +3332,17 @@ async function addStatusEntry(){
     payload.returnImages = tempImages.return.slice(0,4);
     payload.note = note || `İade sebebi: ${returnReason}`;
   }
-  if(status === 'READY' && !d.imeiSerial){
-    const imeiInput = document.getElementById('st-ready-imei');
-    const enteredImei = imeiInput ? imeiInput.value.trim() : '';
-    if(!enteredImei){
-      toast('Teslime Hazır yapmadan önce IMEI / Seri No girilmelidir');
-      return;
+  if(status === 'READY'){
+    if(!d.imeiSerial){
+      const imeiInput = document.getElementById('st-ready-imei');
+      const enteredImei = imeiInput ? imeiInput.value.trim() : '';
+      if(!enteredImei){
+        toast('Teslime Hazır yapmadan önce IMEI / Seri No girilmelidir');
+        return;
+      }
+      payload.imeiSerial = enteredImei;
     }
-    payload.imeiSerial = enteredImei;
+    payload.readyImages = tempImages.ready.slice(0,4);
   }
   if(status === 'SHIPPED'){
     const trackingInput = document.getElementById('st-cargo-tracking');

@@ -30,6 +30,7 @@ const PUBLIC_DEVICE_SELECT = {
   invoicePdf: true,
   invoiceUploadedAt: true,
   returnImages: true,
+  readyImages: true,
   deliveryImages: true,
   deliveryMethod: true,
   cargoTrackingNumber: true,
