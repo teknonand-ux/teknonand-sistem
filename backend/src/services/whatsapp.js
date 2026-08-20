@@ -239,6 +239,34 @@ async function sendStatusWhatsapp(device, customer, status) {
   });
 }
 
+// Müşteriden gelen bir görsel/belge mesajının medyasını indirir (Meta'nın
+// media-id -> geçici indirme URL'i -> binary akışı) ve base64 data URL olarak
+// döner. Video/ses gibi büyük dosyalarda veritabanını şişirmemek için boyut sınırı var
+// (dekont/görsel WhatsApp'ta zaten 5MB altında kalır — bkz. Meta media limitleri).
+const MAX_INBOUND_MEDIA_BYTES = 8 * 1024 * 1024;
+async function downloadIncomingMedia(mediaId) {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  if (!accessToken) throw new Error('WhatsApp Cloud API yapılandırılmamış');
+
+  const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const meta = await metaRes.json();
+  if (!metaRes.ok) throw new Error(meta.error?.message || `HTTP ${metaRes.status}`);
+  if (meta.file_size && meta.file_size > MAX_INBOUND_MEDIA_BYTES) {
+    throw new Error(`Dosya çok büyük (${Math.round(meta.file_size / 1024 / 1024)}MB)`);
+  }
+
+  const fileRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!fileRes.ok) throw new Error(`Medya indirilemedi (HTTP ${fileRes.status})`);
+  const buffer = Buffer.from(await fileRes.arrayBuffer());
+  if (buffer.length > MAX_INBOUND_MEDIA_BYTES) {
+    throw new Error(`Dosya çok büyük (${Math.round(buffer.length / 1024 / 1024)}MB)`);
+  }
+  const mimeType = meta.mime_type || 'application/octet-stream';
+  return { dataUrl: `data:${mimeType};base64,${buffer.toString('base64')}`, mimeType };
+}
+
 // Panelden gelen kutusuna verilen serbest metin yanıtları için — şablon gerektirmez,
 // yalnızca müşterinin son 24 saat içinde bize yazdığı "customer service window"
 // içindeyken çalışır (Meta bunun dışındaki denemeleri kendi tarafında reddeder).
@@ -350,4 +378,5 @@ module.exports = {
   sendNewAppointmentStaffAlert,
   sendAppointmentConfirmation,
   toCloudApiPhone,
+  downloadIncomingMedia,
 };

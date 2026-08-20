@@ -2,7 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee } = require('../middleware/auth');
-const { sendFreeTextMessage } = require('../services/whatsapp');
+const { sendFreeTextMessage, downloadIncomingMedia } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -42,10 +42,26 @@ router.post('/webhook', async (req, res) => {
         for (const msg of value.messages || []) {
           const phoneDigits = normalizePhoneDigits(msg.from);
           if (!phoneDigits) continue;
-          const body =
-            msg.type === 'text'
-              ? msg.text?.body || ''
-              : `[desteklenmeyen mesaj türü: ${msg.type}]`;
+
+          let body = '';
+          let media = null; // { dataUrl, mimeType, filename }
+          if (msg.type === 'text') {
+            body = msg.text?.body || '';
+          } else if (msg.type === 'image' || msg.type === 'document') {
+            // Musteriler dekont/fatura gibi belgeleri genelde gorsel ya da PDF
+            // olarak gonderiyor — ikisini de indirip panelde gosterilebilir hale getiriyoruz.
+            const mediaObj = msg[msg.type] || {};
+            body = mediaObj.caption || (msg.type === 'image' ? '[Görsel]' : `[Belge] ${mediaObj.filename || ''}`.trim());
+            try {
+              const downloaded = await downloadIncomingMedia(mediaObj.id);
+              media = { ...downloaded, filename: mediaObj.filename || null };
+            } catch (e) {
+              console.error('[whatsapp webhook] medya indirilemedi:', e.message);
+              body += `\n⚠️ Medya indirilemedi: ${e.message}`;
+            }
+          } else {
+            body = `[desteklenmeyen mesaj türü: ${msg.type}]`;
+          }
 
           const existing = await prisma.whatsappConversation.findUnique({ where: { phone: phoneDigits } });
           let conversation = existing;
@@ -58,7 +74,15 @@ router.post('/webhook', async (req, res) => {
 
           try {
             await prisma.whatsappChatMessage.create({
-              data: { conversationId: conversation.id, direction: 'IN', body, waMessageId: msg.id },
+              data: {
+                conversationId: conversation.id,
+                direction: 'IN',
+                body,
+                waMessageId: msg.id,
+                mediaUrl: media?.dataUrl,
+                mediaMimeType: media?.mimeType,
+                mediaFilename: media?.filename,
+              },
             });
           } catch (e) {
             if (e.code === 'P2002') continue; // Meta aynı mesajı tekrar gönderdi (retry) — atla

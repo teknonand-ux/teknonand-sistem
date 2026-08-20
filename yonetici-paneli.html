@@ -331,6 +331,8 @@
   .wa-bubble.in{align-self:flex-start; background:var(--paper); border:1px solid var(--line); border-bottom-left-radius:3px;}
   .wa-bubble.out{align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:3px;}
   .wa-bubble-meta{font-size:10px; opacity:.65; margin-top:4px;}
+  .wa-bubble-img{display:block; max-width:220px; max-height:220px; width:100%; border-radius:8px; margin-bottom:6px; cursor:pointer; object-fit:cover;}
+  .wa-bubble-file{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:8px; background:rgba(0,0,0,0.08); text-decoration:none; color:inherit; font-weight:600; margin-bottom:4px;}
   .wa-thread-empty{flex:1; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:13px;}
   .wa-composer{display:flex; gap:8px; padding:12px; border-top:1px solid var(--line);}
   .wa-composer textarea{flex:1; resize:none; border:1px solid var(--line); border-radius:10px; padding:9px 12px; font:inherit; font-size:13.5px; max-height:90px;}
@@ -1200,9 +1202,14 @@ function renderWaThread(data){
       <button class="ghost" style="color:var(--red); border-color:var(--red);" onclick="deleteWaConversation('${conversation.id}')">Sohbeti Sil</button>
     </div>
     <div class="wa-thread-body" id="waThreadBody">
-      ${messages.map(m=>`
-        <div class="wa-bubble ${m.direction==='IN'?'in':'out'}">${esc(m.body)}<div class="wa-bubble-meta">${m.direction==='OUT' && m.employee ? esc(m.employee.name)+' · ' : ''}${waTime(m.createdAt)}</div></div>
-      `).join('') || '<div style="color:var(--ink-soft); font-size:12.5px;">Henüz mesaj yok</div>'}
+      ${messages.map(m=>{
+        const mediaHtml = !m.mediaUrl ? '' : (m.mediaMimeType && m.mediaMimeType.startsWith('image/')
+          ? `<img src="${esc(m.mediaUrl)}" class="wa-bubble-img" onclick="openLightbox('${esc(m.mediaUrl)}')">`
+          : `<a href="${esc(m.mediaUrl)}" target="_blank" rel="noopener" class="wa-bubble-file">📎 ${esc(m.mediaFilename || 'Belgeyi Aç')}</a>`);
+        return `
+        <div class="wa-bubble ${m.direction==='IN'?'in':'out'}">${mediaHtml}${esc(m.body)}<div class="wa-bubble-meta">${m.direction==='OUT' && m.employee ? esc(m.employee.name)+' · ' : ''}${waTime(m.createdAt)}</div></div>
+      `;
+      }).join('') || '<div style="color:var(--ink-soft); font-size:12.5px;">Henüz mesaj yok</div>'}
     </div>
     <div class="wa-composer">
       <textarea id="waComposerInput" rows="1" placeholder="Mesaj yazın... (Enter ile gönder)" onkeydown="onWaComposerKeydown(event)"></textarea>

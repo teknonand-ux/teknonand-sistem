@@ -454,6 +454,9 @@ model WhatsappChatMessage {
   direction      WhatsappDirection
   body           String
   waMessageId    String?              @unique // Meta mesaj id'si — webhook tekrarlarını (retry) ayıklamak için
+  mediaUrl       String? // musteriden gelen gorsel/belge (dekont vb.) — base64 data URL
+  mediaMimeType  String?
+  mediaFilename  String?
   employeeId     String? // OUT mesajını panelden gönderen personel
   employee       Employee?            @relation(fields: [employeeId], references: [id])
   createdAt      DateTime             @default(now())
