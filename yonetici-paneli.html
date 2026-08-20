@@ -2593,7 +2593,11 @@ function renderDeviceDetail(){
           </tbody>
         </table>
         <div class="detail-meta" style="margin-bottom:10px;">
+          ${d.diagnosisItems.some(it=>it.approved!==null && it.approved!==undefined) ? `
+          <div><span>Onaylanan Toplam</span>₺${d.diagnosisItems.filter(it=>it.approved===true).reduce((s,it)=>s+it.price,0)}</div>
+          ` : `
           <div><span>Toplam Tahmini Fiyat</span>₺${d.estimatedPrice||0}</div>
+          `}
         </div>
         ${(d.diagnosisImages && d.diagnosisImages.length) ? `<div class="img-gallery">${d.diagnosisImages.map(src=>`<img src="${esc(src)}" onclick="openLightbox('${esc(src)}')">`).join('')}</div>` : ''}
         <button class="ghost" style="margin-top:10px;" onclick="sendDiagnosisApprovalWhatsApp('${d.id}')">WhatsApp ile Onay İste</button>
