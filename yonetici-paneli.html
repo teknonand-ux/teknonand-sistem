@@ -4091,17 +4091,19 @@ function renderSupplierDetail(){
     <div class="card">
       <h3>Bu Toptancıdan Alınan Stok Kalemleri</h3>
       <p class="login-hint" style="margin-top:0;">Yanlış girilmiş veya toptancıya iade edilen bir kalemi silerseniz, bu kalemin eklenmesiyle oluşan borç da otomatik geri alınır.</p>
-      <table><thead><tr><th>Parça</th><th>Kaynak</th><th>Adet</th><th>Maliyet</th><th></th></tr></thead>
+      <table><thead><tr><th>Parça</th><th>Kaynak</th><th>Adet</th><th>Maliyet</th><th>Personel</th><th></th></tr></thead>
         <tbody>${(stockItems.length || supplierDeviceParts.length) ? `
           ${stockItems.map(item=>`
           <tr><td>${esc(item.name)}</td><td>Stok</td><td>${item.quantity}</td>
           <td>₺${(parseFloat(item.unitCostTry)||0).toFixed(2)}${item.unitCostUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(item.unitCostUsd).toFixed(2)})</span>`:''}</td>
+          <td>—</td>
           <td><button class="ghost" onclick="removeSupplierStockItem('${item.id}')">Sil</button></td></tr>`).join('')}
           ${supplierDeviceParts.map(p=>`
           <tr><td>${esc(p.name)}</td><td>Cihaz · ${esc(p.trackingCode)}</td><td>1</td>
           <td>₺${(parseFloat(p.cost)||0).toFixed(2)}${p.costUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(p.costUsd).toFixed(2)})</span>`:''}</td>
+          <td>${p.addedByEmployee ? esc(p.addedByEmployee.name) : '—'}</td>
           <td><button class="ghost" onclick="openDevice('${p.deviceId}')">Cihaza Git</button></td></tr>`).join('')}
-        ` : `<tr><td colspan="5" class="empty">Bu toptancıdan henüz stok girişi yok</td></tr>`}</tbody></table>
+        ` : `<tr><td colspan="6" class="empty">Bu toptancıdan henüz stok girişi yok</td></tr>`}</tbody></table>
     </div>
   `;
 }
