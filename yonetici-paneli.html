@@ -4036,6 +4036,12 @@ function renderSupplierDetail(){
   const balanceTry = parseFloat(s.currentBalance) || 0;
   const balanceUsd = parseFloat(s.currentBalanceUsd) || 0;
   const stockItems = stock.filter(item=>item.supplierId===s.id);
+  // Bir cihazın "Parçalar / Yapılan İşlemler" alanına stoktan seçilmeden, doğrudan
+  // toptancı seçilerek eklenen parçalar da (stockItemId yoksa) burada listelensin —
+  // stoktan seçilenler zaten kendi stok kalemi üzerinden yukarıda görünüyor.
+  const supplierDeviceParts = devices.flatMap(d => (d.parts||[])
+    .filter(p => p.supplierId===s.id && !p.stockItemId)
+    .map(p => ({ ...p, deviceId: d.id, trackingCode: d.trackingCode })));
 
   box.innerHTML = `
     <div class="detail-head">
@@ -4062,7 +4068,7 @@ function renderSupplierDetail(){
     <div class="stat-grid">
       <div class="stat"><div class="num" style="color:${balanceTry>0?'var(--red)':'var(--green)'}">₺${balanceTry.toFixed(2)}</div><div class="lbl">Borç (₺)</div></div>
       <div class="stat"><div class="num" style="color:${balanceUsd>0?'var(--red)':'var(--green)'}">$${balanceUsd.toFixed(2)}</div><div class="lbl">Borç ($)</div></div>
-      <div class="stat"><div class="num">${stockItems.length}</div><div class="lbl">Bu Toptancıdan Alınan Kalem</div></div>
+      <div class="stat"><div class="num">${stockItems.length + supplierDeviceParts.length}</div><div class="lbl">Bu Toptancıdan Alınan Kalem</div></div>
     </div>
 
     <div class="card">
@@ -4085,11 +4091,17 @@ function renderSupplierDetail(){
     <div class="card">
       <h3>Bu Toptancıdan Alınan Stok Kalemleri</h3>
       <p class="login-hint" style="margin-top:0;">Yanlış girilmiş veya toptancıya iade edilen bir kalemi silerseniz, bu kalemin eklenmesiyle oluşan borç da otomatik geri alınır.</p>
-      <table><thead><tr><th>Parça</th><th>Adet</th><th>Maliyet</th><th></th></tr></thead>
-        <tbody>${stockItems.length ? stockItems.map(item=>`
-          <tr><td>${esc(item.name)}</td><td>${item.quantity}</td>
+      <table><thead><tr><th>Parça</th><th>Kaynak</th><th>Adet</th><th>Maliyet</th><th></th></tr></thead>
+        <tbody>${(stockItems.length || supplierDeviceParts.length) ? `
+          ${stockItems.map(item=>`
+          <tr><td>${esc(item.name)}</td><td>Stok</td><td>${item.quantity}</td>
           <td>₺${(parseFloat(item.unitCostTry)||0).toFixed(2)}${item.unitCostUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(item.unitCostUsd).toFixed(2)})</span>`:''}</td>
-          <td><button class="ghost" onclick="removeSupplierStockItem('${item.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="4" class="empty">Bu toptancıdan henüz stok girişi yok</td></tr>`}</tbody></table>
+          <td><button class="ghost" onclick="removeSupplierStockItem('${item.id}')">Sil</button></td></tr>`).join('')}
+          ${supplierDeviceParts.map(p=>`
+          <tr><td>${esc(p.name)}</td><td>Cihaz · ${esc(p.trackingCode)}</td><td>1</td>
+          <td>₺${(parseFloat(p.cost)||0).toFixed(2)}${p.costUsd?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(p.costUsd).toFixed(2)})</span>`:''}</td>
+          <td><button class="ghost" onclick="openDevice('${p.deviceId}')">Cihaza Git</button></td></tr>`).join('')}
+        ` : `<tr><td colspan="5" class="empty">Bu toptancıdan henüz stok girişi yok</td></tr>`}</tbody></table>
     </div>
   `;
 }
