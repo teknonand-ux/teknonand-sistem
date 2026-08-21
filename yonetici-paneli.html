@@ -370,12 +370,9 @@
       <button data-view="suppliers">Toptancı</button>
       <button data-view="employees" class="admin-only">Personel</button>
       <button data-view="dealers">Bayiler</button>
-      <button data-view="label-design" class="admin-only">Etiket Tasarımı</button>
-      <button data-view="doc-design" class="admin-only">Belge Tasarımı</button>
-      <button data-view="whatsapp-templates" class="admin-only">WhatsApp Şablonları</button>
       <button data-view="cashbox" class="admin-only">Kasa</button>
       <button data-view="profit" class="admin-only">Kâr / Zarar</button>
-      <button data-view="backup" class="admin-only">Yedekleme</button>
+      <button data-view="settings" class="admin-only">Ayarlar</button>
     </nav>
     <div class="user-badge" id="userBadge"></div>
     <div class="shared-note">Not: bu prototipteki veriler bu tarayıcıda/uygulamayı açan herkeste paylaşımlı olarak saklanır (demo amaçlı).</div>
@@ -654,6 +651,30 @@
       <div class="card">
         <h3>Yaklaşan Randevular</h3>
         <div id="appointmentList"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="view" id="view-settings">
+      <h1>Ayarlar</h1>
+      <p class="subtitle">Tasarım, şablon ve yedekleme ayarlarına buradan ulaşın</p>
+      <div class="form-grid">
+        <div class="card" style="cursor:pointer;" onclick="if(switchView('label-design')) refreshViewData('label-design')">
+          <h3>Etiket Tasarımı</h3>
+          <p class="login-hint" style="margin:0;">Etiket boyutu, yazı tipleri ve yazdırma ayarları</p>
+        </div>
+        <div class="card" style="cursor:pointer;" onclick="if(switchView('doc-design')) refreshViewData('doc-design')">
+          <h3>Belge Tasarımı</h3>
+          <p class="login-hint" style="margin:0;">Fiş/belge üzerindeki firma bilgileri ve görünüm</p>
+        </div>
+        <div class="card" style="cursor:pointer;" onclick="if(switchView('whatsapp-templates')) refreshViewData('whatsapp-templates')">
+          <h3>WhatsApp Şablonları</h3>
+          <p class="login-hint" style="margin:0;">Otomatik gönderilen WhatsApp mesaj şablonları</p>
+        </div>
+        <div class="card" style="cursor:pointer;" onclick="if(switchView('backup')) refreshViewData('backup')">
+          <h3>Yedekleme</h3>
+          <p class="login-hint" style="margin:0;">Verilerin dışa aktarımı ve yedek geri yükleme</p>
+        </div>
       </div>
     </div>
 
@@ -4980,6 +5001,7 @@ document.addEventListener('click', (e)=>{
 });
 
 const RESTORABLE_VIEWS = new Set(Array.from(document.querySelectorAll('nav button')).map(b=>b.dataset.view));
+['label-design','doc-design','whatsapp-templates','backup'].forEach(v=>RESTORABLE_VIEWS.add(v));
 
 function switchView(name){
   if(document.body.classList.contains('restricted-user') && (name==='cashbox' || name==='profit' || name==='label-design' || name==='doc-design' || name==='employees' || name==='whatsapp-templates' || name==='backup')){
@@ -4988,7 +5010,9 @@ function switchView(name){
   }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
-  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+  const SETTINGS_SUBVIEWS = new Set(['label-design','doc-design','whatsapp-templates','backup']);
+  const navActiveName = SETTINGS_SUBVIEWS.has(name) ? 'settings' : name;
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===navActiveName));
   // Sadece nav'daki üst seviye sayfaları hatırlıyoruz — cihaz/bayi detay sayfaları
   // ilgili kayıt yeniden seçilmeden anlamlı şekilde geri yüklenemez.
   if(RESTORABLE_VIEWS.has(name)) localStorage.setItem('teknonand_admin_last_view', name);
