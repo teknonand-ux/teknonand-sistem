@@ -1066,18 +1066,6 @@ function esc(str){
     .replace(/'/g, '&#39;');
 }
 
-// Fiziksel etiket kaybolur/fotoğrafı çekilirse cihaz şifresi tamamen açık
-// verilmesin diye yalnızca ETİKET BASKISINDA kullanılır — panelde (liste,
-// cihaz detayı, düzenleme formu) personel tam şifreyi görmeye devam eder,
-// çünkü tamir için gerekli. Son 2 karakter açık kalır (personelin doğru
-// şifreyi yazdığını teyit edebilmesi için), gerisi * ile maskelenir.
-function maskDevicePassword(pw){
-  if(!pw) return '';
-  const s = String(pw);
-  if(s.length <= 2) return '*'.repeat(s.length);
-  return '*'.repeat(s.length - 2) + s.slice(-2);
-}
-
 let authToken = null;
 let devices = [];
 let stock = [];
@@ -2946,13 +2934,13 @@ function updateLabelPreview(){
   document.getElementById('lp-name').textContent = name;
   document.getElementById('lp-phone').textContent = phone ? '· ' + phone : '';
   document.getElementById('lp-issue').textContent = issue ? 'Arıza: ' + issue : '';
-  document.getElementById('lp-pass').textContent = pass ? 'Şifre: ' + maskDevicePassword(pass) : '';
+  document.getElementById('lp-pass').textContent = pass ? 'Şifre: ' + pass : '';
   document.getElementById('lp-imei').textContent = imei ? 'IMEI: ' + imei : '';
 
   document.getElementById('pl-name').textContent = name;
   document.getElementById('pl-phone').textContent = phone ? '· ' + phone : '';
   document.getElementById('pl-issue').textContent = issue ? 'Arıza: ' + issue : '';
-  document.getElementById('pl-pass').textContent = pass ? 'Şifre: ' + maskDevicePassword(pass) : '';
+  document.getElementById('pl-pass').textContent = pass ? 'Şifre: ' + pass : '';
   document.getElementById('pl-imei').textContent = imei ? 'IMEI: ' + imei : '';
 
   applyLabelSettings('lp');
@@ -3282,7 +3270,7 @@ async function printLabelNow(labelData){
   document.getElementById('pl-name').textContent = labelData.customerName || '';
   document.getElementById('pl-phone').textContent = labelData.customerPhone ? '· ' + labelData.customerPhone : '';
   document.getElementById('pl-issue').textContent = labelData.issueDescription ? 'Arıza: ' + labelData.issueDescription : '';
-  document.getElementById('pl-pass').textContent = labelData.devicePassword ? 'Şifre: ' + maskDevicePassword(labelData.devicePassword) : '';
+  document.getElementById('pl-pass').textContent = labelData.devicePassword ? 'Şifre: ' + labelData.devicePassword : '';
   document.getElementById('pl-imei').textContent = labelData.imeiSerial ? 'IMEI: ' + labelData.imeiSerial : '';
   applyLabelSettings('pl');
   applyLabelLogo('pl');
