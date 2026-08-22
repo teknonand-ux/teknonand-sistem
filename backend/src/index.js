@@ -39,20 +39,26 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 
-// NOT: CORS_ORIGIN şu an prod'da tanımlı değil (bkz. aşağıdaki uyarı) ve bunu kasıtlı
-// olarak "fail-closed" yapmadık — personel panel/portalları çoğunlukla dosyayı
-// tarayıcıda doğrudan çift tıklayarak (file://) açıyor, bu da tarayıcıda "Origin: null"
-// gönderir ve GitHub Pages origin'ine kilitlenen bir allowlist bu kullanımı kırar. Ayrıca
-// kimlik doğrulama çerez değil Authorization header/JWT ile yapıldığından (localStorage),
-// gevşek CORS burada klasik CSRF riski taşımıyor — asıl risk XSS ile token çalınması,
-// CORS'un koruyamayacağı bir senaryo. Personel tamamen hosted panel URL'sine geçerse
-// CORS_ORIGIN=https://teknonand-ux.github.io olarak ayarlanıp sıkılaştırılabilir.
+// CORS_ORIGIN tanımlıysa yalnızca o origin'lere (virgülle ayrılmış) izin veriyoruz.
+// İki istisna her zaman serbest: Origin header'ı hiç olmayan istekler (curl, Meta
+// webhook'ları, sunucu-sunucu — CORS zaten bunları etkilemiyor) ve "null" origin
+// (personel panel/portalları çoğunlukla dosyayı tarayıcıda çift tıklayarak, yani
+// file:// olarak açıyor; tarayıcı bu durumda Origin: null gönderir — bunu da
+// engellersek personel iş akışı kırılır). Kimlik doğrulama çerez değil Authorization
+// header/JWT ile yapıldığından (localStorage), zaten klasik çerez tabanlı CSRF riski
+// yok — buradaki asıl amaç başka web sitelerinin tarayıcı üzerinden API'ye sessizce
+// istek atabilmesini kesmek.
 const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
 const allowAllOrigins = allowedOrigins.length === 0 || allowedOrigins.includes('*');
 if (allowAllOrigins) {
   console.warn('[cors] CORS_ORIGIN tanımlı değil — API şu an TÜM originlerden erişime açık. Üretimde .env dosyasında CORS_ORIGIN ayarlayın.');
 }
-app.use(cors({ origin: allowAllOrigins ? true : allowedOrigins }));
+app.use(cors({
+  origin: allowAllOrigins ? true : (origin, callback) => {
+    if (!origin || origin === 'null' || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(Object.assign(new Error('CORS: origin izinli değil'), { status: 403 }));
+  },
+}));
 // rawBody: WhatsApp/Instagram webhook imza doğrulaması (bkz. middleware/verifyMetaSignature)
 // HMAC'i ham gövde baytları üzerinden hesaplamak zorunda — JSON.parse sonrası yeniden
 // serialize edilen gövde Meta'nın imzasıyla birebir eşleşmeyebilir.
