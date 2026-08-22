@@ -524,6 +524,7 @@ router.patch('/:id/diagnosis-items', async (req, res, next) => {
 router.patch('/:id/details', async (req, res, next) => {
   try {
     const schema = z.object({
+      model: z.string().min(1).optional(),
       backupPhone: z.string().optional(),
       imeiSerial: z.string().optional(),
       devicePassword: z.string().optional(),
