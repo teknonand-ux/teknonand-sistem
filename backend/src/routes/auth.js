@@ -36,15 +36,40 @@ const dealerLoginSchema = z.object({
 
 const normalizePhone = (val) => String(val || '').replace(/\D/g, '');
 
+// Hesap bazlı kilitleme eşiği — IP bazlı loginLimiter'dan (10 istek/15dk) farklı
+// bir savunma katmanı: farklı/rotasyonlu IP'lerden tek bir hesabı hedefleyen
+// denemelere karşı. Süre sonunda otomatik açılmaz (kasıtlı) — yönetici, kilitli
+// hesabı POST /api/employees/:id/unlock ile açar (bkz. routes/employees.js).
+const MAX_FAILED_LOGIN_ATTEMPTS = 3;
+
 // POST /api/auth/employee-login  (yönetici paneli)
 router.post('/employee-login', loginLimiter, async (req, res, next) => {
   try {
     const { username, password } = loginSchema.parse(req.body);
     const employee = await prisma.employee.findUnique({ where: { username: username.toLowerCase() } });
     const passwordOk = await verifyPassword(password, employee?.passwordHash || DUMMY_HASH);
+
+    if (employee?.lockedAt) {
+      return res.status(423).json({ error: `Hesabınız ${MAX_FAILED_LOGIN_ATTEMPTS} hatalı giriş denemesinden sonra kilitlendi. Açılması için yöneticinize başvurun.` });
+    }
+
     if (!employee || !employee.active || !passwordOk) {
+      if (employee && employee.active) {
+        const attempts = employee.failedLoginAttempts + 1;
+        await prisma.employee.update({
+          where: { id: employee.id },
+          data: attempts >= MAX_FAILED_LOGIN_ATTEMPTS
+            ? { failedLoginAttempts: attempts, lockedAt: new Date() }
+            : { failedLoginAttempts: attempts },
+        });
+      }
       return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
     }
+
+    if (employee.failedLoginAttempts > 0) {
+      await prisma.employee.update({ where: { id: employee.id }, data: { failedLoginAttempts: 0 } });
+    }
+
     const token = signToken({ id: employee.id, type: 'employee', permission: employee.permission });
     res.json({
       token,

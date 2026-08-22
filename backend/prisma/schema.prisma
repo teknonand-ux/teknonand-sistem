@@ -32,6 +32,12 @@ model Employee {
   active       Boolean            @default(true)
   createdAt    DateTime           @default(now())
 
+  // 3 hatalı giriş denemesinde hesap kilitlenir (bkz. routes/auth.js) — sadece
+  // yönetici (routes/employees.js POST /:id/unlock) kilidi açabilir, otomatik
+  // süre sonunda açılmaz (kasıtlı: hedefli saldırı denemesini yönetici görsün).
+  failedLoginAttempts Int         @default(0)
+  lockedAt            DateTime?
+
   assignedDevices Device[]             @relation("AssignedEmployee")
   statusChanges   DeviceStatusHistory[]
   addedDeviceParts DevicePart[]

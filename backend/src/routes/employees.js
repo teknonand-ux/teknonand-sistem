@@ -11,7 +11,7 @@ router.get('/', async (req, res, next) => {
   try {
     const employees = await prisma.employee.findMany({
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, role: true, username: true, permission: true, active: true, phone: true, email: true },
+      select: { id: true, name: true, role: true, username: true, permission: true, active: true, phone: true, email: true, lockedAt: true, failedLoginAttempts: true },
     });
     res.json(employees);
   } catch (e) {
@@ -51,6 +51,21 @@ router.patch('/:id', requireAdmin, async (req, res, next) => {
     const { password, ...rest } = schema.parse(req.body);
     const data = password ? { ...rest, passwordHash: await hashPassword(password) } : rest;
     const employee = await prisma.employee.update({ where: { id: req.params.id }, data });
+    res.json(employee);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/employees/:id/unlock — 3 hatalı girişten sonra kilitlenen hesabı
+// yönetici açar (bkz. routes/auth.js employee-login).
+router.post('/:id/unlock', requireAdmin, async (req, res, next) => {
+  try {
+    const employee = await prisma.employee.update({
+      where: { id: req.params.id },
+      data: { lockedAt: null, failedLoginAttempts: 0 },
+      select: { id: true, name: true, role: true, username: true, permission: true, active: true, phone: true, email: true, lockedAt: true, failedLoginAttempts: true },
+    });
     res.json(employee);
   } catch (e) {
     next(e);

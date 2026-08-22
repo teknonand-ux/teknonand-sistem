@@ -3648,13 +3648,21 @@ async function resetEmployeePassword(id){
   toast('Şifre güncellendi');
 }
 
+async function unlockEmployee(id){
+  const updated = await apiFetch(`/employees/${id}/unlock`, { method: 'POST' });
+  const i = employees.findIndex(e=>e.id===id);
+  if(i>=0) employees[i] = updated;
+  toast(`${updated.name} — hesap kilidi açıldı`);
+  renderEmployees();
+}
+
 function renderEmployees(){
   const tbody = document.getElementById('employeeTable');
   if(!tbody) return;
   tbody.innerHTML = employees.length ? employees.map(e=>`
-    <tr><td>${esc(e.name)}</td><td class="code">${esc(e.username)||'—'}</td><td>${esc(e.role)||'—'}</td>
+    <tr><td>${esc(e.name)}${e.lockedAt ? ' <span class="pill" style="color:#dc2626; background:#FBEAE6;">🔒 Kilitli</span>' : ''}</td><td class="code">${esc(e.username)||'—'}</td><td>${esc(e.role)||'—'}</td>
     <td>${e.permission==='RESTRICTED' ? '<span class="pill" style="color:var(--amber); background:#FBF0DD;">Kısıtlı</span>' : '<span class="pill" style="color:var(--green); background:#E4F3EC;">Yönetici</span>'}</td>
-    <td><button class="ghost" onclick="resetEmployeePassword('${e.id}')">Şifre Değiştir</button> <button class="ghost" onclick="removeItem('employees','${e.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz personel eklenmedi</td></tr>`;
+    <td>${e.lockedAt ? `<button class="ghost" onclick="unlockEmployee('${e.id}')">Kilidi Aç</button> ` : ''}<button class="ghost" onclick="resetEmployeePassword('${e.id}')">Şifre Değiştir</button> <button class="ghost" onclick="removeItem('employees','${e.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">Henüz personel eklenmedi</td></tr>`;
 }
 
 async function doLogin(){
@@ -3667,7 +3675,12 @@ async function doLogin(){
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ username, password })
     });
-    if(!res.ok){ errorEl.style.display = 'block'; return; }
+    if(!res.ok){
+      const data = await res.json().catch(()=>({}));
+      errorEl.textContent = data.error || 'Kullanıcı adı veya şifre hatalı.';
+      errorEl.style.display = 'block';
+      return;
+    }
     const data = await res.json();
     authToken = data.token;
     localStorage.setItem('teknonand_admin_token', authToken);
