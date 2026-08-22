@@ -6,7 +6,11 @@ const { hashPassword } = require('../lib/auth');
 // sistem-plani.md prototipindeki varsayılan giriş (yonetici / teknonand) ile eşleşir.
 async function main() {
   const username = (process.env.SEED_ADMIN_USERNAME || 'yonetici').toLowerCase();
-  const password = process.env.SEED_ADMIN_PASSWORD || 'teknonand';
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!password) {
+    console.error('SEED_ADMIN_PASSWORD tanımlı değil — tahmin edilebilir bir varsayılan şifreyle admin oluşturmamak için duruyoruz. .env dosyasında (veya Railway değişkenlerinde) SEED_ADMIN_PASSWORD tanımlayıp tekrar çalıştırın.');
+    process.exit(1);
+  }
 
   const existing = await prisma.employee.findUnique({ where: { username } });
   if (existing) {

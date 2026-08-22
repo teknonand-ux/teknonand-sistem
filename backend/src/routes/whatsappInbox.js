@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee } = require('../middleware/auth');
+const { verifyMetaSignature } = require('../middleware/verifyMetaSignature');
 const { sendFreeTextMessage, downloadIncomingMedia } = require('../services/whatsapp');
 
 const router = express.Router();
@@ -31,7 +32,7 @@ async function findCustomerByPhone(waPhoneDigits) {
 // POST /api/whatsapp/webhook — Meta'dan gelen mesaj/olay bildirimleri. Herkese açık
 // olmak zorunda (Meta bu uca istek atarken oturum/token kullanmaz); her zaman hızlıca
 // 200 dönüyoruz, aksi halde Meta aynı bildirimi tekrar tekrar dener.
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', verifyMetaSignature('WHATSAPP_APP_SECRET'), async (req, res) => {
   res.sendStatus(200);
   try {
     const entries = req.body?.entry || [];

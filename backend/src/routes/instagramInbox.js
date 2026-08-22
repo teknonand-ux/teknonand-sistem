@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee } = require('../middleware/auth');
+const { verifyMetaSignature } = require('../middleware/verifyMetaSignature');
 const { sendInstagramMessage } = require('../services/instagram');
 
 const router = express.Router();
@@ -37,7 +38,7 @@ async function fetchInstagramUsername(igsid) {
 // POST /api/instagram/webhook — Meta'dan gelen DM bildirimleri. Herkese açık
 // olmak zorunda; her zaman hızlıca 200 dönüyoruz, aksi halde Meta aynı
 // bildirimi tekrar tekrar dener.
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', verifyMetaSignature('INSTAGRAM_APP_SECRET'), async (req, res) => {
   res.sendStatus(200);
   try {
     const entries = req.body?.entry || [];
