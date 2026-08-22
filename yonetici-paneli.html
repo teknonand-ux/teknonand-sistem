@@ -14,7 +14,7 @@
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js" defer></script>
+<script src="vendor/qrcode-generator.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
 <style>
   :root{
@@ -1476,7 +1476,7 @@ function revealField(key){
   document.getElementById('btn-'+key).style.display = 'none';
 }
 
-function normPhone(p){ return (p||'').replace(/\s|-/g,''); }
+function normPhone(p){ return (p||'').replace(/\D/g,''); }
 
 let customerSuggestTimer = null;
 let customerSuggestSeq = 0;
@@ -2617,7 +2617,7 @@ function renderDeviceDetail(){
         </div>
       </div>
       <div id="st-return-fields" style="display:none;">
-        <div class="field"><label>İade Sebebi</label><textarea id="st-return-reason" rows="2" placeholder="İade sebebini yazın">${d.returnReason||''}</textarea></div>
+        <div class="field"><label>İade Sebebi</label><textarea id="st-return-reason" rows="2" placeholder="İade sebebini yazın">${esc(d.returnReason||'')}</textarea></div>
         <div class="field">
           <label>Görsel Ekle (opsiyonel, en fazla 4)</label>
           <input type="file" id="st-return-images-input" accept="image/*" multiple onchange="handleImageSelect(event,'return','st-return-images-preview')">
@@ -2652,7 +2652,7 @@ function renderDeviceDetail(){
           <input id="st-delivery-imei" placeholder="Cihazın IMEI/Seri numarasını girin">
           <div class="login-hint" style="margin-top:6px;">Bu cihaz kayıt sırasında kapalı/açılmıyor olarak işaretlenmişti — teslim edebilmek için IMEI/Seri numarasının şimdi girilmesi gerekiyor.</div>
         </div>` : ''}
-        <div class="field"><label>Teslim Notu (opsiyonel)</label><textarea id="st-delivery-note" rows="2" placeholder="örn. cihaz temiz teslim edildi, kılıf takıldı">${d.deliveryNote||''}</textarea></div>
+        <div class="field"><label>Teslim Notu (opsiyonel)</label><textarea id="st-delivery-note" rows="2" placeholder="örn. cihaz temiz teslim edildi, kılıf takıldı">${esc(d.deliveryNote||'')}</textarea></div>
         <div class="field">
           <label>Görsel Ekle (opsiyonel, en fazla 4)</label>
           <input type="file" id="st-delivery-images-input" accept="image/*" multiple onchange="handleImageSelect(event,'delivery','st-delivery-images-preview')">
@@ -2664,7 +2664,11 @@ function renderDeviceDetail(){
     </div>
 
     <div class="card">
-      <h3>Arıza Tespiti ve Onay</h3>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <h3 style="margin:0;">Arıza Tespiti ve Onay</h3>
+        ${(d.diagnosisItems && d.diagnosisItems.length) ? `<button class="ghost" style="margin-top:0;" onclick="openDiagnosisEdit()">Düzenle</button>` : ''}
+      </div>
+      <div id="diagnosis-view">
       ${(d.diagnosisItems && d.diagnosisItems.length) ? `
         <table class="line-table" style="margin-bottom:10px;">
           <thead><tr><th>Arıza</th><th>Fiyat</th><th>Durum</th></tr></thead>
@@ -2687,6 +2691,29 @@ function renderDeviceDetail(){
         <button class="ghost" style="margin-top:10px;" onclick="sendDiagnosisApprovalWhatsApp('${d.id}')">WhatsApp ile Onay İste</button>
       ` : `<p class="empty">Durum "Arıza Tespiti Bitti" olarak güncellendiğinde arıza kalemleri ve tahmini fiyat burada görünür.</p>`}
       ${d.status === 'AWAITING_PARTS' ? `<button class="ghost" style="margin-top:10px;" onclick="sendAwaitingPartsWhatsApp('${d.id}')">WhatsApp ile "Parça Bekleniyor" Bildir</button>` : ''}
+      </div>
+      <div id="diagnosis-edit" style="display:none;">
+        <div class="login-hint" style="margin-top:0;">
+          Buradaki değişiklikler cihazın durumunu değiştirmez, WhatsApp bildirimi göndermez. Yalnızca
+          değiştirdiğiniz/eklediğiniz kalemler için müşteri onayı sıfırlanır — dokunmadığınız kalemlerin
+          onay/ret durumu korunur.
+        </div>
+        <div id="diagnosis-edit-items-list" class="parts-list" style="margin:8px 0;"></div>
+        <div class="part-add-row">
+          <input id="edi-desc" class="pname-input" placeholder="Arıza açıklaması (örn. Ekran kırık)" onkeydown="if(event.key==='Enter'){event.preventDefault(); addEditDiagnosisItem();}">
+          <input id="edi-price" class="pprice-input" type="number" placeholder="Fiyat (₺)" onkeydown="if(event.key==='Enter'){event.preventDefault(); addEditDiagnosisItem();}">
+          <button type="button" class="ghost" onclick="addEditDiagnosisItem()">Ekle</button>
+        </div>
+        <div class="field" style="margin-top:10px;">
+          <label>Görseller (en fazla 4)</label>
+          <input type="file" id="diagnosis-edit-images-input" accept="image/*" multiple onchange="handleImageSelect(event,'diagnosisEdit','diagnosis-edit-images-preview')">
+          <div class="img-thumb-row" id="diagnosis-edit-images-preview"></div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          <button class="primary" style="margin-top:0;" onclick="saveDiagnosisEdit()">Kaydet</button>
+          <button class="ghost" style="margin-top:0;" onclick="cancelDiagnosisEdit()">Vazgeç</button>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -3168,7 +3195,7 @@ function sendDiagnosisApprovalWhatsApp(id){
     tahmini_fiyat: d.estimatedPrice || 0
   }));
   const number = toWhatsAppNumber(d.customer.phone);
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
 }
 
 function sendAwaitingPartsWhatsApp(id){
@@ -3180,7 +3207,7 @@ function sendAwaitingPartsWhatsApp(id){
     cihaz_modeli: d.model
   }));
   const number = toWhatsAppNumber(d.customer.phone);
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
 }
 
 function sendNetPriceWhatsApp(id){
@@ -3197,7 +3224,7 @@ function sendNetPriceWhatsApp(id){
     toplam_tutar: total.toFixed(2)
   }));
   const number = toWhatsAppNumber(d.customer.phone);
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
 }
 
 function printDeviceLabel(id){
@@ -3220,7 +3247,23 @@ function handleLabelPrint(labelData){
   else requestRemoteLabelPrint(labelData);
 }
 
-function printLabelNow(labelData){
+// Karekod (ve logo) resmi <img src="data:..."> olarak DOM'a yeni eklendiğinde
+// tarayıcı onu decode edip boyamadan window.print() çağrılırsa, görsel bazen
+// yazdırma anında hazır olmadığı için etikette çıkmıyor. Print'ten önce
+// kutudaki tüm görsellerin yüklenmesini/decode olmasını bekliyoruz.
+function waitForLabelImages(container){
+  const imgs = Array.from(container.querySelectorAll('img'));
+  return Promise.all(imgs.map(img=>{
+    if(img.complete && img.naturalWidth > 0) return Promise.resolve();
+    if(typeof img.decode === 'function') return img.decode().catch(()=>{});
+    return new Promise(resolve=>{
+      img.addEventListener('load', resolve, { once:true });
+      img.addEventListener('error', resolve, { once:true });
+    });
+  }));
+}
+
+async function printLabelNow(labelData){
   document.getElementById('pl-name').textContent = labelData.customerName || '';
   document.getElementById('pl-phone').textContent = labelData.customerPhone ? '· ' + labelData.customerPhone : '';
   document.getElementById('pl-issue').textContent = labelData.issueDescription ? 'Arıza: ' + labelData.issueDescription : '';
@@ -3235,6 +3278,7 @@ function printLabelNow(labelData){
   printBox.style.height = labelSettings.heightCm + 'cm';
   setPrintPage(`${labelSettings.widthCm}cm ${labelSettings.heightCm}cm`, '0');
   document.body.classList.add('printing-label');
+  await waitForLabelImages(printBox);
   window.print();
   document.body.classList.remove('printing-label');
 }
@@ -3267,7 +3311,7 @@ async function checkPendingLabelPrintJobs(){
   try{
     const jobs = await apiFetch('/label-print-jobs/pending');
     for(const job of jobs){
-      printLabelNow({
+      await printLabelNow({
         trackingCode: job.trackingCode,
         customerName: job.customerName,
         customerPhone: job.customerPhone,
@@ -3307,8 +3351,69 @@ function onStatusFieldChange(){
   document.getElementById('st-shipped-fields').style.display = status === 'SHIPPED' ? 'block' : 'none';
 }
 
-let tempImages = {diagnosing:[], diagnosis:[], return:[], ready:[], delivery:[], intake:[]};
+let tempImages = {diagnosing:[], diagnosis:[], return:[], ready:[], delivery:[], intake:[], diagnosisEdit:[]};
 let tempDiagnosisItems = [];
+let diagnosisEditItems = [];
+
+// "Arıza Tespiti ve Onay" kartındaki bağımsız düzenleme modu — durum/onay/WhatsApp
+// akışına dokunmadan arıza kalemi/görsel ekleyip çıkarmak için (bkz. saveDiagnosisEdit).
+function openDiagnosisEdit(){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  if(!d) return;
+  diagnosisEditItems = (d.diagnosisItems||[]).map(it=>({ id: it.id, description: it.description, price: parseFloat(it.price)||0 }));
+  tempImages.diagnosisEdit = (d.diagnosisImages||[]).slice();
+  document.getElementById('diagnosis-view').style.display = 'none';
+  document.getElementById('diagnosis-edit').style.display = 'block';
+  renderDiagnosisEditItems();
+  renderImageThumbs(tempImages.diagnosisEdit, 'diagnosis-edit-images-preview', 'diagnosisEdit');
+}
+
+function cancelDiagnosisEdit(){
+  document.getElementById('diagnosis-view').style.display = '';
+  document.getElementById('diagnosis-edit').style.display = 'none';
+}
+
+function renderDiagnosisEditItems(){
+  const box = document.getElementById('diagnosis-edit-items-list');
+  if(!box) return;
+  box.innerHTML = diagnosisEditItems.length ? diagnosisEditItems.map((it,i)=>`
+    <div class="part-line"><span>${esc(it.description)}</span><span>₺${it.price}</span><button type="button" onclick="removeEditDiagnosisItem(${i})">×</button></div>
+  `).join('') : `<p class="empty">Henüz arıza kalemi yok</p>`;
+}
+
+function addEditDiagnosisItem(){
+  const descEl = document.getElementById('edi-desc');
+  const priceEl = document.getElementById('edi-price');
+  const description = descEl.value.trim();
+  const price = parseFloat(priceEl.value) || 0;
+  if(!description){ toast('Arıza açıklaması girin'); return; }
+  diagnosisEditItems.push({ description, price });
+  descEl.value = '';
+  priceEl.value = '';
+  descEl.focus();
+  renderDiagnosisEditItems();
+}
+
+function removeEditDiagnosisItem(i){
+  diagnosisEditItems.splice(i, 1);
+  renderDiagnosisEditItems();
+}
+
+async function saveDiagnosisEdit(){
+  if(!diagnosisEditItems.length){ toast('En az bir arıza kalemi olmalı'); return; }
+  const d = devices.find(x=>x.id===currentDeviceId);
+  if(!d) return;
+  const payload = {
+    diagnosisItems: diagnosisEditItems.map(it=>({ id: it.id || undefined, description: it.description, price: it.price })),
+    diagnosisImages: tempImages.diagnosisEdit.slice(0,4),
+  };
+  try{
+    const updated = await apiFetch(`/devices/${d.id}/diagnosis-items`, { method: 'PATCH', body: JSON.stringify(payload) });
+    Object.assign(d, updated);
+    toast('Arıza tespiti güncellendi');
+    renderDeviceDetail();
+  }catch(e){ toast(e.message || 'Güncellenemedi'); }
+}
 
 function renderDiagnosisItemsList(){
   const box = document.getElementById('diagnosis-items-list');
@@ -3613,6 +3718,7 @@ function doLogout(){
   waConversations = []; waActiveConvId = null;
   igConversations = []; igActiveConvId = null; igLoaded = false; inboxChannel = 'whatsapp';
   localStorage.removeItem('teknonand_admin_token');
+  if('caches' in window) caches.delete('teknonand-panel-v1').catch(()=>{});
   document.body.classList.remove('restricted-user');
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
@@ -3739,7 +3845,7 @@ function sendDealerCredentialsWhatsApp(){
   ];
   const text = encodeURIComponent(lines.join('\n'));
   const number = dl.phone ? toWhatsAppNumber(dl.phone) : '';
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
 }
 
 async function uploadInvoicePdf(id, event){
@@ -3796,7 +3902,7 @@ function sendTrackingLinkWhatsApp(id){
     takip_linki: TRACK_PORTAL_URL
   }));
   const number = d.customer.phone ? toWhatsAppNumber(d.customer.phone) : '';
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
 }
 
 function sendPaymentReminderWhatsApp(id){
@@ -3814,7 +3920,7 @@ function sendPaymentReminderWhatsApp(id){
     kalan_tutar: remaining.toFixed(2)
   }));
   const number = d.customer.phone ? toWhatsAppNumber(d.customer.phone) : '';
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
 }
 
 function openDealer(id){
@@ -4178,7 +4284,7 @@ function sendDealerBalanceWhatsApp(id){
     hareket_listesi: hareketListesi
   }));
   const number = dl.phone ? toWhatsAppNumber(dl.phone) : '';
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
 }
 
 function allPayments(){
@@ -4503,9 +4609,18 @@ function renderLabelQr(prefix, trackingCode){
   const box = document.getElementById(prefix+'-qr');
   if(!box) return;
   const cfg = labelSettings.qr || DEFAULT_LABEL_SETTINGS.qr;
-  if(!cfg.show || !trackingCode || typeof qrcode !== 'function'){
+  if(!cfg.show || !trackingCode){
     box.style.display = 'none';
     box.innerHTML = '';
+    return;
+  }
+  if(typeof qrcode !== 'function'){
+    // Karekod kütüphanesi henüz yüklenmemiş (ör. sayfa yeni açıldı) — sessizce
+    // atlamak yerine loglayıp, yazdırma kutusundaysa kullanıcıyı uyarıyoruz.
+    console.error('Karekod kütüphanesi yüklü değil (qrcode tanımsız) — vendor/qrcode-generator.js kontrol edin');
+    box.style.display = 'none';
+    box.innerHTML = '';
+    if(prefix === 'pl') toast('Karekod kütüphanesi yüklenemedi, etiket karekodsuz basılabilir — sayfayı yenileyip tekrar deneyin');
     return;
   }
   box.style.display = '';
@@ -4514,7 +4629,11 @@ function renderLabelQr(prefix, trackingCode){
     qr.addData(`${PANEL_URL}?takip=${encodeURIComponent(trackingCode)}`);
     qr.make();
     box.innerHTML = `<img src="${qr.createDataURL(4,2)}" style="width:${cfg.size}px; height:${cfg.size}px; display:block;">`;
-  }catch(e){ box.innerHTML = ''; }
+  }catch(e){
+    console.error('Karekod oluşturulamadı:', e);
+    box.innerHTML = '';
+    if(prefix === 'pl') toast('Karekod oluşturulamadı, etiket karekodsuz basıldı');
+  }
 }
 
 function applyLabelLogo(prefix){
@@ -4707,7 +4826,7 @@ function sendAppointmentReminderWhatsApp(id){
   ];
   const text = encodeURIComponent(lines.join('\n'));
   const number = toWhatsAppNumber(a.phone);
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
 }
 
 let deviceSearchMode = 'imei';

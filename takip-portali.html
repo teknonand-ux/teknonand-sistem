@@ -196,7 +196,7 @@ function openCargoTracking(code){
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(code).catch(()=>{});
   }
-  window.open(`https://www.yurticikargo.com/tr/online-servisler/gonderi-sorgula?code=${encodeURIComponent(code)}`, '_blank');
+  window.open(`https://www.yurticikargo.com/tr/online-servisler/gonderi-sorgula?code=${encodeURIComponent(code)}`, '_blank', 'noopener,noreferrer');
 }
 
 function lineGross(p){

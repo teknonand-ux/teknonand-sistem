@@ -269,6 +269,7 @@ function doLogout(){
   currentDealer = null;
   localStorage.removeItem('teknonand_dealer_token');
   sessionStorage.removeItem('teknonand_dealer_token');
+  if('caches' in window) caches.delete('teknonand-bayi-v1').catch(()=>{});
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'block';
 }

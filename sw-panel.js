@@ -27,8 +27,14 @@ self.addEventListener('activate', (event) => {
 // falling back to cache when offline. Panel verisi zaten her zaman canlı
 // API'den çekiliyor (bkz. apiFetch) — burada sadece uygulama kabuğu (HTML/
 // ikonlar) önbelleğe alınır, offline'da veri değil sadece arayüz açılır.
+// Bunu garanti altına almak için cross-origin (backend API) istekleri hiç
+// ele alınmadan tarayıcıya bırakılır — aksi halde paylaşımlı bir cihazda
+// offline moda düşüldüğünde başka bir kullanıcının önbelleklenmiş API
+// yanıtı (Authorization header'ından bağımsız, URL eşleşmesiyle) servis
+// edilebilir.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request)
       .then((response) => {

@@ -454,6 +454,70 @@ router.patch('/:id/status', async (req, res, next) => {
   }
 });
 
+// PATCH /api/devices/:id/diagnosis-items — "Arıza Tespiti ve Onay" kartındaki
+// "Düzenle" akışı: durum, statusHistory ve WhatsApp bildirimine DOKUNMADAN arıza
+// kalemlerini/görselleri düzeltmek için (bkz. yonetici-paneli.html saveDiagnosisEdit).
+// PATCH /:id/status'un aksine (ki orada tüm kalemler silinip yeniden oluşturulur ve
+// TÜM onay bilgisi sıfırlanır — kasıtlı, çünkü o akış gerçek bir yeniden tanı/yeniden
+// bildirimdir), burada her kalem id'siyle eşleştirilir: içeriği değişmeyen kalemlerin
+// müşteri/bayi onayı korunur, yalnızca açıklaması/fiyatı fiilen değişen ya da yeni
+// eklenen kalemlerin onayı sıfırlanır.
+router.patch('/:id/diagnosis-items', async (req, res, next) => {
+  try {
+    const schema = z.object({
+      diagnosisItems: z.array(z.object({
+        id: z.string().uuid().optional(),
+        description: z.string().min(1),
+        price: z.number().nonnegative(),
+      })).max(20),
+      diagnosisImages: z.array(dataUrlImage).max(4).optional(),
+    });
+    const { diagnosisItems, diagnosisImages } = schema.parse(req.body);
+
+    const existing = await prisma.diagnosisItem.findMany({ where: { deviceId: req.params.id } });
+    const existingById = new Map(existing.map((it) => [it.id, it]));
+    const keepIds = new Set();
+
+    const device = await prisma.$transaction(async (tx) => {
+      for (const it of diagnosisItems) {
+        const prev = it.id ? existingById.get(it.id) : null;
+        if (prev) {
+          keepIds.add(prev.id);
+          const changed = prev.description !== it.description || Number(prev.price) !== it.price;
+          await tx.diagnosisItem.update({
+            where: { id: prev.id },
+            data: changed
+              ? { description: it.description, price: it.price, approved: null, respondedBy: null, respondedAt: null, respondNote: null }
+              : { description: it.description, price: it.price },
+          });
+        } else {
+          await tx.diagnosisItem.create({
+            data: { deviceId: req.params.id, description: it.description, price: it.price },
+          });
+        }
+      }
+      const toDelete = existing.filter((it) => !keepIds.has(it.id)).map((it) => it.id);
+      if (toDelete.length) {
+        await tx.diagnosisItem.deleteMany({ where: { id: { in: toDelete } } });
+      }
+
+      return tx.device.update({
+        where: { id: req.params.id },
+        data: {
+          diagnosisText: diagnosisItems.map((it) => it.description).join(', '),
+          estimatedPrice: diagnosisItems.reduce((s, it) => s + it.price, 0),
+          ...(diagnosisImages ? { diagnosisImages } : {}),
+        },
+        include: { customer: true, diagnosisItems: { orderBy: { createdAt: 'asc' } } },
+      });
+    });
+
+    res.json(device);
+  } catch (e) {
+    next(e);
+  }
+});
+
 // PATCH /api/devices/:id/details — durum/geçmiş etkilenmeden cihaza özel bilgileri
 // (şifre, IMEI, kargo adresi vb.) düzenler — bkz. yonetici-paneli.html "Müşteri
 // Bilgilerini Düzenle" kutusu (saveCustomerEdit).
@@ -705,6 +769,10 @@ router.post('/:id/parts', async (req, res, next) => {
 
 router.delete('/:id/parts/:partId', async (req, res, next) => {
   try {
+    const part = await prisma.devicePart.findUnique({ where: { id: req.params.partId } });
+    if (!part || part.deviceId !== req.params.id) {
+      return res.status(404).json({ error: 'Kayıt bulunamadı' });
+    }
     await prisma.devicePart.delete({ where: { id: req.params.partId } });
     // Parca silindiginde bayi veresiye tutari da guncel toplama gore duzelsin.
     const device = await prisma.device.findUnique({ where: { id: req.params.id } });
