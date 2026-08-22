@@ -2906,7 +2906,10 @@ function renderDeviceDetail(){
   renderImageThumbs(tempImages.ready, 'st-ready-images-preview', 'ready');
   renderImageThumbs(tempImages.delivery, 'st-delivery-images-preview', 'delivery');
 
-  tempDiagnosisItems = (d.diagnosisItems || []).map(it => ({ description: it.description, price: it.price }));
+  // Prisma Decimal alanları API'den string olarak gelir (ör. "1500.00") — parseFloat
+  // ile sayıya çevrilmezse, backend'e karışık tip (string+number) dizi gider ve Zod
+  // "price: number" doğrulamasında "Geçersiz veri" hatası verir (bkz. addStatusEntry).
+  tempDiagnosisItems = (d.diagnosisItems || []).map(it => ({ description: it.description, price: parseFloat(it.price) || 0 }));
   renderDiagnosisItemsList();
 
   document.getElementById('pay-datetime').value = toLocalInputValue(new Date());
