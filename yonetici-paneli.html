@@ -535,7 +535,7 @@
           <button class="ghost search-mode-btn" data-mode="model" onclick="setSearchMode('model')">Cihaz Modeli ile Bul</button>
         </div>
         <div style="display:flex; gap:8px;">
-          <input id="device-search" placeholder="Aramak için yazmaya başlayın..." oninput="renderDeviceTable()" style="flex:1;">
+          <input id="device-search" placeholder="Aramak için yazmaya başlayın..." oninput="onDeviceSearchInput()" style="flex:1;">
           <button class="ghost" onclick="openQrScan()">📷 Karekod ile Ara</button>
         </div>
         <div class="field" style="max-width:280px; margin:10px 0 0;">
@@ -4933,6 +4933,28 @@ let lastDeviceSearchKey = '';
 function changeDevicePage(delta){
   deviceCurrentPage += delta;
   renderDeviceTable();
+}
+
+let deviceSearchDebounceTimer = null;
+// "Cihazlar" listesi varsayılan olarak yalnızca son 500 kaydı yükler (bkz.
+// backend/src/routes/devices.js) — önceki sistemden aktarılan eski kayıtlar silinmedi,
+// sadece varsayılan görünümde yok. Arama kutusuna yazılınca, sonuçları `devices`
+// dizisine ekleyip (mevcut olanları tekrar eklemeden) tüm geçmişte arama yapılmış olur;
+// renderDeviceTable() zaten aynı filtreyi `devices` üzerinde uyguladığından ayrıca
+// dokunmaya gerek kalmaz.
+function onDeviceSearchInput(){
+  clearTimeout(deviceSearchDebounceTimer);
+  renderDeviceTable(); // yüklü liste üzerinde anında filtrele, sunucu sonucunu bekleme
+  const query = (document.getElementById('device-search').value || '').trim();
+  if(!query) return;
+  deviceSearchDebounceTimer = setTimeout(async () => {
+    try{
+      const results = await apiFetch(`/devices?mode=${deviceSearchMode}&query=${encodeURIComponent(query)}`);
+      const known = new Set(devices.map(d => d.id));
+      results.forEach(d => { if(!known.has(d.id)) devices.push(d); });
+    }catch(e){ /* arama başarısız olsa da yüklü liste üzerinden filtrelemeye devam edilir */ }
+    renderDeviceTable();
+  }, 300);
 }
 
 function renderDeviceTable(){

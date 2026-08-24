@@ -161,10 +161,17 @@ router.get('/', async (req, res, next) => {
       else if (mode === 'phone') where.customer = { phone: { contains: q.replace(/\s|-/g, '') } };
       else if (mode === 'name') where.customer = { fullName: { contains: q, mode: 'insensitive' } };
     }
+    // Arama sorgusu yokken (personel sadece "Cihazlar" sekmesini açtığında) son 500
+    // kayıtla sınırlıyoruz — önceki sistemden aktarılan ~10.000+ eski kayıt (silinmedi,
+    // sadece varsayılan listede gösterilmiyor) her yüklemede tam sorgulanıp
+    // serileştirildiğinden istekler 1.3-1.6 saniye sürüyordu. Arama yapıldığında
+    // (imei/telefon/isim/model) sınır kaldırılır — where zaten eşleşenleri daraltır ve
+    // eski kayıtlara da ulaşılabilir.
     const devices = await prisma.device.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       select: DEVICE_LIST_SELECT,
+      ...(query ? {} : { take: 500 }),
     });
     res.json(devices);
   } catch (e) {
