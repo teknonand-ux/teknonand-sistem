@@ -3035,6 +3035,43 @@ function printDeliveryForm(id){
   document.body.classList.remove('printing-form');
 }
 
+// Cihaz kabulünde müşteriye verilen fiş — "Cihaz Teslim Formu"nun tersi (orada
+// biz müşteriye teslim ediyoruz, burada müşteri bize teslim ediyor). Henüz arıza
+// tespiti/fiyat olmadığından işlem tablosu/tutar yok; sadece kabul anındaki bilgiler
+// ve müşterinin takip kodunu görebileceği bir kayıt niteliğinde.
+function buildIntakeReceiptHTML(d){
+  const receivedAt = new Date(d.receivedAt || d.createdAt).toLocaleString('tr-TR');
+  return `
+    ${buildCompanyHeaderHTML()}
+    <h4>Cihaz Teslim Alma Fişi</h4>
+    <div class="fp-sub">Kayıt No: ${esc(d.trackingCode)} · Teslim Tarihi: ${receivedAt}</div>
+    <div class="detail-meta">
+      <div><span>Müşteri</span>${esc(d.customer.fullName)}</div>
+      <div><span>Telefon</span>${esc(d.customer.phone) || '—'}</div>
+      ${d.backupPhone ? `<div><span>Yedek Telefon</span>${esc(d.backupPhone)}</div>` : ''}
+      <div><span>Cihaz</span>${esc(d.brand)} ${esc(d.model)}</div>
+      <div><span>IMEI / Seri No</span>${esc(d.imeiSerial) || '—'}</div>
+      ${d.devicePassword ? `<div><span>Cihaz Şifresi</span>${esc(d.devicePassword)}</div>` : ''}
+      ${d.isCargo ? `<div><span>Teslim Şekli</span>Kargo ile geldi${d.cargoAddress ? ` — ${esc(d.cargoAddress)}` : ''}</div>` : ''}
+    </div>
+    <div style="margin-top:8px;"><span style="color:var(--ink-soft); font-size:11.5px;">Arıza</span><br>${esc(d.issueDescription) || '—'}</div>
+    <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--line); font-size:10.5px; color:var(--ink-soft); line-height:1.5;">
+      Cihazınız yukarıdaki bilgilerle kaydımıza alınmıştır. Cihazınızın durumunu <strong>${esc(d.trackingCode)}</strong> takip kodu ile öğrenebilirsiniz. İnceleme sonrası tespit edilen arıza ve ücret hakkında tarafınıza bilgi verilecektir.
+    </div>
+    <div class="fp-signrow"><span>Teslim Eden (Müşteri)</span><span>Teslim Alan (Teknonand)</span></div>
+  `;
+}
+
+function printIntakeReceipt(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  document.getElementById('printForm').innerHTML = buildIntakeReceiptHTML(d);
+  setPrintPage('A5', '10mm');
+  document.body.classList.add('printing-form');
+  window.print();
+  document.body.classList.remove('printing-form');
+}
+
 const WHATSAPP_TEMPLATES_DEFAULT = {
   received: {
     label: 'Cihaz Alındı',
@@ -5021,6 +5058,7 @@ function renderDeviceTable(){
       <td>${parts.length} kalem · ₺${total.toFixed(0)}${unpaidDelivered ? `<br><span style="color:var(--red); font-size:11px; font-weight:600;">⚠ Kalan ₺${(total-paid).toFixed(0)}</span>` : ''}</td>
       <td onclick="event.stopPropagation()">
         <button class="ghost" onclick="printDeviceLabel('${d.id}')">Etiket Bas</button>
+        <button class="ghost" style="margin-top:4px;" onclick="printIntakeReceipt('${d.id}')">Teslim Fişi Yazdır</button>
         ${unpaidDelivered ? `<button class="ghost" style="color:var(--red); border-color:var(--red); margin-top:4px;" onclick="sendPaymentReminderWhatsApp('${d.id}')">Ödeme Hatırlat</button>` : ''}
       </td>
     </tr>`;
