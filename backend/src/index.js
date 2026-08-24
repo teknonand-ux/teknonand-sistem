@@ -64,13 +64,20 @@ app.use(cors({
 // serialize edilen gövde Meta'nın imzasıyla birebir eşleşmeyebilir.
 app.use(express.json({ limit: '2mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 
-// Genel oran sınırlama — herkese açık uçlar (randevu, takip) kötüye kullanıma karşı ayrıca sınırlanır
+// Genel oran sınırlama — herkese açık uçlar (randevu, takip) kötüye kullanıma karşı ayrıca sınırlanır.
+// Limit 1000'e çıkarıldı: aynı ofis IP'sinden birden fazla personel panelde açıkken
+// WhatsApp/Instagram gelen kutusu ~60 saniyede bir sorgulanıyor (OPTIONS+GET), bu da
+// tek başına 15 dakikada onlarca istek demek — eski 300 limiti normal kullanımda bile
+// doluyor ve personel "kullanıcı adı/şifre hatalı" sanılan bir 429 alıyordu (bkz. altta).
+// message: express-rate-limit'in düz metin varsayılanı yerine JSON döndürür — aksi halde
+// frontend'in res.json() ayrıştırması sessizce başarısız olup gerçek nedeni gizliyordu.
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 300,
+    limit: 1000,
     standardHeaders: true,
     legacyHeaders: false,
+    message: { error: 'Çok fazla istek yapıldı, lütfen birkaç dakika sonra tekrar deneyin' },
   })
 );
 

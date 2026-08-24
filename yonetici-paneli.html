@@ -3677,7 +3677,8 @@ async function doLogin(){
     });
     if(!res.ok){
       const data = await res.json().catch(()=>({}));
-      errorEl.textContent = data.error || 'Kullanıcı adı veya şifre hatalı.';
+      const fallback = res.status === 429 ? 'Çok fazla istek yapıldı, lütfen birkaç dakika sonra tekrar deneyin.' : 'Kullanıcı adı veya şifre hatalı.';
+      errorEl.textContent = data.error || fallback;
       errorEl.style.display = 'block';
       return;
     }
