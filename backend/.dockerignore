@@ -1,6 +1,0 @@
-node_modules/
-prisma/
-.env
-.env.example
-dist/
-*.log
