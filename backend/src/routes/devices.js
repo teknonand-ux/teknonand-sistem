@@ -100,6 +100,54 @@ const deviceCreateSchema = z.object({
   sendWhatsapp: z.boolean().optional(), // panelde personelin onayı — bkz. yonetici-paneli.html createDevice
 });
 
+// Liste görünümü hiçbir görsel/PDF alanını göstermez (yalnızca bir cihaz açıldığında
+// GET /:id ile tam kayıt çekilir — bkz. yonetici-paneli.html openDevice). intakeImages,
+// diagnosingImages, diagnosisImages, returnImages, readyImages, deliveryImages,
+// invoicePdf hepsi base64 metin; her cihazda birkaçı doluysa listede tümünü döndürmek
+// cihaz sayısı arttıkça yanıtı megabaytlarca büyütüp isteği saniyelerce yavaşlatıyordu
+// (Postgres CPU'su boştu — darboğaz sorgu değil, bu alanların sorgulanıp
+// serileştirilmesiydi). Bu yüzden include yerine, ağır alanları dışarıda bırakan select
+// kullanıyoruz.
+const DEVICE_LIST_SELECT = {
+  id: true,
+  customerId: true,
+  customer: true,
+  dealerId: true,
+  dealer: true,
+  assignedEmployeeId: true,
+  assignedEmployee: true,
+  trackingCode: true,
+  brand: true,
+  model: true,
+  imeiSerial: true,
+  devicePassword: true,
+  backupPhone: true,
+  deviceOff: true,
+  isCargo: true,
+  cargoAddress: true,
+  issueDescription: true,
+  status: true,
+  diagnosisText: true,
+  estimatedPrice: true,
+  customerApproved: true,
+  dealerApproved: true,
+  approvalNote: true,
+  approvedAt: true,
+  returnReason: true,
+  deliveryMethod: true,
+  deliveryNote: true,
+  cargoTrackingNumber: true,
+  invoiceUploadedAt: true,
+  approvalSeenByStaff: true,
+  receivedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  parts: { include: { supplier: true, addedByEmployee: true } },
+  payments: true,
+  statusHistory: { orderBy: { changedAt: 'desc' }, include: { changedByEmployee: true } },
+  diagnosisItems: { orderBy: { createdAt: 'asc' } },
+};
+
 // GET /api/devices?status=&query=&mode=imei|phone|name|model
 router.get('/', async (req, res, next) => {
   try {
@@ -116,13 +164,7 @@ router.get('/', async (req, res, next) => {
     const devices = await prisma.device.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: {
-        customer: true, dealer: true, assignedEmployee: true,
-        parts: { include: { supplier: true, addedByEmployee: true } },
-        payments: true,
-        statusHistory: { orderBy: { changedAt: 'desc' }, include: { changedByEmployee: true } },
-        diagnosisItems: { orderBy: { createdAt: 'asc' } },
-      },
+      select: DEVICE_LIST_SELECT,
     });
     res.json(devices);
   } catch (e) {

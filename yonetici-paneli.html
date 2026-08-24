@@ -2244,6 +2244,17 @@ async function openDevice(id){
   customerEditOpen = false;
   switchView('device-detail');
   renderDeviceDetail();
+  // Liste isteği (GET /devices) görsel/PDF alanlarını (intakeImages, diagnosingImages vb.)
+  // artık içermiyor — performans için (bkz. backend/src/routes/devices.js). Detay
+  // görünümü bunlara ihtiyaç duyduğundan, henüz çekilmemişse burada tamamlanır.
+  const listEntry = devices.find(x=>x.id===id);
+  if(listEntry && listEntry.intakeImages === undefined){
+    try{
+      const full = await apiFetch(`/devices/${id}`);
+      Object.assign(listEntry, full);
+      if(currentDeviceId === id) renderDeviceDetail();
+    }catch(e){ /* liste görünümü zaten yüklendi, sessizce geç */ }
+  }
   const d = devices.find(x=>x.id===id);
   if(d && d.approvalSeenByStaff === false){
     d.approvalSeenByStaff = true;
