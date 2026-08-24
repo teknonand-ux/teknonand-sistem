@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 
 const { errorHandler } = require('./middleware/errorHandler');
@@ -38,6 +39,11 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
+
+// Cihaz listesi (intakeImages/diagnosingImages base64 olarak DB'de tutuluyor) tek bir
+// istekte megabaytlarca JSON dönebiliyor ve panel bunu sık sık çekiyor — gzip bu
+// aktarım süresini ciddi şekilde kısaltır (base64 metin iyi sıkışır).
+app.use(compression());
 
 // CORS_ORIGIN tanımlıysa yalnızca o origin'lere (virgülle ayrılmış) izin veriyoruz.
 // İki istisna her zaman serbest: Origin header'ı hiç olmayan istekler (curl, Meta
