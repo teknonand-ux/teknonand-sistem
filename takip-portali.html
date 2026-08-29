@@ -289,7 +289,6 @@ function render(d){
       let actions = '';
       if(!responded || editing){
         actions = `
-          <textarea id="diag-note-${it.id}" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)">${editing && it.respondNote ? esc(it.respondNote) : ''}</textarea>
           <div class="item-actions">
             <button onclick="respondDiagnosisItem('${it.id}', true)">Onaylıyorum</button>
             <button class="again-btn" onclick="respondDiagnosisItem('${it.id}', false)">Yapılmasın</button>
@@ -410,14 +409,12 @@ function cancelEditDiagItem(){
 
 async function respondDiagnosisItem(itemId, approved){
   if(!currentDevice) return;
-  const noteEl = document.getElementById(`diag-note-${itemId}`);
-  const note = noteEl ? noteEl.value.trim() : '';
   setApproveBoxDisabled(true);
   try{
     const res = await fetch(`${API_BASE}/track/${encodeURIComponent(currentDevice.trackingCode)}/diagnosis-items/${encodeURIComponent(itemId)}/respond`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ approved, note: note || undefined, phone: lastPhoneSuffix })
+      body: JSON.stringify({ approved, phone: lastPhoneSuffix })
     });
     if(res.ok){
       diagEditingItemId = null;

@@ -406,7 +406,6 @@ function renderDevices(){
               const stateLabel = it.approved===true ? '<span class="item-state ok">✓ Onaylandı</span>' : it.approved===false ? '<span class="item-state no">✕ Yapılmasın dediniz</span>' : '';
               const noteLine = (responded && it.respondNote) ? `<div class="item-note">Notunuz: ${esc(it.respondNote)}</div>` : '';
               const actions = !responded ? `
-                <textarea id="dealer-diag-note-${it.id}" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)"></textarea>
                 <div class="item-actions">
                   <button class="primary" onclick="respondDealerDiagnosisItem('${d.id}','${it.id}',true)">Onaylıyorum</button>
                   <button class="ghost" style="border-color:var(--red); color:var(--red);" onclick="respondDealerDiagnosisItem('${d.id}','${it.id}',false)">Yapılmasın</button>
@@ -458,12 +457,10 @@ async function approveDevice(id){
 }
 
 async function respondDealerDiagnosisItem(deviceId, itemId, approved){
-  const noteEl = document.getElementById(`dealer-diag-note-${itemId}`);
-  const note = noteEl ? noteEl.value.trim() : '';
   try{
     const res = await apiFetch(`/dealers/me/devices/${deviceId}/diagnosis-items/${itemId}/respond`, {
       method: 'POST',
-      body: JSON.stringify({ approved, note: note || undefined })
+      body: JSON.stringify({ approved })
     });
     if(!res.ok) return;
     const updated = await res.json();
