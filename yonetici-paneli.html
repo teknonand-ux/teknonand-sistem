@@ -4219,6 +4219,16 @@ function renderSupplierDetail(){
     .filter(p => p.supplierId===s.id && !p.stockItemId && inDateRange(p.createdAt))
     .map(p => ({ ...p, deviceId: d.id, trackingCode: d.trackingCode })));
 
+  // Stok dökümü PDF düğmeleri — tarih aralığı seçilmeden hiçbiri etkin olmaz;
+  // toptancıya gönderme düğmesi ayrıca toptancının telefonu kayıtlı değilse kapalı kalır.
+  const stockRangeSelected = !!(supplierStockFrom && supplierStockTo);
+  const noRangeTitle = 'Önce Başlangıç ve Bitiş tarihi seçip Ara\'ya basın';
+  const viewPdfBtnHtml = `<button class="ghost" style="margin-top:0;" onclick="viewSupplierStockPdf('${s.id}')"${stockRangeSelected ? '' : ` disabled title="${esc(noRangeTitle)}"`}>PDF Görüntüle</button>`;
+  const sendToSupplierDisabled = !stockRangeSelected || !s.phone;
+  const sendToSupplierTitle = !stockRangeSelected ? noRangeTitle : (!s.phone ? 'Toptancının telefon numarası kayıtlı değil' : '');
+  const sendToSupplierBtnHtml = `<button class="primary" style="margin-top:0;" onclick="sendSupplierStockPdf('${s.id}','supplier')"${sendToSupplierDisabled ? ` disabled title="${esc(sendToSupplierTitle)}"` : ''}>Toptancıya WhatsApp Gönder${s.phone ? ` (${esc(s.phone)})` : ''}</button>`;
+  const sendToExtraBtnHtml = `<button class="primary" style="margin-top:0;" onclick="sendSupplierStockPdf('${s.id}','extra')"${stockRangeSelected ? '' : ` disabled title="${esc(noRangeTitle)}"`}>05342024037'e WhatsApp Gönder</button>`;
+
   box.innerHTML = `
     <div class="detail-head">
       <div>
@@ -4272,7 +4282,11 @@ function renderSupplierDetail(){
         <div class="field" style="margin-bottom:0;"><label>Bitiş</label><input type="date" id="supStockTo" value="${esc(supplierStockTo)}"></div>
         <button class="ghost" style="margin-top:0;" onclick="searchSupplierStock('${s.id}')">Ara</button>
         ${(supplierStockFrom || supplierStockTo) ? `<button class="ghost" style="margin-top:0;" onclick="clearSupplierStockSearch('${s.id}')">Temizle</button>` : ''}
-        <button class="primary" style="margin-top:0;" onclick="sendSupplierStockPdf('${s.id}')" ${(supplierStockFrom && supplierStockTo) ? '' : `disabled title="Önce Başlangıç ve Bitiş tarihi seçip Ara'ya basın"`}>WhatsApp'tan PDF Gönder</button>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        ${viewPdfBtnHtml}
+        ${sendToSupplierBtnHtml}
+        ${sendToExtraBtnHtml}
       </div>
       <table><thead><tr><th>Parça</th><th>Kaynak</th><th>Adet</th><th>Maliyet</th><th>Personel</th><th></th></tr></thead>
         <tbody>${(stockItems.length || supplierDeviceParts.length) ? `
@@ -4307,18 +4321,41 @@ function clearSupplierStockSearch(id){
   renderSupplierDetail();
 }
 
-async function sendSupplierStockPdf(id){
+async function sendSupplierStockPdf(id, target){
   if(!supplierStockFrom || !supplierStockTo){ toast('Önce Başlangıç ve Bitiş tarihi seçip Ara\'ya basın'); return; }
   const s = suppliers.find(x=>x.id===id);
-  if(!confirm(`${s ? esc(s.name) : 'Toptancı'} için ${supplierStockFrom} — ${supplierStockTo} aralığındaki stok dökümü PDF olarak WhatsApp'tan gönderilsin mi?`)) return;
+  const targetLabel = target==='supplier' ? `toptancının numarasına (${s?.phone||''})` : '05342024037 numarasına';
+  if(!confirm(`${s ? esc(s.name) : 'Toptancı'} için ${supplierStockFrom} — ${supplierStockTo} aralığındaki stok dökümü PDF olarak ${targetLabel} WhatsApp'tan gönderilsin mi?`)) return;
   try{
     const res = await apiFetch(`/suppliers/${id}/stock-pdf-whatsapp`, {
       method: 'POST',
-      body: JSON.stringify({ from: supplierStockFrom, to: supplierStockTo })
+      body: JSON.stringify({ from: supplierStockFrom, to: supplierStockTo, target })
     });
     toast(`PDF gönderildi (${res.itemCount} kalem)`);
   }catch(e){
     toast(e.message || 'PDF gönderilemedi');
+  }
+}
+
+function base64ToBlobUrl(base64, mimeType){
+  const byteChars = atob(base64);
+  const byteNumbers = new Array(byteChars.length);
+  for(let i=0;i<byteChars.length;i++) byteNumbers[i] = byteChars.charCodeAt(i);
+  const blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
+  return URL.createObjectURL(blob);
+}
+
+async function viewSupplierStockPdf(id){
+  if(!supplierStockFrom || !supplierStockTo){ toast('Önce Başlangıç ve Bitiş tarihi seçip Ara\'ya basın'); return; }
+  try{
+    const res = await apiFetch(`/suppliers/${id}/stock-pdf`, {
+      method: 'POST',
+      body: JSON.stringify({ from: supplierStockFrom, to: supplierStockTo })
+    });
+    const url = base64ToBlobUrl(res.pdfBase64, 'application/pdf');
+    window.open(url, '_blank');
+  }catch(e){
+    toast(e.message || 'PDF oluşturulamadı');
   }
 }
 

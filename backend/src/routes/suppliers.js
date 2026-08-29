@@ -2,11 +2,52 @@ const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee } = require('../middleware/auth');
-const { sendSupplierStockPdfWhatsapp } = require('../services/whatsapp');
+const { sendSupplierStockPdfToPhone, SUPPLIER_STOCK_PDF_EXTRA_PHONE } = require('../services/whatsapp');
 const { buildSupplierStockPdfBuffer } = require('../services/pdfGenerator');
 
 const router = express.Router();
 router.use(requireAuth, requireEmployee);
+
+// "Bu Toptancıdan Alınan Stok Kalemleri" kartındaki tarih aralığı araması için
+// PDF'i üretir — WhatsApp gönderim uçları ve görüntüleme ucu ortak kullanır.
+async function buildSupplierStockPdf(supplierId, from, to) {
+  const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });
+  if (!supplier) return { error: 'Toptancı bulunamadı', status: 404 };
+
+  const fromDate = new Date(`${from}T00:00:00`);
+  const toDate = new Date(`${to}T23:59:59.999`);
+  if (isNaN(fromDate) || isNaN(toDate) || fromDate > toDate) {
+    return { error: 'Geçersiz tarih aralığı', status: 400 };
+  }
+  const dateRange = { gte: fromDate, lte: toDate };
+
+  const [stockItems, deviceParts] = await Promise.all([
+    prisma.stockItem.findMany({ where: { supplierId: supplier.id, createdAt: dateRange } }),
+    // Stoktan seçilmeden, doğrudan toptancı seçilerek cihaza eklenen parçalar —
+    // stoktan seçilenler zaten kendi stok kalemi üzerinden yukarıda geliyor
+    // (bkz. yonetici-paneli.html renderSupplierDetail ile aynı ayrım).
+    prisma.devicePart.findMany({ where: { supplierId: supplier.id, stockItemId: null, createdAt: dateRange } }),
+  ]);
+
+  const items = [
+    ...stockItems.map((item) => ({ name: item.name, costUsd: item.unitCostUsd, date: item.createdAt })),
+    ...deviceParts.map((p) => ({ name: p.name, costUsd: p.costUsd, date: p.createdAt })),
+  ].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const [companyInfoSetting, companyLogoSetting] = await Promise.all([
+    prisma.appSetting.findUnique({ where: { key: 'companyInfo' } }),
+    prisma.appSetting.findUnique({ where: { key: 'companyLogo' } }),
+  ]);
+  const companyInfo = companyInfoSetting?.value || {};
+  const companyLogo = companyLogoSetting?.value || null;
+
+  const fromLabel = fromDate.toLocaleDateString('tr-TR');
+  const toLabel = toDate.toLocaleDateString('tr-TR');
+  const pdfBuffer = await buildSupplierStockPdfBuffer(supplier, items, fromLabel, toLabel, companyInfo, companyLogo);
+  const filename = `Stok-Dokumu-${supplier.name}-${from}-${to}.pdf`;
+
+  return { supplier, items, fromLabel, toLabel, pdfBuffer, filename };
+}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -105,52 +146,39 @@ router.delete('/:id/transactions/:txId', async (req, res, next) => {
 
 // POST /api/suppliers/:id/stock-pdf-whatsapp — "Bu Toptancıdan Alınan Stok
 // Kalemleri" kartındaki tarih aralığı araması sonucunu PDF olarak üretip
-// hem toptancının kendi numarasına hem de sabit ofis hattına WhatsApp'tan
-// belge olarak gönderir (bkz. src/services/whatsapp.js sendSupplierStockPdfWhatsapp).
+// panelde seçilen tek hedefe (toptancının kendi numarası ya da sabit ofis
+// hattı) WhatsApp'tan belge olarak gönderir.
 router.post('/:id/stock-pdf-whatsapp', async (req, res, next) => {
   try {
-    const { from, to } = z
-      .object({ from: z.string().min(1), to: z.string().min(1) })
+    const { from, to, target } = z
+      .object({ from: z.string().min(1), to: z.string().min(1), target: z.enum(['supplier', 'extra']) })
       .parse(req.body);
 
-    const supplier = await prisma.supplier.findUnique({ where: { id: req.params.id } });
-    if (!supplier) return res.status(404).json({ error: 'Toptancı bulunamadı' });
+    const built = await buildSupplierStockPdf(req.params.id, from, to);
+    if (built.error) return res.status(built.status).json({ error: built.error });
+    const { supplier, items, fromLabel, toLabel, pdfBuffer, filename } = built;
 
-    const fromDate = new Date(`${from}T00:00:00`);
-    const toDate = new Date(`${to}T23:59:59.999`);
-    if (isNaN(fromDate) || isNaN(toDate) || fromDate > toDate) {
-      return res.status(400).json({ error: 'Geçersiz tarih aralığı' });
-    }
-    const dateRange = { gte: fromDate, lte: toDate };
+    const phone = target === 'supplier' ? supplier.phone : SUPPLIER_STOCK_PDF_EXTRA_PHONE;
+    if (!phone) return res.status(400).json({ error: 'Toptancının telefon numarası kayıtlı değil' });
 
-    const [stockItems, deviceParts] = await Promise.all([
-      prisma.stockItem.findMany({ where: { supplierId: supplier.id, createdAt: dateRange } }),
-      // Stoktan seçilmeden, doğrudan toptancı seçilerek cihaza eklenen parçalar —
-      // stoktan seçilenler zaten kendi stok kalemi üzerinden yukarıda geliyor
-      // (bkz. yonetici-paneli.html renderSupplierDetail ile aynı ayrım).
-      prisma.devicePart.findMany({ where: { supplierId: supplier.id, stockItemId: null, createdAt: dateRange } }),
-    ]);
-
-    const items = [
-      ...stockItems.map((item) => ({ name: item.name, costUsd: item.unitCostUsd, date: item.createdAt })),
-      ...deviceParts.map((p) => ({ name: p.name, costUsd: p.costUsd, date: p.createdAt })),
-    ].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    const [companyInfoSetting, companyLogoSetting] = await Promise.all([
-      prisma.appSetting.findUnique({ where: { key: 'companyInfo' } }),
-      prisma.appSetting.findUnique({ where: { key: 'companyLogo' } }),
-    ]);
-    const companyInfo = companyInfoSetting?.value || {};
-    const companyLogo = companyLogoSetting?.value || null;
-
-    const fromLabel = fromDate.toLocaleDateString('tr-TR');
-    const toLabel = toDate.toLocaleDateString('tr-TR');
-    const pdfBuffer = await buildSupplierStockPdfBuffer(supplier, items, fromLabel, toLabel, companyInfo, companyLogo);
-    const filename = `Stok-Dokumu-${supplier.name}-${from}-${to}.pdf`;
-
-    const result = await sendSupplierStockPdfWhatsapp(supplier, pdfBuffer, filename, [supplier.name, fromLabel, toLabel]);
-    if (!result.ok) return res.status(502).json({ error: result.errorMessage || 'Mesaj gönderilemedi' });
+    const result = await sendSupplierStockPdfToPhone(phone, pdfBuffer, filename, [supplier.name, fromLabel, toLabel]);
+    if (!result.ok) return res.status(502).json({ error: result.error || 'Mesaj gönderilemedi' });
     res.json({ ok: true, itemCount: items.length });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/suppliers/:id/stock-pdf — aynı tarih aralığı dökümünü, göndermeden
+// panelde görüntülemek/indirmek için base64 PDF olarak döner.
+router.post('/:id/stock-pdf', async (req, res, next) => {
+  try {
+    const { from, to } = z.object({ from: z.string().min(1), to: z.string().min(1) }).parse(req.body);
+
+    const built = await buildSupplierStockPdf(req.params.id, from, to);
+    if (built.error) return res.status(built.status).json({ error: built.error });
+
+    res.json({ pdfBase64: built.pdfBuffer.toString('base64'), filename: built.filename, itemCount: built.items.length });
   } catch (e) {
     next(e);
   }

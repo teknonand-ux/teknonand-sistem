@@ -429,10 +429,12 @@ async function sendDealerBalanceReminder(dealer) {
   return result;
 }
 
-// "Bu Toptancıdan Alınan Stok Kalemleri" kartındaki tarih aralığı PDF'i — hem
-// toptancının kendi numarasına hem de sabit muhasebe/ofis hattına gönderilir.
-// Cihaz/müşteri bağlamı olmadığından sendDocumentWhatsapp'tan (whatsappMessage
-// kaydı, device/customer zorunluluğu) bağımsız, kendi belge gönderimini yapar.
+// "Bu Toptancıdan Alınan Stok Kalemleri" kartındaki tarih aralığı PDF'i — panelde
+// ayrı iki düğmeyle ya toptancının kendi numarasına ya da sabit muhasebe/ofis
+// hattına gönderilir (bkz. routes/suppliers.js POST /:id/stock-pdf-whatsapp,
+// target: 'supplier' | 'extra'). Cihaz/müşteri bağlamı olmadığından
+// sendDocumentWhatsapp'tan (whatsappMessage kaydı, device/customer zorunluluğu)
+// bağımsız, kendi belge gönderimini yapar.
 const SUPPLIER_STOCK_PDF_EXTRA_PHONE = '05342024037';
 
 async function sendSupplierStockPdfToPhone(phone, pdfBuffer, filename, bodyParams) {
@@ -461,15 +463,6 @@ async function sendSupplierStockPdfToPhone(phone, pdfBuffer, filename, bodyParam
   return { ok: status_ === 'GONDERILDI', error: errorMessage };
 }
 
-// supplier.phone boşsa yalnızca sabit hatta gönderilir.
-async function sendSupplierStockPdfWhatsapp(supplier, pdfBuffer, filename, bodyParams) {
-  const targets = [...new Set([supplier.phone, SUPPLIER_STOCK_PDF_EXTRA_PHONE].filter(Boolean))];
-  const results = await Promise.all(targets.map((phone) => sendSupplierStockPdfToPhone(phone, pdfBuffer, filename, bodyParams)));
-  const ok = results.some((r) => r.ok);
-  const errorMessage = ok ? null : results.map((r) => r.error).filter(Boolean).join('; ');
-  return { ok, errorMessage, results };
-}
-
 module.exports = {
   sendStatusWhatsapp,
   sendDocumentWhatsapp,
@@ -477,7 +470,8 @@ module.exports = {
   sendNewAppointmentStaffAlert,
   sendAppointmentConfirmation,
   sendDealerBalanceReminder,
-  sendSupplierStockPdfWhatsapp,
+  sendSupplierStockPdfToPhone,
+  SUPPLIER_STOCK_PDF_EXTRA_PHONE,
   toCloudApiPhone,
   downloadIncomingMedia,
 };
