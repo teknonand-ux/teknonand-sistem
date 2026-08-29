@@ -417,12 +417,25 @@ async function sendAppointmentConfirmation(appointment) {
   return result;
 }
 
+// Bayiler sayfasındaki "WhatsApp ile Bakiye Bildir" butonu — önceden wa.me linki
+// açıp personelin elle "gönder"e basmasını gerektiriyordu; artık diğer bayi
+// bildirimleri gibi onaylı şablon üzerinden otomatik gönderiliyor.
+async function sendDealerBalanceReminder(dealer) {
+  const templateName = process.env.WHATSAPP_TEMPLATE_DEALER_BALANCE;
+  const balance = (parseFloat(dealer.balance) || 0).toFixed(2);
+  const body = `Sayın ${dealer.name}, toplam bakiyeniz ₺${balance}. Ödeme yapmanız rica olunur. Bakiye detayını bayi portalından görüntüleyebilirsiniz.`;
+  const result = await sendNamedTemplateMessage(dealer.phone, templateName, [dealer.name, balance]);
+  await recordOutboundInInbox({ phone: dealer.phone, customerId: null, body, ok: result.ok, errorMessage: result.error });
+  return result;
+}
+
 module.exports = {
   sendStatusWhatsapp,
   sendDocumentWhatsapp,
   sendFreeTextMessage,
   sendNewAppointmentStaffAlert,
   sendAppointmentConfirmation,
+  sendDealerBalanceReminder,
   toCloudApiPhone,
   downloadIncomingMedia,
 };

@@ -3141,19 +3141,6 @@ Kalan: ₺{kalan_tutar}
 
 Bizi tercih ettiğiniz için teşekkür ederiz!`
   },
-  dealerBalance: {
-    label: 'Bayi Bakiye Bildirimi',
-    placeholders: ['bayi_adi','bakiye','hareket_listesi'],
-    text: `Teknonand — Bayi Hesap Bildirimi
-Sayın {bayi_adi},
-
-Güncel Veresiye Bakiyeniz: ₺{bakiye}
-
-Son Hareketler:
-{hareket_listesi}
-
-Bilgilerinize sunarız.`
-  },
   paymentReminder: {
     label: 'Ödeme Hatırlatması (Teslim Edilmiş, Tahsilat Eksik)',
     placeholders: ['takip_kodu','musteri_adi','cihaz_modeli','toplam_tutar','odenen_tutar','kalan_tutar'],
@@ -4344,18 +4331,18 @@ async function updateDealerPhone(id){
   renderDealerDetail();
 }
 
-function sendDealerBalanceWhatsApp(id){
+async function sendDealerBalanceWhatsApp(id){
   const dl = dealers.find(x=>x.id===id);
   if(!dl) return;
-  const txs = (dl.transactions||[]).slice(0,10); // zaten en yeniden en eskiye sıralı gelir
-  const hareketListesi = txs.length ? txs.map(t=>`- ${t.type==='VERESIYE_SATIS'?'Veresiye Satış':'Tahsilat'}: ₺${(parseFloat(t.amount)||0).toFixed(2)} (${new Date(t.createdAt).toLocaleDateString('tr-TR')})`).join('\n') : '- Hareket yok';
-  const text = encodeURIComponent(fillTemplate(whatsappTemplates.dealerBalance.text, {
-    bayi_adi: dl.name,
-    bakiye: (parseFloat(dl.balance)||0).toFixed(2),
-    hareket_listesi: hareketListesi
-  }));
-  const number = dl.phone ? toWhatsAppNumber(dl.phone) : '';
-  window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
+  if(!dl.phone){ toast('Bayinin telefon numarası kayıtlı değil'); return; }
+  const bakiye = (parseFloat(dl.balance)||0).toFixed(2);
+  if(!confirm(`${dl.name} adlı bayiye güncel bakiyesi (₺${bakiye}) WhatsApp'tan otomatik gönderilsin mi?`)) return;
+  try{
+    await apiFetch(`/dealers/${id}/balance-whatsapp`, { method: 'POST' });
+    toast('Bakiye bildirimi WhatsApp\'tan gönderildi');
+  }catch(e){
+    toast(e.message || 'Bakiye bildirimi gönderilemedi');
+  }
 }
 
 function allPayments(){

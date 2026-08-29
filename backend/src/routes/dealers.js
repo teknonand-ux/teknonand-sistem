@@ -3,7 +3,7 @@ const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireDealer } = require('../middleware/auth');
 const { hashPassword } = require('../lib/auth');
-const { sendStatusWhatsapp } = require('../services/whatsapp');
+const { sendStatusWhatsapp, sendDealerBalanceReminder } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -99,6 +99,21 @@ router.delete('/:id', requireAuth, requireEmployee, async (req, res, next) => {
   try {
     await prisma.dealer.delete({ where: { id: req.params.id } });
     res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/dealers/:id/balance-whatsapp — "WhatsApp ile Bakiye Bildir" butonu:
+// onaylı WHATSAPP_TEMPLATE_DEALER_BALANCE şablonuyla güncel veresiye bakiyesini
+// otomatik gönderir (bkz. src/services/whatsapp.js sendDealerBalanceReminder).
+router.post('/:id/balance-whatsapp', requireAuth, requireEmployee, async (req, res, next) => {
+  try {
+    const dealer = await prisma.dealer.findUniqueOrThrow({ where: { id: req.params.id } });
+    if (!dealer.phone) return res.status(400).json({ error: 'Bayinin telefon numarası kayıtlı değil' });
+    const result = await sendDealerBalanceReminder(dealer);
+    if (!result.ok) return res.status(502).json({ error: result.error || 'Mesaj gönderilemedi' });
+    res.json({ ok: true });
   } catch (e) {
     next(e);
   }
