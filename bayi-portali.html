@@ -82,6 +82,7 @@
   .approve-box .item-state.ok{color:var(--green);}
   .approve-box .item-state.no{color:var(--red);}
   .approve-box .item-actions{display:flex; gap:8px; margin-top:6px;}
+  .approve-box .item-note{font-size:11.5px; color:var(--ink-soft); margin-top:4px; font-style:italic;}
   .empty{color:var(--ink-soft); font-size:13px; padding:16px 0; text-align:center;}
 
   .tx-line{display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #EEEDE7; font-size:12.5px;}
@@ -395,20 +396,28 @@ function renderDevices(){
         ${(!d.diagnosisItems || !d.diagnosisItems.length) && d.diagnosisText ? `<div class="d-line"><span>Arıza Tespiti</span>${esc(d.diagnosisText)}</div>` : ''}
         ${(!d.diagnosisItems || !d.diagnosisItems.length) && d.estimatedPrice ? `<div class="d-line"><span>Tahmini Fiyat</span>₺${d.estimatedPrice}</div>` : ''}
         ${imgGallery(d.diagnosisImages, 'Arıza Tespiti Görselleri')}
-        ${(d.diagnosisItems && d.diagnosisItems.length) ? `
+        ${(d.diagnosisItems && d.diagnosisItems.length) ? (()=>{
+          const anyPending = d.diagnosisItems.some(it=>it.approved===null||it.approved===undefined);
+          return `
           <div class="approve-box" onclick="event.stopPropagation()">
-            <div style="font-weight:600; margin-bottom:4px;">${d.diagnosisItems.some(it=>it.approved===null||it.approved===undefined) ? 'Her arıza kalemi için ayrı ayrı onayınız bekleniyor' : 'Arıza Kalemleri'}</div>
+            <div style="font-weight:600; margin-bottom:4px;">${anyPending ? 'Her arıza kalemi için ayrı ayrı onayınız bekleniyor' : 'Arıza Kalemleri'}</div>
             ${d.diagnosisItems.map(it=>{
               const responded = it.approved===true || it.approved===false;
               const stateLabel = it.approved===true ? '<span class="item-state ok">✓ Onaylandı</span>' : it.approved===false ? '<span class="item-state no">✕ Yapılmasın dediniz</span>' : '';
+              const noteLine = (responded && it.respondNote) ? `<div class="item-note">Notunuz: ${esc(it.respondNote)}</div>` : '';
               const actions = !responded ? `
+                <textarea id="dealer-diag-note-${it.id}" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)"></textarea>
                 <div class="item-actions">
                   <button class="primary" onclick="respondDealerDiagnosisItem('${d.id}','${it.id}',true)">Onaylıyorum</button>
                   <button class="ghost" style="border-color:var(--red); color:var(--red);" onclick="respondDealerDiagnosisItem('${d.id}','${it.id}',false)">Yapılmasın</button>
                 </div>` : '';
-              return `<div class="diag-item"><div class="d-line"><span>${esc(it.description)}</span>₺${it.price}</div>${stateLabel}${actions}</div>`;
+              return `<div class="diag-item"><div class="d-line"><span>${esc(it.description)}</span>₺${it.price}</div>${stateLabel}${noteLine}${actions}</div>`;
             }).join('')}
-          </div>` : ''}
+            ${anyPending ? `
+            <textarea id="approveNote-${d.id}" rows="2" placeholder="Genel bir not eklemek ister misiniz? (opsiyonel)"></textarea>
+            <button class="ghost" style="border-color:var(--red); color:var(--red); margin-top:8px; width:100%;" onclick="requestReturnDevice('${d.id}')">Hiçbirini Onaylamıyorum, İade İstiyorum</button>` : ''}
+          </div>`;
+        })() : ''}
         ${(needsApproval && (!d.diagnosisItems || !d.diagnosisItems.length)) ? `
           <div class="approve-box" onclick="event.stopPropagation()">
             Bu cihaz için tespit edilen arıza ve tahmini fiyatı onaylıyor musunuz?
@@ -449,10 +458,12 @@ async function approveDevice(id){
 }
 
 async function respondDealerDiagnosisItem(deviceId, itemId, approved){
+  const noteEl = document.getElementById(`dealer-diag-note-${itemId}`);
+  const note = noteEl ? noteEl.value.trim() : '';
   try{
     const res = await apiFetch(`/dealers/me/devices/${deviceId}/diagnosis-items/${itemId}/respond`, {
       method: 'POST',
-      body: JSON.stringify({ approved })
+      body: JSON.stringify({ approved, note: note || undefined })
     });
     if(!res.ok) return;
     const updated = await res.json();

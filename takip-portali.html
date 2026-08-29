@@ -304,6 +304,9 @@ function render(d){
       <div class="approve-box">
         <div class="a-title">${pending.length ? 'Her Arıza Kalemi İçin Ayrı Ayrı Onayınız Bekleniyor' : 'Arıza Kalemleri Yanıtlandı'}</div>
         ${itemsListHtml}
+        ${pending.length ? `
+        <textarea id="approveNote" rows="2" placeholder="Genel bir not eklemek ister misiniz? (opsiyonel)"></textarea>
+        <button class="again-btn" onclick="requestReturn()">Hiçbirini Onaylamıyorum, İade İstiyorum</button>` : ''}
       </div>`;
   } else if(d.status === 'DIAGNOSIS_DONE' && !d.customerApproved){
     approveHtml = `

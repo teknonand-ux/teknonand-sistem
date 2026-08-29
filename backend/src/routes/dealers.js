@@ -244,7 +244,9 @@ async function advanceStatusIfAllItemsResponded(deviceId, respondedByLabel) {
 // arıza kalemini onaylar ya da reddeder ("yapılmasın")
 router.post('/me/devices/:id/diagnosis-items/:itemId/respond', requireAuth, requireDealer, async (req, res, next) => {
   try {
-    const { approved } = z.object({ approved: z.boolean() }).parse(req.body);
+    const { approved, note } = z
+      .object({ approved: z.boolean(), note: z.string().max(300).optional() })
+      .parse(req.body);
     const device = await prisma.device.findFirst({ where: { id: req.params.id, dealerId: req.user.sub } });
     if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
 
@@ -253,7 +255,7 @@ router.post('/me/devices/:id/diagnosis-items/:itemId/respond', requireAuth, requ
 
     await prisma.diagnosisItem.update({
       where: { id: item.id },
-      data: { approved, respondedBy: 'dealer', respondedAt: new Date() },
+      data: { approved, respondedBy: 'dealer', respondedAt: new Date(), respondNote: note || null },
     });
 
     await advanceStatusIfAllItemsResponded(device.id, 'Bayi');
