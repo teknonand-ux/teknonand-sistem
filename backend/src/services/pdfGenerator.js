@@ -187,12 +187,14 @@ function buildDeliveryFormPdfBuffer(device, companyInfo, companyLogoDataUrl) {
 
 // Bir toptancıdan, verilen tarih aralığında alınan stok kalemlerinin (stok
 // girişleri + doğrudan cihaza toptancı seçilerek eklenen parçalar) dökümünü
-// PDF olarak üretir. items: [{ name, costUsd, date }] — çağıran taraf (suppliers.js)
-// stok kalemleri ile cihaz parçalarını birleştirip tarihe göre sıralamış halde verir.
-// Cihaz takip kodu kasıtlı olarak basılmaz (toptancıyı ilgilendirmez); maliyet
-// yalnızca dolar cinsinden yazılır — TL girilip dolar karşılığı hiç kaydedilmemiş
-// kalemlerde "—" gösterilir (TL->$ dönüşümü o anki kura göre yanıltıcı olabileceğinden
-// tahmini bir çevrim yapılmaz).
+// PDF olarak üretir. items: [{ name, costUsd, date, employeeName }] — çağıran
+// taraf (suppliers.js) stok kalemleri ile cihaz parçalarını birleştirip tarihe
+// göre sıralamış halde verir. Cihaz takip kodu kasıtlı olarak basılmaz
+// (toptancıyı ilgilendirmez); maliyet yalnızca dolar cinsinden yazılır — TL
+// girilip dolar karşılığı hiç kaydedilmemiş kalemlerde "—" gösterilir (TL->$
+// dönüşümü o anki kura göre yanıltıcı olabileceğinden tahmini bir çevrim
+// yapılmaz). employeeName yalnızca cihaza doğrudan eklenen parçalarda vardır —
+// genel stok girişinde personel kaydı tutulmadığından "—" basılır.
 function buildSupplierStockPdfBuffer(supplier, items, from, to, companyInfo, companyLogoDataUrl) {
   return new Promise((resolve, reject) => {
     try {
@@ -232,11 +234,17 @@ function buildSupplierStockPdfBuffer(supplier, items, from, to, companyInfo, com
 
       const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
       doc.font('Body-Bold').fontSize(9);
-      const colX = { name: doc.page.margins.left, cost: doc.page.margins.left + contentWidth - 200, date: doc.page.margins.left + contentWidth - 100 };
+      const colX = {
+        name: doc.page.margins.left,
+        employee: doc.page.margins.left + contentWidth - 260,
+        cost: doc.page.margins.left + contentWidth - 160,
+        date: doc.page.margins.left + contentWidth - 90,
+      };
       const tableTop = doc.y;
-      doc.text('Parça', colX.name, tableTop, { width: colX.cost - colX.name - 10 });
-      doc.text('Maliyet ($)', colX.cost, tableTop, { width: 90 });
-      doc.text('İşlem Tarihi', colX.date, tableTop, { width: 100 });
+      doc.text('Parça', colX.name, tableTop, { width: colX.employee - colX.name - 10 });
+      doc.text('Personel', colX.employee, tableTop, { width: 100 });
+      doc.text('Maliyet ($)', colX.cost, tableTop, { width: 70 });
+      doc.text('İşlem Tarihi', colX.date, tableTop, { width: 90 });
       doc.moveDown(0.3);
       doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
       doc.moveDown(0.2);
@@ -246,14 +254,15 @@ function buildSupplierStockPdfBuffer(supplier, items, from, to, companyInfo, com
       if (items.length) {
         items.forEach((item) => {
           const rowY = doc.y;
-          doc.text(item.name, colX.name, rowY, { width: colX.cost - colX.name - 10 });
+          doc.text(item.name, colX.name, rowY, { width: colX.employee - colX.name - 10 });
+          doc.text(item.employeeName || '—', colX.employee, rowY, { width: 100 });
           if (item.costUsd != null) {
-            doc.text(`$${Number(item.costUsd).toFixed(2)}`, colX.cost, rowY, { width: 90 });
+            doc.text(`$${Number(item.costUsd).toFixed(2)}`, colX.cost, rowY, { width: 70 });
             totalUsd += Number(item.costUsd);
           } else {
-            doc.text('—', colX.cost, rowY, { width: 90 });
+            doc.text('—', colX.cost, rowY, { width: 70 });
           }
-          doc.text(new Date(item.date).toLocaleDateString('tr-TR'), colX.date, rowY, { width: 100 });
+          doc.text(new Date(item.date).toLocaleDateString('tr-TR'), colX.date, rowY, { width: 90 });
           doc.moveDown(0.4);
         });
       } else {

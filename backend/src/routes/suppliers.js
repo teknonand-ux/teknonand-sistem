@@ -22,16 +22,21 @@ async function buildSupplierStockPdf(supplierId, from, to) {
   const dateRange = { gte: fromDate, lte: toDate };
 
   const [stockItems, deviceParts] = await Promise.all([
+    // Genel stoğa girişte personel kaydı tutulmuyor (StockItem'da böyle bir alan
+    // yok) — bu yüzden bu kalemlerde "Personel" sütunu boş kalır.
     prisma.stockItem.findMany({ where: { supplierId: supplier.id, createdAt: dateRange } }),
     // Stoktan seçilmeden, doğrudan toptancı seçilerek cihaza eklenen parçalar —
     // stoktan seçilenler zaten kendi stok kalemi üzerinden yukarıda geliyor
     // (bkz. yonetici-paneli.html renderSupplierDetail ile aynı ayrım).
-    prisma.devicePart.findMany({ where: { supplierId: supplier.id, stockItemId: null, createdAt: dateRange } }),
+    prisma.devicePart.findMany({
+      where: { supplierId: supplier.id, stockItemId: null, createdAt: dateRange },
+      include: { addedByEmployee: true },
+    }),
   ]);
 
   const items = [
-    ...stockItems.map((item) => ({ name: item.name, costUsd: item.unitCostUsd, date: item.createdAt })),
-    ...deviceParts.map((p) => ({ name: p.name, costUsd: p.costUsd, date: p.createdAt })),
+    ...stockItems.map((item) => ({ name: item.name, costUsd: item.unitCostUsd, date: item.createdAt, employeeName: null })),
+    ...deviceParts.map((p) => ({ name: p.name, costUsd: p.costUsd, date: p.createdAt, employeeName: p.addedByEmployee?.name || null })),
   ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
   const [companyInfoSetting, companyLogoSetting] = await Promise.all([
