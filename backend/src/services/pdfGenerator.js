@@ -185,4 +185,92 @@ function buildDeliveryFormPdfBuffer(device, companyInfo, companyLogoDataUrl) {
   });
 }
 
-module.exports = { buildDeliveryFormPdfBuffer };
+// Bir toptancıdan, verilen tarih aralığında alınan stok kalemlerinin (stok
+// girişleri + doğrudan cihaza toptancı seçilerek eklenen parçalar) dökümünü
+// PDF olarak üretir. items: [{ name, costUsd, date }] — çağıran taraf (suppliers.js)
+// stok kalemleri ile cihaz parçalarını birleştirip tarihe göre sıralamış halde verir.
+// Cihaz takip kodu kasıtlı olarak basılmaz (toptancıyı ilgilendirmez); maliyet
+// yalnızca dolar cinsinden yazılır — TL girilip dolar karşılığı hiç kaydedilmemiş
+// kalemlerde "—" gösterilir (TL->$ dönüşümü o anki kura göre yanıltıcı olabileceğinden
+// tahmini bir çevrim yapılmaz).
+function buildSupplierStockPdfBuffer(supplier, items, from, to, companyInfo, companyLogoDataUrl) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const chunks = [];
+      doc.on('data', (c) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      doc.registerFont('Body', FONT_REGULAR);
+      doc.registerFont('Body-Bold', FONT_BOLD);
+
+      let headerY = doc.y;
+      try {
+        const imgBuf =
+          companyLogoDataUrl && companyLogoDataUrl.startsWith('data:image')
+            ? Buffer.from(companyLogoDataUrl.split(',')[1], 'base64')
+            : fs.readFileSync(DEFAULT_LOGO_PATH);
+        doc.image(imgBuf, doc.x, headerY, { height: 34 });
+      } catch (e) {
+        /* logo bozuksa sessizce atla */
+      }
+      const textX = doc.x + 50;
+      doc.fontSize(13).font('Body-Bold').text(companyInfo.name || 'Teknonand', textX, headerY, { width: 300 });
+      const infoLines = [companyInfo.address, [companyInfo.phone, companyInfo.email].filter(Boolean).join(' · '), companyInfo.tax ? 'Vergi: ' + companyInfo.tax : ''].filter(Boolean);
+      doc.fontSize(8).font('Body').fillColor('#666');
+      infoLines.forEach((l) => doc.text(l, textX, doc.y, { width: 300 }));
+      doc.fillColor('#000');
+      doc.moveDown(1);
+      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
+      doc.moveDown(0.6);
+
+      doc.fontSize(14).font('Body-Bold').text('Toptancı Stok Kalemleri Dökümü');
+      doc.fontSize(9).font('Body').fillColor('#666').text(`Toptancı: ${supplier.name} · Tarih Aralığı: ${from} — ${to}`);
+      doc.fillColor('#000');
+      doc.moveDown(0.8);
+
+      const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+      doc.font('Body-Bold').fontSize(9);
+      const colX = { name: doc.page.margins.left, cost: doc.page.margins.left + contentWidth - 200, date: doc.page.margins.left + contentWidth - 100 };
+      const tableTop = doc.y;
+      doc.text('Parça', colX.name, tableTop, { width: colX.cost - colX.name - 10 });
+      doc.text('Maliyet ($)', colX.cost, tableTop, { width: 90 });
+      doc.text('İşlem Tarihi', colX.date, tableTop, { width: 100 });
+      doc.moveDown(0.3);
+      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
+      doc.moveDown(0.2);
+
+      doc.font('Body').fontSize(9);
+      let totalUsd = 0;
+      if (items.length) {
+        items.forEach((item) => {
+          const rowY = doc.y;
+          doc.text(item.name, colX.name, rowY, { width: colX.cost - colX.name - 10 });
+          if (item.costUsd != null) {
+            doc.text(`$${Number(item.costUsd).toFixed(2)}`, colX.cost, rowY, { width: 90 });
+            totalUsd += Number(item.costUsd);
+          } else {
+            doc.text('—', colX.cost, rowY, { width: 90 });
+          }
+          doc.text(new Date(item.date).toLocaleDateString('tr-TR'), colX.date, rowY, { width: 100 });
+          doc.moveDown(0.4);
+        });
+      } else {
+        doc.fillColor('#999').text('Bu tarih aralığında kayıt yok');
+        doc.fillColor('#000');
+      }
+      doc.moveDown(0.4);
+      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor('#ccc').stroke();
+      doc.moveDown(0.4);
+
+      doc.font('Body-Bold').fontSize(10).text(`Toplam: $${totalUsd.toFixed(2)}`, doc.page.margins.left, doc.y, { width: contentWidth, align: 'right' });
+
+      doc.end();
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+module.exports = { buildDeliveryFormPdfBuffer, buildSupplierStockPdfBuffer };

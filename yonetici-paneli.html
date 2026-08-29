@@ -4162,10 +4162,14 @@ function renderDealerDetail(){
 
 let currentSupplierId = null;
 let supplierEditOpen = false;
+let supplierStockFrom = '';
+let supplierStockTo = '';
 
 function openSupplier(id){
   currentSupplierId = id;
   supplierEditOpen = false;
+  supplierStockFrom = '';
+  supplierStockTo = '';
   switchView('supplier-detail');
   renderSupplierDetail();
 }
@@ -4199,12 +4203,20 @@ function renderSupplierDetail(){
   const txs = s.transactions || [];
   const balanceTry = parseFloat(s.currentBalance) || 0;
   const balanceUsd = parseFloat(s.currentBalanceUsd) || 0;
-  const stockItems = stock.filter(item=>item.supplierId===s.id);
+  // "Ara" ile seçilen tarih aralığı (YYYY-MM-DD) — boşsa filtre uygulanmaz.
+  const inDateRange = (dateStr) => {
+    if(!supplierStockFrom && !supplierStockTo) return true;
+    const d = String(dateStr).slice(0,10);
+    if(supplierStockFrom && d < supplierStockFrom) return false;
+    if(supplierStockTo && d > supplierStockTo) return false;
+    return true;
+  };
+  const stockItems = stock.filter(item=>item.supplierId===s.id && inDateRange(item.createdAt));
   // Bir cihazın "Parçalar / Yapılan İşlemler" alanına stoktan seçilmeden, doğrudan
   // toptancı seçilerek eklenen parçalar da (stockItemId yoksa) burada listelensin —
   // stoktan seçilenler zaten kendi stok kalemi üzerinden yukarıda görünüyor.
   const supplierDeviceParts = devices.flatMap(d => (d.parts||[])
-    .filter(p => p.supplierId===s.id && !p.stockItemId)
+    .filter(p => p.supplierId===s.id && !p.stockItemId && inDateRange(p.createdAt))
     .map(p => ({ ...p, deviceId: d.id, trackingCode: d.trackingCode })));
 
   box.innerHTML = `
@@ -4255,6 +4267,13 @@ function renderSupplierDetail(){
     <div class="card">
       <h3>Bu Toptancıdan Alınan Stok Kalemleri</h3>
       <p class="login-hint" style="margin-top:0;">Yanlış girilmiş veya toptancıya iade edilen bir kalemi silerseniz, bu kalemin eklenmesiyle oluşan borç da otomatik geri alınır.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
+        <div class="field" style="margin-bottom:0;"><label>Başlangıç</label><input type="date" id="supStockFrom" value="${esc(supplierStockFrom)}"></div>
+        <div class="field" style="margin-bottom:0;"><label>Bitiş</label><input type="date" id="supStockTo" value="${esc(supplierStockTo)}"></div>
+        <button class="ghost" style="margin-top:0;" onclick="searchSupplierStock('${s.id}')">Ara</button>
+        ${(supplierStockFrom || supplierStockTo) ? `<button class="ghost" style="margin-top:0;" onclick="clearSupplierStockSearch('${s.id}')">Temizle</button>` : ''}
+        <button class="primary" style="margin-top:0;" onclick="sendSupplierStockPdf('${s.id}')" ${(supplierStockFrom && supplierStockTo) ? '' : `disabled title="Önce Başlangıç ve Bitiş tarihi seçip Ara'ya basın"`}>WhatsApp'tan PDF Gönder</button>
+      </div>
       <table><thead><tr><th>Parça</th><th>Kaynak</th><th>Adet</th><th>Maliyet</th><th>Personel</th><th></th></tr></thead>
         <tbody>${(stockItems.length || supplierDeviceParts.length) ? `
           ${stockItems.map(item=>`
@@ -4270,6 +4289,37 @@ function renderSupplierDetail(){
         ` : `<tr><td colspan="6" class="empty">Bu toptancıdan henüz stok girişi yok</td></tr>`}</tbody></table>
     </div>
   `;
+}
+
+function searchSupplierStock(id){
+  supplierStockFrom = document.getElementById('supStockFrom').value || '';
+  supplierStockTo = document.getElementById('supStockTo').value || '';
+  if(supplierStockFrom && supplierStockTo && supplierStockFrom > supplierStockTo){
+    toast('Başlangıç tarihi bitiş tarihinden sonra olamaz');
+    return;
+  }
+  renderSupplierDetail();
+}
+
+function clearSupplierStockSearch(id){
+  supplierStockFrom = '';
+  supplierStockTo = '';
+  renderSupplierDetail();
+}
+
+async function sendSupplierStockPdf(id){
+  if(!supplierStockFrom || !supplierStockTo){ toast('Önce Başlangıç ve Bitiş tarihi seçip Ara\'ya basın'); return; }
+  const s = suppliers.find(x=>x.id===id);
+  if(!confirm(`${s ? esc(s.name) : 'Toptancı'} için ${supplierStockFrom} — ${supplierStockTo} aralığındaki stok dökümü PDF olarak WhatsApp'tan gönderilsin mi?`)) return;
+  try{
+    const res = await apiFetch(`/suppliers/${id}/stock-pdf-whatsapp`, {
+      method: 'POST',
+      body: JSON.stringify({ from: supplierStockFrom, to: supplierStockTo })
+    });
+    toast(`PDF gönderildi (${res.itemCount} kalem)`);
+  }catch(e){
+    toast(e.message || 'PDF gönderilemedi');
+  }
 }
 
 async function addSupplierTx(id){

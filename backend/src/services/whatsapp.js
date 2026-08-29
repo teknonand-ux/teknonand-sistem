@@ -429,6 +429,47 @@ async function sendDealerBalanceReminder(dealer) {
   return result;
 }
 
+// "Bu Toptancıdan Alınan Stok Kalemleri" kartındaki tarih aralığı PDF'i — hem
+// toptancının kendi numarasına hem de sabit muhasebe/ofis hattına gönderilir.
+// Cihaz/müşteri bağlamı olmadığından sendDocumentWhatsapp'tan (whatsappMessage
+// kaydı, device/customer zorunluluğu) bağımsız, kendi belge gönderimini yapar.
+const SUPPLIER_STOCK_PDF_EXTRA_PHONE = '05342024037';
+
+async function sendSupplierStockPdfToPhone(phone, pdfBuffer, filename, bodyParams) {
+  const templateName = process.env.WHATSAPP_TEMPLATE_SUPPLIER_STOCK;
+  let status_ = 'GONDERILDI';
+  let errorMessage = null;
+  if (!templateName) {
+    status_ = 'BASARISIZ';
+    errorMessage = 'Bu belge için onaylı şablon tanımlı değil (WHATSAPP_TEMPLATE_SUPPLIER_STOCK)';
+  } else {
+    try {
+      const mediaId = await uploadMediaToMeta(pdfBuffer, filename, 'application/pdf');
+      await sendDocumentTemplateMessage(phone, templateName, mediaId, filename, bodyParams);
+    } catch (e) {
+      status_ = 'BASARISIZ';
+      errorMessage = e.message;
+    }
+  }
+  await recordOutboundInInbox({
+    phone,
+    customerId: null,
+    body: `[Belge] ${filename}`,
+    ok: status_ === 'GONDERILDI',
+    errorMessage,
+  });
+  return { ok: status_ === 'GONDERILDI', error: errorMessage };
+}
+
+// supplier.phone boşsa yalnızca sabit hatta gönderilir.
+async function sendSupplierStockPdfWhatsapp(supplier, pdfBuffer, filename, bodyParams) {
+  const targets = [...new Set([supplier.phone, SUPPLIER_STOCK_PDF_EXTRA_PHONE].filter(Boolean))];
+  const results = await Promise.all(targets.map((phone) => sendSupplierStockPdfToPhone(phone, pdfBuffer, filename, bodyParams)));
+  const ok = results.some((r) => r.ok);
+  const errorMessage = ok ? null : results.map((r) => r.error).filter(Boolean).join('; ');
+  return { ok, errorMessage, results };
+}
+
 module.exports = {
   sendStatusWhatsapp,
   sendDocumentWhatsapp,
@@ -436,6 +477,7 @@ module.exports = {
   sendNewAppointmentStaffAlert,
   sendAppointmentConfirmation,
   sendDealerBalanceReminder,
+  sendSupplierStockPdfWhatsapp,
   toCloudApiPhone,
   downloadIncomingMedia,
 };
