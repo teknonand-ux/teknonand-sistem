@@ -16,6 +16,19 @@ const TEMPLATES = {
   DELIVERED: (d) => `Sayın ${d.customerName}, cihazınızı teslim aldığınız için teşekkür ederiz.`,
 };
 
+// Cihaz bir bayiye aitse (device.dealerId doluysa) "müşteri" kaydı aslında bayinin
+// kendisidir (bkz. routes/devices.js POST /bulk) — bayiye TEMPLATES'teki müşteri
+// metinleri yerine, bayi adını içeren ve bayi portalına yönlendiren ayrı bir kısa
+// metin seti gider. AWAITING_PARTS bilerek yok — bayiye parça bekleme bildirimi
+// gönderilmiyor.
+const DEALER_TEMPLATES = {
+  RECEIVED: (d) => `Sayın ${d.customerName}, ${d.model} modelli cihazınızın takip kodu: ${d.trackingCode}. Cihaz aşamalarını bayi portalından takip edebilirsiniz.`,
+  DIAGNOSIS_DONE: (d) => `Sayın ${d.customerName}, ${d.model} modelli cihazınızın arıza tespiti tamamlandı. Tahmini tutar: ₺${d.estimatedPrice ?? '-'}. Bayi portalından onaylanmayan cihazlar işleme alınmaz. İşlemin hızlı ilerlemesi için portaldan onay veriniz.`,
+  READY: (d) => `Sayın ${d.customerName}, ${d.model} modelli cihazınız teslime hazır. Cihaz aşamalarını bayi portalından takip edebilirsiniz.`,
+  SHIPPED: (d) => `Sayın ${d.customerName}, ${d.model} modelli cihazınız Yurtiçi Kargo ile gönderildi. Takip No: ${d.cargoTrackingNumber || '-'}. Cihaz aşamalarını bayi portalından takip edebilirsiniz.`,
+  DELIVERED: (d) => `Sayın ${d.customerName}, ${d.model} modelli cihazınız teslim edildi. Cihaz aşamalarını bayi portalından takip edebilirsiniz.`,
+};
+
 // Her durum için Meta'da onaylanmış şablon adı ve şablonun body'sindeki
 // {{1}}, {{2}}... parametrelerinin hangi sırayla doldurulacağı.
 const CLOUD_API_TEMPLATES = {
@@ -25,6 +38,25 @@ const CLOUD_API_TEMPLATES = {
   READY: { envKey: 'WHATSAPP_TEMPLATE_READY', params: (d) => [d.customerName, d.model] },
   SHIPPED: { envKey: 'WHATSAPP_TEMPLATE_SHIPPED', params: (d) => [d.customerName, d.model, d.cargoTrackingNumber || '-'] },
   DELIVERED: { envKey: 'WHATSAPP_TEMPLATE_DELIVERED', params: (d) => [d.customerName] },
+};
+
+// Bayi bildirimleri için Meta Business Manager'da onaylatılan şablonlar (bkz.
+// WhatsApp Yöneticisi > Mesaj şablonları: cihaz_alindi_bayi, ariza_tespiti_tamamlandi_bayi,
+// teslime_hazir_bayi, kargoya_verildi_bayi, teslim_edildi_bayi). AWAITING_PARTS yok —
+// bayiye parça bekleme bildirimi gönderilmiyor. SHIPPED şablonu ayrıca gövdedeki
+// {{3}} takip numarasının yanında, "Kargomu Takip Et" adlı dinamik URL düğmesi
+// içerir (bkz. buttonParams) — düğme Yurtiçi Kargo'nun gönderi sorgulama sayfasına
+// takip numarasını otomatik dolduran bir linke gider.
+const DEALER_CLOUD_API_TEMPLATES = {
+  RECEIVED: { envKey: 'WHATSAPP_TEMPLATE_DEALER_RECEIVED', params: (d) => [d.customerName, d.model, d.trackingCode] },
+  DIAGNOSIS_DONE: { envKey: 'WHATSAPP_TEMPLATE_DEALER_DIAGNOSIS_DONE', params: (d) => [d.customerName, d.model, String(d.estimatedPrice ?? '-')] },
+  READY: { envKey: 'WHATSAPP_TEMPLATE_DEALER_READY', params: (d) => [d.customerName, d.model] },
+  SHIPPED: {
+    envKey: 'WHATSAPP_TEMPLATE_DEALER_SHIPPED',
+    params: (d) => [d.customerName, d.model, d.cargoTrackingNumber || '-'],
+    buttonParams: (d) => [d.cargoTrackingNumber || ''],
+  },
+  DELIVERED: { envKey: 'WHATSAPP_TEMPLATE_DEALER_DELIVERED', params: (d) => [d.customerName, d.model] },
 };
 
 // Telefonu Meta Cloud API'nin beklediği ülke koduyla başlayan, +/boşluk/tire
@@ -37,10 +69,10 @@ function toCloudApiPhone(phone) {
   return digits;
 }
 
-async function sendViaCloudApi(templateType, data, phone) {
+async function sendViaCloudApi(templateType, data, phone, templatesConfig = CLOUD_API_TEMPLATES) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const templateConfig = CLOUD_API_TEMPLATES[templateType];
+  const templateConfig = templatesConfig[templateType];
   const templateName = templateConfig && process.env[templateConfig.envKey];
   if (!accessToken || !phoneNumberId || !templateConfig || !templateName) {
     return { ok: false, error: 'WhatsApp Cloud API yapılandırılmamış veya bu durum için onaylı şablon tanımlı değil' };
@@ -49,6 +81,24 @@ async function sendViaCloudApi(templateType, data, phone) {
   const to = toCloudApiPhone(phone);
   if (!to) return { ok: false, error: 'Müşteri telefon numarası yok' };
 
+  const components = [
+    {
+      type: 'body',
+      parameters: templateConfig.params(data).map((text) => ({ type: 'text', text: String(text) })),
+    },
+  ];
+  // Dinamik URL düğmesi olan şablonlar için (ör. bayi SHIPPED şablonundaki
+  // "Kargomu Takip Et") — düğmenin {{1}}'i gövdedeki parametrelerden bağımsız,
+  // her zaman index 0'daki tek düğmeye ait ayrı bir parametre listesidir.
+  if (templateConfig.buttonParams) {
+    components.push({
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: templateConfig.buttonParams(data).map((text) => ({ type: 'text', text: String(text) })),
+    });
+  }
+
   const body = {
     messaging_product: 'whatsapp',
     to,
@@ -56,12 +106,7 @@ async function sendViaCloudApi(templateType, data, phone) {
     template: {
       name: templateName,
       language: { code: process.env.WHATSAPP_TEMPLATE_LANG || 'tr' },
-      components: [
-        {
-          type: 'body',
-          parameters: templateConfig.params(data).map((text) => ({ type: 'text', text: String(text) })),
-        },
-      ],
+      components,
     },
   };
 
@@ -203,7 +248,8 @@ async function sendDocumentWhatsapp({ device, customer, pdfBuffer, filename, tem
 }
 
 async function sendStatusWhatsapp(device, customer, status) {
-  const templateFn = TEMPLATES[status];
+  const isDealerDevice = !!device.dealerId;
+  const templateFn = (isDealerDevice ? DEALER_TEMPLATES : TEMPLATES)[status];
   if (!templateFn) return null;
 
   const data = { customerName: customer.fullName, model: device.model, trackingCode: device.trackingCode, estimatedPrice: device.estimatedPrice, cargoTrackingNumber: device.cargoTrackingNumber };
@@ -213,7 +259,7 @@ async function sendStatusWhatsapp(device, customer, status) {
   let errorMessage = null;
 
   const phone = customer.phone || device.backupPhone;
-  const result = await sendViaCloudApi(status, data, phone);
+  const result = await sendViaCloudApi(status, data, phone, isDealerDevice ? DEALER_CLOUD_API_TEMPLATES : CLOUD_API_TEMPLATES);
   if (!result.ok) {
     status_ = 'BASARISIZ';
     errorMessage = result.error;
