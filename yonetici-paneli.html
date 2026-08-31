@@ -854,6 +854,38 @@
         <table><thead><tr><th>Toptancı</th><th>Telefon</th><th>Bakiye</th></tr></thead>
           <tbody id="supplierTable"></tbody></table>
       </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+          <div>
+            <h3 style="margin:0;">Toptancı Dönemi</h3>
+            <p class="login-hint" style="margin-top:4px;">Tüm toptancılardaki alım (borçlanma) ve ödeme toplamı — toptancı bakiyelerini (gerçek borç) etkilemez.</p>
+          </div>
+          <button class="ghost" style="color:var(--red); border-color:var(--red); white-space:nowrap;" onclick="resetSupplierPeriod()">Dönemi Sıfırla</button>
+        </div>
+        <p class="login-hint" id="supplierPeriodInfo" style="margin-top:0;"></p>
+        <div class="stat-grid" id="supplierPeriodStatGrid"></div>
+      </div>
+
+      <div class="card">
+        <h3>Aylık Toptancı Raporu</h3>
+        <p class="login-hint" style="margin-top:0;">Seçilen ayda toptancı bazında alım/ödeme dökümü çıkarır — dönem sıfırlamadan bağımsız çalışır, geçmiş herhangi bir ay için de rapor alabilirsiniz.</p>
+        <div class="form-grid">
+          <div class="field"><label>Ay</label><input id="report-supplier-month" type="month"></div>
+          <div class="field" style="align-self:flex-end; display:flex; gap:8px;">
+            <button class="primary" onclick="generateMonthlySupplierReport()">Rapor Oluştur</button>
+            <button class="ghost" id="supplier-report-csv-btn" style="display:none;" onclick="downloadMonthlySupplierReportCSV()">CSV İndir</button>
+          </div>
+        </div>
+        <div id="monthlySupplierReportResult"></div>
+      </div>
+
+      <div class="card">
+        <h3>Toptancı Dönemi Sıfırlama Geçmişi</h3>
+        <p class="login-hint" style="margin-top:0;">"Dönemi Sıfırla" ile kapatılan dönemlerin özeti — her biri o dönemin ay sonu raporu gibi kullanılabilir.</p>
+        <table><thead><tr><th>Dönem</th><th>Alım (₺)</th><th>Ödeme (₺)</th><th>Alım ($)</th><th>Ödeme ($)</th><th>Kim</th><th>Not</th><th></th></tr></thead>
+          <tbody id="supplierResetTable" class="mini-list"></tbody></table>
+      </div>
     </div>
 
     <!-- SUPPLIER DETAIL -->
@@ -1129,6 +1161,7 @@ let customers = [];
 let expenses = [];
 let cashboxResets = [];
 let profitResets = [];
+let supplierResets = [];
 let exchangeRate = 47.89; // Harem Altın USD/TL satış kuru - varsayılan, elle güncellenebilir
 let currentDeviceId = null;
 let customerEditOpen = false;
@@ -1195,7 +1228,7 @@ async function apiFetch(path, options = {}){
 
 async function loadAll(){
   const isAdmin = currentUserPermission === 'ADMIN';
-  [devices, stock, suppliers, appointments, employees, dealers, customers, expenses, cashboxResets, profitResets] = await Promise.all([
+  [devices, stock, suppliers, appointments, employees, dealers, customers, expenses, cashboxResets, profitResets, supplierResets] = await Promise.all([
     apiFetch('/devices'),
     apiFetch('/stock'),
     apiFetch('/suppliers'),
@@ -1206,6 +1239,7 @@ async function loadAll(){
     isAdmin ? apiFetch('/reports/cashbox').then(r => r.expenses) : Promise.resolve([]),
     isAdmin ? apiFetch('/reports/cashbox/resets') : Promise.resolve([]),
     isAdmin ? apiFetch('/reports/profit/resets') : Promise.resolve([]),
+    apiFetch('/reports/suppliers/resets'),
   ]);
   await loadExchangeRate();
   await loadLabelDesign();
@@ -4476,6 +4510,174 @@ async function removeSupplierTx(supplierId, txId){
   renderAll();
 }
 
+// Tüm toptancıların ALIM/ÖDEME hareketlerini tek listede toplar — Toptancı
+// Dönemi özeti, sıfırlama ve aylık rapor bunu paylaşır.
+function allSupplierTx(){
+  const list = [];
+  suppliers.forEach(s=>{
+    (s.transactions||[]).forEach(t=>list.push({ supplierName: s.name, type: t.type, currency: t.currency, amount: parseFloat(t.amount)||0, at: t.createdAt }));
+  });
+  return list;
+}
+
+function lastSupplierResetAt(){
+  if(!supplierResets.length) return null;
+  return supplierResets.reduce((latest,r)=> !latest || new Date(r.periodEnd) > new Date(latest) ? r.periodEnd : latest, null);
+}
+
+function supplierPeriodStart(){
+  const resetAt = lastSupplierResetAt();
+  if(resetAt) return new Date(resetAt);
+  const dates = allSupplierTx().map(t=>t.at);
+  if(!dates.length) return null;
+  return new Date(Math.min(...dates.map(d=>new Date(d).getTime())));
+}
+
+// inPeriod(tarih)'e göre filtrelenmiş toptancı hareketlerinden ₺/$ bazında
+// alım-ödeme toplamlarını ve toptancı bazında kırılımı hesaplar.
+function computeSupplierPeriodStats(inPeriod){
+  const tx = allSupplierTx().filter(t=>inPeriod(t.at));
+  let totalAlimTry=0, totalOdemeTry=0, totalAlimUsd=0, totalOdemeUsd=0;
+  const bySupplier = {};
+  tx.forEach(t=>{
+    const key = t.supplierName;
+    if(!bySupplier[key]) bySupplier[key] = { alimTry:0, odemeTry:0, alimUsd:0, odemeUsd:0 };
+    const bucket = t.currency==='USD' ? (t.type==='ALIM'?'alimUsd':'odemeUsd') : (t.type==='ALIM'?'alimTry':'odemeTry');
+    bySupplier[key][bucket] += t.amount;
+    if(t.currency==='USD'){ if(t.type==='ALIM') totalAlimUsd+=t.amount; else totalOdemeUsd+=t.amount; }
+    else { if(t.type==='ALIM') totalAlimTry+=t.amount; else totalOdemeTry+=t.amount; }
+  });
+  return { totalAlimTry, totalOdemeTry, totalAlimUsd, totalOdemeUsd, bySupplier };
+}
+
+function renderSupplierPeriod(){
+  const grid = document.getElementById('supplierPeriodStatGrid');
+  const periodInfo = document.getElementById('supplierPeriodInfo');
+  if(!grid) return;
+
+  const resetAt = lastSupplierResetAt();
+  const sinceMs = resetAt ? new Date(resetAt).getTime() : -Infinity;
+  const { totalAlimTry, totalOdemeTry, totalAlimUsd, totalOdemeUsd } = computeSupplierPeriodStats(d => new Date(d).getTime() > sinceMs);
+
+  if(periodInfo){
+    const start = supplierPeriodStart();
+    periodInfo.textContent = start
+      ? `Bu dönem: ${start.toLocaleString('tr-TR')} — şimdi${resetAt ? ' (en son sıfırlama: '+new Date(resetAt).toLocaleString('tr-TR')+')' : ''}`
+      : 'Bu dönem: henüz hareket yok';
+  }
+
+  grid.innerHTML = `
+    <div class="stat"><div class="num" style="color:var(--red);">₺${totalAlimTry.toFixed(0)}</div><div class="lbl">Alım (₺)</div></div>
+    <div class="stat"><div class="num" style="color:var(--green);">₺${totalOdemeTry.toFixed(0)}</div><div class="lbl">Ödeme (₺)</div></div>
+    <div class="stat"><div class="num">₺${(totalAlimTry-totalOdemeTry).toFixed(0)}</div><div class="lbl">Net (₺)</div></div>
+    <div class="stat"><div class="num" style="color:var(--red);">$${totalAlimUsd.toFixed(0)}</div><div class="lbl">Alım ($)</div></div>
+    <div class="stat"><div class="num" style="color:var(--green);">$${totalOdemeUsd.toFixed(0)}</div><div class="lbl">Ödeme ($)</div></div>
+    <div class="stat"><div class="num">$${(totalAlimUsd-totalOdemeUsd).toFixed(0)}</div><div class="lbl">Net ($)</div></div>
+  `;
+  renderSupplierResetHistory();
+}
+
+function renderSupplierResetHistory(){
+  const tbody = document.getElementById('supplierResetTable');
+  if(!tbody) return;
+  const latestId = lastSupplierResetAt() ? supplierResets.reduce((a,b)=> new Date(a.periodEnd)>new Date(b.periodEnd)?a:b).id : null;
+  tbody.innerHTML = supplierResets.length ? supplierResets.map(r=>`
+    <tr><td>${new Date(r.periodStart).toLocaleDateString('tr-TR')} — ${new Date(r.periodEnd).toLocaleDateString('tr-TR')}${r.id===latestId?' <span class="pill" style="color:var(--green); background:rgba(46,158,109,0.12);">güncel</span>':''}</td>
+    <td class="code" style="color:var(--red);">₺${(parseFloat(r.totalAlimTry)||0).toFixed(2)}</td>
+    <td class="code" style="color:var(--green);">₺${(parseFloat(r.totalOdemeTry)||0).toFixed(2)}</td>
+    <td class="code" style="color:var(--red);">$${(parseFloat(r.totalAlimUsd)||0).toFixed(2)}</td>
+    <td class="code" style="color:var(--green);">$${(parseFloat(r.totalOdemeUsd)||0).toFixed(2)}</td>
+    <td>${esc(r.employee?.name)||'—'}</td>
+    <td>${esc(r.note)||'—'}</td>
+    <td><button class="ghost" onclick="undoSupplierReset('${r.id}', ${r.id===latestId})">Geri Al</button></td></tr>`).join('') : `<tr><td colspan="8" class="empty">Henüz toptancı dönemi sıfırlanmadı</td></tr>`;
+}
+
+async function resetSupplierPeriod(){
+  const resetAt = lastSupplierResetAt();
+  const sinceMs = resetAt ? new Date(resetAt).getTime() : -Infinity;
+  const { totalAlimTry, totalOdemeTry, totalAlimUsd, totalOdemeUsd } = computeSupplierPeriodStats(d => new Date(d).getTime() > sinceMs);
+  const start = supplierPeriodStart();
+
+  if(!confirm(`Toptancı dönemi sıfırlanacak.\n\nBu dönem: ${start ? start.toLocaleDateString('tr-TR') : '—'} — ${new Date().toLocaleDateString('tr-TR')}\nAlım: ₺${totalAlimTry.toFixed(2)} / $${totalAlimUsd.toFixed(2)}\nÖdeme: ₺${totalOdemeTry.toFixed(2)} / $${totalOdemeUsd.toFixed(2)}\n\nBu özet geçmişe arşivlenecek ve dönem raporu sıfırdan başlayacak. Toptancıların gerçek borç bakiyeleri DEĞİŞMEZ. Devam edilsin mi?`)) return;
+
+  const note = prompt('Bu sıfırlama için not eklemek ister misiniz? (opsiyonel, boş bırakabilirsiniz)', '') || undefined;
+
+  try{
+    const reset = await apiFetch('/reports/suppliers/reset', {
+      method: 'POST',
+      body: JSON.stringify({ periodStart: (start || new Date()).toISOString(), totalAlimTry, totalOdemeTry, totalAlimUsd, totalOdemeUsd, note })
+    });
+    supplierResets.unshift(reset);
+    toast('Toptancı dönemi sıfırlandı');
+    renderSupplierPeriod();
+  }catch(e){ toast(e.message || 'Dönem sıfırlanamadı'); }
+}
+
+async function undoSupplierReset(id, isLatest){
+  const msg = isLatest
+    ? 'Bu sıfırlama geri alınacak — dönem raporu bu sıfırlamadan önceki döneme (bir önceki sıfırlamaya veya en başına) dönecek. Toptancı bakiyeleri etkilenmez. Devam edilsin mi?'
+    : 'Bu geçmiş sıfırlama kaydı silinecek. En son sıfırlama olmadığı için güncel dönemi etkilemez, yalnızca geçmiş listesinden kaldırılır. Devam edilsin mi?';
+  if(!confirm(msg)) return;
+  try{
+    await apiFetch(`/reports/suppliers/reset/${id}`, { method: 'DELETE' });
+  }catch(e){ toast(e.message || 'Sıfırlama geri alınamadı'); return; }
+  supplierResets = supplierResets.filter(x=>x.id!==id);
+  toast('Sıfırlama geri alındı');
+  renderSupplierPeriod();
+}
+
+function monthlySupplierReportRange(){
+  const val = document.getElementById('report-supplier-month').value; // "YYYY-MM"
+  if(!val) return null;
+  const [y,m] = val.split('-').map(Number);
+  const from = new Date(y, m-1, 1);
+  const to = new Date(y, m, 1);
+  return { from, to, label: from.toLocaleDateString('tr-TR', {month:'long', year:'numeric'}) };
+}
+
+let lastMonthlySupplierReport = null;
+
+function generateMonthlySupplierReport(){
+  const range = monthlySupplierReportRange();
+  const box = document.getElementById('monthlySupplierReportResult');
+  const csvBtn = document.getElementById('supplier-report-csv-btn');
+  if(!range){ toast('Bir ay seçin'); return; }
+
+  const stats = computeSupplierPeriodStats(d => { const t = new Date(d); return t>=range.from && t<range.to; });
+  const { totalAlimTry, totalOdemeTry, totalAlimUsd, totalOdemeUsd, bySupplier } = stats;
+  lastMonthlySupplierReport = { range, ...stats };
+
+  const supKeys = Object.keys(bySupplier);
+  box.innerHTML = `
+    <h4 style="margin:14px 0 6px;">${esc(range.label)}</h4>
+    <div class="stat-grid">
+      <div class="stat"><div class="num" style="color:var(--red);">₺${totalAlimTry.toFixed(0)}</div><div class="lbl">Alım (₺)</div></div>
+      <div class="stat"><div class="num" style="color:var(--green);">₺${totalOdemeTry.toFixed(0)}</div><div class="lbl">Ödeme (₺)</div></div>
+      <div class="stat"><div class="num" style="color:var(--red);">$${totalAlimUsd.toFixed(0)}</div><div class="lbl">Alım ($)</div></div>
+      <div class="stat"><div class="num" style="color:var(--green);">$${totalOdemeUsd.toFixed(0)}</div><div class="lbl">Ödeme ($)</div></div>
+    </div>
+    <table><thead><tr><th>Toptancı</th><th>Alım (₺)</th><th>Ödeme (₺)</th><th>Alım ($)</th><th>Ödeme ($)</th></tr></thead>
+      <tbody>${supKeys.length ? supKeys.map(k=>`
+        <tr><td>${esc(k)}</td><td>₺${bySupplier[k].alimTry.toFixed(2)}</td><td>₺${bySupplier[k].odemeTry.toFixed(2)}</td>
+        <td>$${bySupplier[k].alimUsd.toFixed(2)}</td><td>$${bySupplier[k].odemeUsd.toFixed(2)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty">Bu ayda hareket yok</td></tr>'}</tbody></table>
+  `;
+  csvBtn.style.display = supKeys.length ? 'inline-block' : 'none';
+}
+
+function downloadMonthlySupplierReportCSV(){
+  if(!lastMonthlySupplierReport) return;
+  const { range, totalAlimTry, totalOdemeTry, totalAlimUsd, totalOdemeUsd, bySupplier } = lastMonthlySupplierReport;
+  const header = ['Toptancı','Alım (₺)','Ödeme (₺)','Alım ($)','Ödeme ($)'];
+  const rows = Object.keys(bySupplier).map(k=>[k, bySupplier[k].alimTry.toFixed(2), bySupplier[k].odemeTry.toFixed(2), bySupplier[k].alimUsd.toFixed(2), bySupplier[k].odemeUsd.toFixed(2)]);
+  const csv = '﻿' + [header, ...rows].map(r=>r.map(csvEscape).join(';')).join('\r\n')
+    + `\r\n\r\n${csvEscape('Toplam Alım (₺)')};${totalAlimTry.toFixed(2)}`
+    + `\r\n${csvEscape('Toplam Ödeme (₺)')};${totalOdemeTry.toFixed(2)}`
+    + `\r\n${csvEscape('Toplam Alım ($)')};${totalAlimUsd.toFixed(2)}`
+    + `\r\n${csvEscape('Toplam Ödeme ($)')};${totalOdemeUsd.toFixed(2)}`;
+  downloadBlob(`toptanci-rapor-${range.from.toISOString().slice(0,7)}.csv`, csv, 'text/csv;charset=utf-8;');
+  toast('Aylık toptancı raporu indirildi');
+}
+
 async function removeSupplierStockItem(stockItemId){
   const item = stock.find(x=>x.id===stockItemId);
   if(!item) return;
@@ -5559,6 +5761,7 @@ function renderAll(){
   document.getElementById('supplierTable').innerHTML = suppliers.length ? suppliers.map(s=>`
     <tr class="row-click" onclick="openSupplier('${s.id}')"><td>${esc(s.name)}</td><td>${esc(s.phone)||'—'}</td>
     <td>₺${(parseFloat(s.currentBalance)||0).toFixed(2)}${parseFloat(s.currentBalanceUsd)?` <span style="color:var(--ink-soft); font-size:11px;">($${parseFloat(s.currentBalanceUsd).toFixed(2)})</span>`:''}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Henüz toptancı eklenmedi</td></tr>`;
+  renderSupplierPeriod();
 
   // Stok Ekle formundaki toptancı seçim listesi
   const stockSupplierSel = document.getElementById('s-supplier');

@@ -219,4 +219,55 @@ router.delete('/profit/reset/:id', async (req, res, next) => {
   }
 });
 
+// Toptancı dönemi uçları — Toptancılar sayfası tüm personele açık olduğundan
+// (yalnızca Kasa ve Kâr/Zarar yönetici-özel) bunlar da requireAdmin OLMADAN,
+// dosyanın en üstündeki requireEmployee ile korunur.
+
+// GET /api/reports/suppliers/resets — geçmiş toptancı dönemi sıfırlamaları (en yeni önce)
+router.get('/suppliers/resets', async (req, res, next) => {
+  try {
+    const resets = await prisma.supplierReset.findMany({
+      orderBy: { periodEnd: 'desc' },
+      include: { employee: { select: { name: true } } },
+    });
+    res.json(resets);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/reports/suppliers/reset — kapanan dönemin toptancı alım/ödeme
+// özetini (₺ ve $ ayrı) arşivler. Toptancı bakiyeleri (gerçek borç) bu
+// işlemden ETKİLENMEZ — yalnızca dönem raporu görünümü sıfırlanır.
+router.post('/suppliers/reset', async (req, res, next) => {
+  try {
+    const schema = z.object({
+      periodStart: z.coerce.date(),
+      totalAlimTry: z.number(),
+      totalOdemeTry: z.number(),
+      totalAlimUsd: z.number(),
+      totalOdemeUsd: z.number(),
+      note: z.string().optional(),
+    });
+    const data = schema.parse(req.body);
+    const reset = await prisma.supplierReset.create({
+      data: { ...data, employeeId: req.user.sub },
+      include: { employee: { select: { name: true } } },
+    });
+    res.status(201).json(reset);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// DELETE /api/reports/suppliers/reset/:id — bir dönem sıfırlamasını geri alır
+router.delete('/suppliers/reset/:id', async (req, res, next) => {
+  try {
+    await prisma.supplierReset.delete({ where: { id: req.params.id } });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
 module.exports = router;

@@ -47,6 +47,7 @@ model Employee {
   labelPrintJobs  LabelPrintJob[]
   cashboxResets   CashboxReset[]
   profitResets    ProfitReset[]
+  supplierResets  SupplierReset[]
 
   @@map("employees")
 }
@@ -432,6 +433,26 @@ model ProfitReset {
   createdAt    DateTime  @default(now())
 
   @@map("profit_resets")
+}
+
+// Toptancı dönemi sıfırlama: "Dönemi Sıfırla" dendiğinde tüm toptancılardaki
+// Alım (borçlanma) ve Ödeme toplamlarının (₺ ve $ ayrı) özeti arşivlenir.
+// Toptancı bakiyeleri (gerçek borç) ASLA değişmez/silinmez — bu yalnızca
+// "Toptancılar" ekranındaki dönem raporunun görünümünü sıfırlar.
+model SupplierReset {
+  id            String    @id @default(uuid())
+  periodStart   DateTime
+  periodEnd     DateTime  @default(now())
+  totalAlimTry  Decimal   @db.Decimal(12, 2)
+  totalOdemeTry Decimal   @db.Decimal(12, 2)
+  totalAlimUsd  Decimal   @db.Decimal(12, 2)
+  totalOdemeUsd Decimal   @db.Decimal(12, 2)
+  note          String?
+  employeeId    String?
+  employee      Employee? @relation(fields: [employeeId], references: [id])
+  createdAt     DateTime  @default(now())
+
+  @@map("supplier_resets")
 }
 
 // ---------------------------------------------------------------------------
