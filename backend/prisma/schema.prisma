@@ -46,6 +46,7 @@ model Employee {
   instagramChatMessages InstagramChatMessage[]
   labelPrintJobs  LabelPrintJob[]
   cashboxResets   CashboxReset[]
+  profitResets    ProfitReset[]
 
   @@map("employees")
 }
@@ -412,6 +413,25 @@ model CashboxReset {
   createdAt    DateTime  @default(now())
 
   @@map("cashbox_resets")
+}
+
+// Kâr/Zarar sıfırlama: "Kâr/Zararı Sıfırla" dendiğinde kapanan dönemin
+// (bir önceki sıfırlamadan bu ana kadar) gelir/maliyet/net kâr özeti burada
+// arşivlenir. Ödeme/parça kayıtları silinmez — Kâr/Zarar ekranı bir sonraki
+// sıfırlamaya kadar yalnızca bu tarihten sonrasını gösterir.
+model ProfitReset {
+  id           String    @id @default(uuid())
+  periodStart  DateTime
+  periodEnd    DateTime  @default(now())
+  totalRevenue Decimal   @db.Decimal(12, 2)
+  totalCost    Decimal   @db.Decimal(12, 2)
+  netProfit    Decimal   @db.Decimal(12, 2)
+  note         String?
+  employeeId   String?
+  employee     Employee? @relation(fields: [employeeId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  @@map("profit_resets")
 }
 
 // ---------------------------------------------------------------------------

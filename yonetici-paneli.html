@@ -979,8 +979,14 @@
 
     <!-- PROFIT / LOSS -->
     <div class="view" id="view-profit">
-      <h1>Kâr / Zarar</h1>
-      <p class="subtitle">Gelir, maliyet ve net kâr detayı</p>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h1>Kâr / Zarar</h1>
+          <p class="subtitle">Gelir, maliyet ve net kâr detayı</p>
+        </div>
+        <button class="ghost" style="color:var(--red); border-color:var(--red); white-space:nowrap;" onclick="resetProfit()">Kâr/Zararı Sıfırla</button>
+      </div>
+      <p class="login-hint" id="profitPeriodInfo" style="margin-top:0;"></p>
       <div class="stat-grid" id="profitStatGrid"></div>
       <div class="card">
         <h3>Personel Bazında Tahsilat</h3>
@@ -991,6 +997,26 @@
         <h3>Cihaz Bazında Detay</h3>
         <table><thead><tr><th>Kod</th><th>Gelir (Tahsilat)</th><th>Parça Maliyeti</th><th>Kâr</th></tr></thead>
           <tbody id="deviceProfitTable"></tbody></table>
+      </div>
+
+      <div class="card">
+        <h3>Aylık Kâr/Zarar Raporu</h3>
+        <p class="login-hint" style="margin-top:0;">Seçilen ayın gelir/maliyet/kâr dökümünü personel ve cihaz bazında çıkarır — sıfırlamadan bağımsız çalışır, geçmiş herhangi bir ay için de rapor alabilirsiniz.</p>
+        <div class="form-grid">
+          <div class="field"><label>Ay</label><input id="report-profit-month" type="month"></div>
+          <div class="field" style="align-self:flex-end; display:flex; gap:8px;">
+            <button class="primary" onclick="generateMonthlyProfitReport()">Rapor Oluştur</button>
+            <button class="ghost" id="profit-report-csv-btn" style="display:none;" onclick="downloadMonthlyProfitReportCSV()">CSV İndir</button>
+          </div>
+        </div>
+        <div id="monthlyProfitReportResult"></div>
+      </div>
+
+      <div class="card">
+        <h3>Kâr/Zarar Sıfırlama Geçmişi</h3>
+        <p class="login-hint" style="margin-top:0;">"Kâr/Zararı Sıfırla" ile kapatılan dönemlerin özeti — her biri o dönemin ay sonu raporu gibi kullanılabilir.</p>
+        <table><thead><tr><th>Dönem</th><th>Gelir</th><th>Maliyet</th><th>Net Kâr</th><th>Kim</th><th>Not</th><th></th></tr></thead>
+          <tbody id="profitResetTable" class="mini-list"></tbody></table>
       </div>
     </div>
 
@@ -1102,6 +1128,7 @@ let dealers = [];
 let customers = [];
 let expenses = [];
 let cashboxResets = [];
+let profitResets = [];
 let exchangeRate = 47.89; // Harem Altın USD/TL satış kuru - varsayılan, elle güncellenebilir
 let currentDeviceId = null;
 let customerEditOpen = false;
@@ -1168,7 +1195,7 @@ async function apiFetch(path, options = {}){
 
 async function loadAll(){
   const isAdmin = currentUserPermission === 'ADMIN';
-  [devices, stock, suppliers, appointments, employees, dealers, customers, expenses, cashboxResets] = await Promise.all([
+  [devices, stock, suppliers, appointments, employees, dealers, customers, expenses, cashboxResets, profitResets] = await Promise.all([
     apiFetch('/devices'),
     apiFetch('/stock'),
     apiFetch('/suppliers'),
@@ -1178,6 +1205,7 @@ async function loadAll(){
     apiFetch('/customers'),
     isAdmin ? apiFetch('/reports/cashbox').then(r => r.expenses) : Promise.resolve([]),
     isAdmin ? apiFetch('/reports/cashbox/resets') : Promise.resolve([]),
+    isAdmin ? apiFetch('/reports/profit/resets') : Promise.resolve([]),
   ]);
   await loadExchangeRate();
   await loadLabelDesign();
@@ -4714,31 +4742,63 @@ function downloadMonthlyReportCSV(){
   toast('Aylık rapor indirildi');
 }
 
-function renderProfit(){
-  const grid = document.getElementById('profitStatGrid');
-  const empTbody = document.getElementById('employeeProfitTable');
-  const devTbody = document.getElementById('deviceProfitTable');
-  if(!grid || !empTbody || !devTbody) return;
-
+// Cihazlardaki ödeme (paidAt) ve parça (createdAt) kayıtlarını inPeriod(tarih)
+// yüklemine göre filtreleyip gelir/maliyet/personel/cihaz kırılımını hesaplar —
+// hem canlı Kâr/Zarar ekranı hem sıfırlama hem aylık rapor bunu paylaşır.
+function computeProfitStats(inPeriod){
   let totalRevenue = 0, totalCost = 0;
   const empStats = {};
   const deviceRows = [];
-
   devices.forEach(d=>{
-    const revenue = (d.payments||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
-    const cost = (d.parts||[]).reduce((s,p)=>s+(parseFloat(p.cost)||0),0);
+    const revenue = (d.payments||[]).filter(p=>inPeriod(p.paidAt)).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+    const cost = (d.parts||[]).filter(p=>inPeriod(p.createdAt)).reduce((s,p)=>s+(parseFloat(p.cost)||0),0);
     totalRevenue += revenue; totalCost += cost;
     if(revenue>0 || cost>0) deviceRows.push({code:d.trackingCode, revenue, cost, profit:revenue-cost});
-
-    if(d.assignedEmployee){
+    if(d.assignedEmployee && revenue>0){
       const key = d.assignedEmployee.name;
       if(!empStats[key]) empStats[key] = {count:0, revenue:0};
       empStats[key].count += 1;
       empStats[key].revenue += revenue;
     }
   });
+  return { totalRevenue, totalCost, netProfit: totalRevenue - totalCost, empStats, deviceRows };
+}
 
-  const netProfit = totalRevenue - totalCost;
+function lastProfitResetAt(){
+  if(!profitResets.length) return null;
+  return profitResets.reduce((latest,r)=> !latest || new Date(r.periodEnd) > new Date(latest) ? r.periodEnd : latest, null);
+}
+
+function profitPeriodStart(){
+  const resetAt = lastProfitResetAt();
+  if(resetAt) return new Date(resetAt);
+  const dates = [];
+  devices.forEach(d=>{
+    (d.payments||[]).forEach(p=>dates.push(p.paidAt));
+    (d.parts||[]).forEach(p=>dates.push(p.createdAt));
+  });
+  if(!dates.length) return null;
+  return new Date(Math.min(...dates.map(d=>new Date(d).getTime())));
+}
+
+function renderProfit(){
+  const grid = document.getElementById('profitStatGrid');
+  const empTbody = document.getElementById('employeeProfitTable');
+  const devTbody = document.getElementById('deviceProfitTable');
+  const periodInfo = document.getElementById('profitPeriodInfo');
+  if(!grid || !empTbody || !devTbody) return;
+
+  const resetAt = lastProfitResetAt();
+  const sinceMs = resetAt ? new Date(resetAt).getTime() : -Infinity;
+  const { totalRevenue, totalCost, netProfit, empStats, deviceRows } = computeProfitStats(d => new Date(d).getTime() > sinceMs);
+
+  if(periodInfo){
+    const start = profitPeriodStart();
+    periodInfo.textContent = start
+      ? `Bu dönem: ${start.toLocaleString('tr-TR')} — şimdi${resetAt ? ' (en son sıfırlama: '+new Date(resetAt).toLocaleString('tr-TR')+')' : ''}`
+      : 'Bu dönem: henüz hareket yok';
+  }
+
   grid.innerHTML = `
     <div class="stat"><div class="num">₺${totalRevenue.toFixed(0)}</div><div class="lbl">Toplam Gelir</div></div>
     <div class="stat"><div class="num">₺${totalCost.toFixed(0)}</div><div class="lbl">Toplam Parça Maliyeti</div></div>
@@ -4747,10 +4807,121 @@ function renderProfit(){
   `;
   const empKeys = Object.keys(empStats);
   empTbody.innerHTML = empKeys.length ? empKeys.map(k=>`
-    <tr><td>${esc(k)}</td><td>${empStats[k].count}</td><td class="code">₺${empStats[k].revenue.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Henüz devredilmiş cihaz yok</td></tr>`;
+    <tr><td>${esc(k)}</td><td>${empStats[k].count}</td><td class="code">₺${empStats[k].revenue.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="3" class="empty">Bu dönemde devredilmiş cihaz yok</td></tr>`;
   devTbody.innerHTML = deviceRows.length ? deviceRows.map(r=>`
     <tr><td class="code">${esc(r.code)}</td><td>₺${r.revenue.toFixed(2)}</td><td>₺${r.cost.toFixed(2)}</td>
-    <td style="color:${r.profit>=0?'var(--green)':'var(--red)'}">₺${r.profit.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz veri yok</td></tr>`;
+    <td style="color:${r.profit>=0?'var(--green)':'var(--red)'}">₺${r.profit.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Bu dönemde veri yok</td></tr>`;
+
+  renderProfitResetHistory();
+}
+
+function renderProfitResetHistory(){
+  const tbody = document.getElementById('profitResetTable');
+  if(!tbody) return;
+  const latestId = lastProfitResetAt() ? profitResets.reduce((a,b)=> new Date(a.periodEnd)>new Date(b.periodEnd)?a:b).id : null;
+  tbody.innerHTML = profitResets.length ? profitResets.map(r=>`
+    <tr><td>${new Date(r.periodStart).toLocaleDateString('tr-TR')} — ${new Date(r.periodEnd).toLocaleDateString('tr-TR')}${r.id===latestId?' <span class="pill" style="color:var(--green); background:rgba(46,158,109,0.12);">güncel</span>':''}</td>
+    <td class="code">₺${(parseFloat(r.totalRevenue)||0).toFixed(2)}</td>
+    <td class="code" style="color:var(--red);">₺${(parseFloat(r.totalCost)||0).toFixed(2)}</td>
+    <td class="code" style="color:${parseFloat(r.netProfit)>=0?'var(--green)':'var(--red)'}">₺${(parseFloat(r.netProfit)||0).toFixed(2)}</td>
+    <td>${esc(r.employee?.name)||'—'}</td>
+    <td>${esc(r.note)||'—'}</td>
+    <td><button class="ghost" onclick="undoProfitReset('${r.id}', ${r.id===latestId})">Geri Al</button></td></tr>`).join('') : `<tr><td colspan="7" class="empty">Henüz kâr/zarar sıfırlanmadı</td></tr>`;
+}
+
+async function resetProfit(){
+  const resetAt = lastProfitResetAt();
+  const sinceMs = resetAt ? new Date(resetAt).getTime() : -Infinity;
+  const { totalRevenue, totalCost, netProfit } = computeProfitStats(d => new Date(d).getTime() > sinceMs);
+  const start = profitPeriodStart();
+
+  if(!confirm(`Kâr/Zarar sıfırlanacak.\n\nBu dönem: ${start ? start.toLocaleDateString('tr-TR') : '—'} — ${new Date().toLocaleDateString('tr-TR')}\nGelir: ₺${totalRevenue.toFixed(2)}  Maliyet: ₺${totalCost.toFixed(2)}  Net Kâr: ₺${netProfit.toFixed(2)}\n\nBu özet geçmişe arşivlenecek ve Kâr/Zarar ekranı sıfırdan başlayacak. Devam edilsin mi?`)) return;
+
+  const note = prompt('Bu sıfırlama için not eklemek ister misiniz? (opsiyonel, boş bırakabilirsiniz)', '') || undefined;
+
+  try{
+    const reset = await apiFetch('/reports/profit/reset', {
+      method: 'POST',
+      body: JSON.stringify({ periodStart: (start || new Date()).toISOString(), totalRevenue, totalCost, netProfit, note })
+    });
+    profitResets.unshift(reset);
+    toast('Kâr/Zarar sıfırlandı');
+    renderProfit();
+  }catch(e){ toast(e.message || 'Kâr/Zarar sıfırlanamadı'); }
+}
+
+async function undoProfitReset(id, isLatest){
+  const msg = isLatest
+    ? 'Bu sıfırlama geri alınacak — Kâr/Zarar ekranı bu sıfırlamadan önceki döneme (bir önceki sıfırlamaya veya en başına) dönecek. Devam edilsin mi?'
+    : 'Bu geçmiş sıfırlama kaydı silinecek. En son sıfırlama olmadığı için güncel dönemi etkilemez, yalnızca geçmiş listesinden kaldırılır. Devam edilsin mi?';
+  if(!confirm(msg)) return;
+  try{
+    await apiFetch(`/reports/profit/reset/${id}`, { method: 'DELETE' });
+  }catch(e){ toast(e.message || 'Sıfırlama geri alınamadı'); return; }
+  profitResets = profitResets.filter(x=>x.id!==id);
+  toast('Sıfırlama geri alındı');
+  renderProfit();
+}
+
+function monthlyProfitReportRange(){
+  const val = document.getElementById('report-profit-month').value; // "YYYY-MM"
+  if(!val) return null;
+  const [y,m] = val.split('-').map(Number);
+  const from = new Date(y, m-1, 1);
+  const to = new Date(y, m, 1);
+  return { from, to, label: from.toLocaleDateString('tr-TR', {month:'long', year:'numeric'}) };
+}
+
+let lastMonthlyProfitReport = null;
+
+function generateMonthlyProfitReport(){
+  const range = monthlyProfitReportRange();
+  const box = document.getElementById('monthlyProfitReportResult');
+  const csvBtn = document.getElementById('profit-report-csv-btn');
+  if(!range){ toast('Bir ay seçin'); return; }
+
+  const stats = computeProfitStats(d => { const t = new Date(d); return t>=range.from && t<range.to; });
+  const { totalRevenue, totalCost, netProfit, empStats, deviceRows } = stats;
+  lastMonthlyProfitReport = { range, ...stats };
+
+  const empKeys = Object.keys(empStats);
+  box.innerHTML = `
+    <h4 style="margin:14px 0 6px;">${esc(range.label)}</h4>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">₺${totalRevenue.toFixed(0)}</div><div class="lbl">Toplam Gelir</div></div>
+      <div class="stat"><div class="num" style="color:var(--red);">₺${totalCost.toFixed(0)}</div><div class="lbl">Toplam Maliyet</div></div>
+      <div class="stat"><div class="num" style="color:${netProfit>=0?'var(--green)':'var(--red)'}">₺${netProfit.toFixed(0)}</div><div class="lbl">Net Kâr</div></div>
+      <div class="stat"><div class="num">%${totalRevenue>0 ? ((netProfit/totalRevenue)*100).toFixed(0) : 0}</div><div class="lbl">Kâr Marjı</div></div>
+    </div>
+    <h4 style="margin:14px 0 6px;">Personel Bazında Tahsilat</h4>
+    <table><thead><tr><th>Personel</th><th>Cihaz Sayısı</th><th>Tahsilat</th></tr></thead>
+      <tbody>${empKeys.length ? empKeys.map(k=>`<tr><td>${esc(k)}</td><td>${empStats[k].count}</td><td class="code">₺${empStats[k].revenue.toFixed(2)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty">Bu ayda devredilmiş cihaz yok</td></tr>'}</tbody></table>
+    <h4 style="margin:14px 0 6px;">Cihaz Bazında Detay</h4>
+    <table><thead><tr><th>Kod</th><th>Gelir</th><th>Maliyet</th><th>Kâr</th></tr></thead>
+      <tbody>${deviceRows.length ? deviceRows.map(r=>`<tr><td class="code">${esc(r.code)}</td><td>₺${r.revenue.toFixed(2)}</td><td>₺${r.cost.toFixed(2)}</td><td style="color:${r.profit>=0?'var(--green)':'var(--red)'}">₺${r.profit.toFixed(2)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty">Bu ayda veri yok</td></tr>'}</tbody></table>
+  `;
+  csvBtn.style.display = deviceRows.length ? 'inline-block' : 'none';
+}
+
+function downloadMonthlyProfitReportCSV(){
+  if(!lastMonthlyProfitReport) return;
+  const { range, totalRevenue, totalCost, netProfit, empStats, deviceRows } = lastMonthlyProfitReport;
+  const rows = [
+    ['Personel Bazında Tahsilat'],
+    ['Personel','Cihaz Sayısı','Tahsilat'],
+    ...Object.keys(empStats).map(k=>[k, String(empStats[k].count), empStats[k].revenue.toFixed(2)]),
+    [],
+    ['Cihaz Bazında Detay'],
+    ['Kod','Gelir','Maliyet','Kâr'],
+    ...deviceRows.map(r=>[r.code, r.revenue.toFixed(2), r.cost.toFixed(2), r.profit.toFixed(2)]),
+    [],
+    ['Toplam Gelir','','',totalRevenue.toFixed(2)],
+    ['Toplam Maliyet','','',totalCost.toFixed(2)],
+    ['Net Kâr','','',netProfit.toFixed(2)],
+  ];
+  const csv = '﻿' + rows.map(r=>r.map(csvEscape).join(';')).join('\r\n');
+  downloadBlob(`kar-zarar-rapor-${range.from.toISOString().slice(0,7)}.csv`, csv, 'text/csv;charset=utf-8;');
+  toast('Aylık kâr/zarar raporu indirildi');
 }
 
 let lastStockCostCurrency = 'TRY';

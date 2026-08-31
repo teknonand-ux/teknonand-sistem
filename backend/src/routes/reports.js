@@ -173,4 +173,50 @@ router.get('/profit', async (req, res, next) => {
   }
 });
 
+// GET /api/reports/profit/resets — geçmiş kâr/zarar sıfırlama kayıtları (en yeni önce)
+router.get('/profit/resets', async (req, res, next) => {
+  try {
+    const resets = await prisma.profitReset.findMany({
+      orderBy: { periodEnd: 'desc' },
+      include: { employee: { select: { name: true } } },
+    });
+    res.json(resets);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/reports/profit/reset — kapanan dönemin gelir/maliyet/net kâr özetini
+// arşivler; ödeme/parça kayıtları silinmez. Toplamlar panel tarafında hesaplanıp
+// gönderilir (bkz. cashbox/reset ile aynı desen).
+router.post('/profit/reset', async (req, res, next) => {
+  try {
+    const schema = z.object({
+      periodStart: z.coerce.date(),
+      totalRevenue: z.number(),
+      totalCost: z.number(),
+      netProfit: z.number(),
+      note: z.string().optional(),
+    });
+    const data = schema.parse(req.body);
+    const reset = await prisma.profitReset.create({
+      data: { ...data, employeeId: req.user.sub },
+      include: { employee: { select: { name: true } } },
+    });
+    res.status(201).json(reset);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// DELETE /api/reports/profit/reset/:id — bir sıfırlamayı geri alır (bkz. cashbox/reset ile aynı desen)
+router.delete('/profit/reset/:id', async (req, res, next) => {
+  try {
+    await prisma.profitReset.delete({ where: { id: req.params.id } });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
 module.exports = router;
