@@ -1162,6 +1162,7 @@ let expenses = [];
 let cashboxResets = [];
 let profitResets = [];
 let supplierResets = [];
+let supplierPeriodResets = {}; // { [supplierId]: SupplierReset[] } — Toptancı Detay sayfasının kendi dönem sıfırlamaları
 let exchangeRate = 47.89; // Harem Altın USD/TL satış kuru - varsayılan, elle güncellenebilir
 let currentDeviceId = null;
 let customerEditOpen = false;
@@ -4272,13 +4273,18 @@ let supplierEditOpen = false;
 let supplierStockFrom = '';
 let supplierStockTo = '';
 
-function openSupplier(id){
+async function openSupplier(id){
   currentSupplierId = id;
   supplierEditOpen = false;
   supplierStockFrom = '';
   supplierStockTo = '';
   switchView('supplier-detail');
   renderSupplierDetail();
+  if(!supplierPeriodResets[id]){
+    try{ supplierPeriodResets[id] = await apiFetch('/reports/suppliers/resets?supplierId=' + id); }
+    catch(e){ supplierPeriodResets[id] = []; }
+    if(currentSupplierId===id) renderSupplierDetail();
+  }
 }
 
 function toggleSupplierEdit(){
@@ -4310,6 +4316,21 @@ function renderSupplierDetail(){
   const txs = s.transactions || [];
   const balanceTry = parseFloat(s.currentBalance) || 0;
   const balanceUsd = parseFloat(s.currentBalanceUsd) || 0;
+
+  // Bu toptancıya özel dönem sıfırlaması (Toptancılar sayfasındaki toplu
+  // dönemden bağımsız) — supplierPeriodResets openSupplier() ile önceden çekilir.
+  const supResets = supplierPeriodResets[s.id] || [];
+  const supLastResetAt = supResets.length ? supResets.reduce((latest,r)=> !latest || new Date(r.periodEnd) > new Date(latest) ? r.periodEnd : latest, null) : null;
+  const supSinceMs = supLastResetAt ? new Date(supLastResetAt).getTime() : -Infinity;
+  const supPeriodTx = txs.filter(t=> new Date(t.createdAt).getTime() > supSinceMs);
+  let supAlimTry=0, supOdemeTry=0, supAlimUsd=0, supOdemeUsd=0;
+  supPeriodTx.forEach(t=>{
+    const amt = parseFloat(t.amount)||0;
+    if(t.currency==='USD'){ if(t.type==='ALIM') supAlimUsd+=amt; else supOdemeUsd+=amt; }
+    else { if(t.type==='ALIM') supAlimTry+=amt; else supOdemeTry+=amt; }
+  });
+  const supPeriodStart = supLastResetAt ? new Date(supLastResetAt) : (txs.length ? new Date(Math.min(...txs.map(t=>new Date(t.createdAt).getTime()))) : null);
+  const supLatestResetId = supLastResetAt ? supResets.reduce((a,b)=> new Date(a.periodEnd)>new Date(b.periodEnd)?a:b).id : null;
   // "Ara" ile seçilen tarih aralığı (YYYY-MM-DD) — boşsa filtre uygulanmaz.
   const inDateRange = (dateStr) => {
     if(!supplierStockFrom && !supplierStockTo) return true;
@@ -4383,6 +4404,37 @@ function renderSupplierDetail(){
       </div>
       <p class="login-hint" style="margin-top:8px;">TL ödemeler, seçilen yöntemle birlikte Kasa'ya gider olarak otomatik yansır.</p>
       <button class="ghost" style="margin-top:12px;" onclick="removeItem('suppliers','${s.id}'); switchView('suppliers');">Toptancıyı Sil</button>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0;">Bu Toptancı İçin Dönem</h3>
+          <p class="login-hint" style="margin-top:4px;">Yalnızca bu toptancının alım/ödeme dönemi — "Toptancılar" sayfasındaki toplu dönemden bağımsızdır ve bakiyeyi etkilemez.</p>
+        </div>
+        <button class="ghost" style="color:var(--red); border-color:var(--red); white-space:nowrap;" onclick="resetSupplierPeriodFor('${s.id}')">Bu Toptancı İçin Dönemi Sıfırla</button>
+      </div>
+      <p class="login-hint" style="margin-top:0;">${supPeriodStart ? `Bu dönem: ${supPeriodStart.toLocaleString('tr-TR')} — şimdi${supLastResetAt ? ' (en son sıfırlama: '+new Date(supLastResetAt).toLocaleString('tr-TR')+')' : ''}` : 'Bu dönem: henüz hareket yok'}</p>
+      <div class="stat-grid">
+        <div class="stat"><div class="num" style="color:var(--red);">₺${supAlimTry.toFixed(0)}</div><div class="lbl">Alım (₺)</div></div>
+        <div class="stat"><div class="num" style="color:var(--green);">₺${supOdemeTry.toFixed(0)}</div><div class="lbl">Ödeme (₺)</div></div>
+        <div class="stat"><div class="num">₺${(supAlimTry-supOdemeTry).toFixed(0)}</div><div class="lbl">Net (₺)</div></div>
+        <div class="stat"><div class="num" style="color:var(--red);">$${supAlimUsd.toFixed(0)}</div><div class="lbl">Alım ($)</div></div>
+        <div class="stat"><div class="num" style="color:var(--green);">$${supOdemeUsd.toFixed(0)}</div><div class="lbl">Ödeme ($)</div></div>
+        <div class="stat"><div class="num">$${(supAlimUsd-supOdemeUsd).toFixed(0)}</div><div class="lbl">Net ($)</div></div>
+      </div>
+      ${supResets.length ? `
+      <table style="margin-top:12px;"><thead><tr><th>Dönem</th><th>Alım (₺)</th><th>Ödeme (₺)</th><th>Alım ($)</th><th>Ödeme ($)</th><th>Kim</th><th>Not</th><th></th></tr></thead>
+        <tbody>${supResets.map(r=>`
+        <tr><td>${new Date(r.periodStart).toLocaleDateString('tr-TR')} — ${new Date(r.periodEnd).toLocaleDateString('tr-TR')}${r.id===supLatestResetId?' <span class="pill" style="color:var(--green); background:rgba(46,158,109,0.12);">güncel</span>':''}</td>
+        <td class="code" style="color:var(--red);">₺${(parseFloat(r.totalAlimTry)||0).toFixed(2)}</td>
+        <td class="code" style="color:var(--green);">₺${(parseFloat(r.totalOdemeTry)||0).toFixed(2)}</td>
+        <td class="code" style="color:var(--red);">$${(parseFloat(r.totalAlimUsd)||0).toFixed(2)}</td>
+        <td class="code" style="color:var(--green);">$${(parseFloat(r.totalOdemeUsd)||0).toFixed(2)}</td>
+        <td>${esc(r.employee?.name)||'—'}</td>
+        <td>${esc(r.note)||'—'}</td>
+        <td><button class="ghost" onclick="undoSupplierPeriodResetFor('${s.id}','${r.id}', ${r.id===supLatestResetId})">Geri Al</button></td></tr>`).join('')}</tbody></table>
+      ` : ''}
     </div>
 
     <div class="card">
@@ -4624,6 +4676,52 @@ async function undoSupplierReset(id, isLatest){
   supplierResets = supplierResets.filter(x=>x.id!==id);
   toast('Sıfırlama geri alındı');
   renderSupplierPeriod();
+}
+
+// Tek bir toptancı için dönem sıfırlama (Toptancı Detay sayfası) — toplu
+// resetSupplierPeriod()'dan bağımsız, yalnızca o toptancının hareketlerini kapsar.
+async function resetSupplierPeriodFor(supplierId){
+  const s = suppliers.find(x=>x.id===supplierId);
+  if(!s) return;
+  const resetsForSupplier = supplierPeriodResets[supplierId] || [];
+  const lastResetAt = resetsForSupplier.length ? resetsForSupplier.reduce((latest,r)=> !latest || new Date(r.periodEnd) > new Date(latest) ? r.periodEnd : latest, null) : null;
+  const sinceMs = lastResetAt ? new Date(lastResetAt).getTime() : -Infinity;
+  const periodTx = (s.transactions||[]).filter(t=> new Date(t.createdAt).getTime() > sinceMs);
+  let totalAlimTry=0, totalOdemeTry=0, totalAlimUsd=0, totalOdemeUsd=0;
+  periodTx.forEach(t=>{
+    const amt = parseFloat(t.amount)||0;
+    if(t.currency==='USD'){ if(t.type==='ALIM') totalAlimUsd+=amt; else totalOdemeUsd+=amt; }
+    else { if(t.type==='ALIM') totalAlimTry+=amt; else totalOdemeTry+=amt; }
+  });
+  const start = lastResetAt ? new Date(lastResetAt) : ((s.transactions||[]).length ? new Date(Math.min(...s.transactions.map(t=>new Date(t.createdAt).getTime()))) : null);
+
+  if(!confirm(`${s.name} için dönem sıfırlanacak.\n\nBu dönem: ${start ? start.toLocaleDateString('tr-TR') : '—'} — ${new Date().toLocaleDateString('tr-TR')}\nAlım: ₺${totalAlimTry.toFixed(2)} / $${totalAlimUsd.toFixed(2)}\nÖdeme: ₺${totalOdemeTry.toFixed(2)} / $${totalOdemeUsd.toFixed(2)}\n\nBu özet geçmişe arşivlenecek ve bu toptancının dönem raporu sıfırdan başlayacak. Bakiye DEĞİŞMEZ. Devam edilsin mi?`)) return;
+
+  const note = prompt('Bu sıfırlama için not eklemek ister misiniz? (opsiyonel, boş bırakabilirsiniz)', '') || undefined;
+
+  try{
+    const reset = await apiFetch('/reports/suppliers/reset', {
+      method: 'POST',
+      body: JSON.stringify({ supplierId, periodStart: (start || new Date()).toISOString(), totalAlimTry, totalOdemeTry, totalAlimUsd, totalOdemeUsd, note })
+    });
+    if(!supplierPeriodResets[supplierId]) supplierPeriodResets[supplierId] = [];
+    supplierPeriodResets[supplierId].unshift(reset);
+    toast(`${s.name} için dönem sıfırlandı`);
+    renderSupplierDetail();
+  }catch(e){ toast(e.message || 'Dönem sıfırlanamadı'); }
+}
+
+async function undoSupplierPeriodResetFor(supplierId, resetId, isLatest){
+  const msg = isLatest
+    ? 'Bu sıfırlama geri alınacak — bu toptancının dönem raporu bir önceki sıfırlamaya (veya en başına) dönecek. Bakiye etkilenmez. Devam edilsin mi?'
+    : 'Bu geçmiş sıfırlama kaydı silinecek. En son sıfırlama olmadığı için güncel dönemi etkilemez, yalnızca geçmiş listesinden kaldırılır. Devam edilsin mi?';
+  if(!confirm(msg)) return;
+  try{
+    await apiFetch(`/reports/suppliers/reset/${resetId}`, { method: 'DELETE' });
+  }catch(e){ toast(e.message || 'Sıfırlama geri alınamadı'); return; }
+  supplierPeriodResets[supplierId] = (supplierPeriodResets[supplierId]||[]).filter(x=>x.id!==resetId);
+  toast('Sıfırlama geri alındı');
+  renderSupplierDetail();
 }
 
 function monthlySupplierReportRange(){

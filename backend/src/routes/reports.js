@@ -223,10 +223,14 @@ router.delete('/profit/reset/:id', async (req, res, next) => {
 // (yalnızca Kasa ve Kâr/Zarar yönetici-özel) bunlar da requireAdmin OLMADAN,
 // dosyanın en üstündeki requireEmployee ile korunur.
 
-// GET /api/reports/suppliers/resets — geçmiş toptancı dönemi sıfırlamaları (en yeni önce)
+// GET /api/reports/suppliers/resets — geçmiş toptancı dönemi sıfırlamaları (en yeni önce).
+// ?supplierId= verilirse yalnızca o toptancının kendi sıfırlamaları döner; verilmezse
+// yalnızca toplu (supplierId'siz) sıfırlamalar döner — "Toptancılar" ekranıyla aynı davranış.
 router.get('/suppliers/resets', async (req, res, next) => {
   try {
+    const { supplierId } = req.query;
     const resets = await prisma.supplierReset.findMany({
+      where: { supplierId: supplierId || null },
       orderBy: { periodEnd: 'desc' },
       include: { employee: { select: { name: true } } },
     });
@@ -236,12 +240,14 @@ router.get('/suppliers/resets', async (req, res, next) => {
   }
 });
 
-// POST /api/reports/suppliers/reset — kapanan dönemin toptancı alım/ödeme
-// özetini (₺ ve $ ayrı) arşivler. Toptancı bakiyeleri (gerçek borç) bu
-// işlemden ETKİLENMEZ — yalnızca dönem raporu görünümü sıfırlanır.
+// POST /api/reports/suppliers/reset — kapanan dönemin alım/ödeme özetini (₺ ve $
+// ayrı) arşivler. supplierId verilirse yalnızca o toptancıya özel bir dönem
+// sıfırlamasıdır. Toptancı bakiyeleri (gerçek borç) bu işlemden ETKİLENMEZ —
+// yalnızca ilgili ekranın dönem raporu görünümü sıfırlanır.
 router.post('/suppliers/reset', async (req, res, next) => {
   try {
     const schema = z.object({
+      supplierId: z.string().uuid().optional().nullable(),
       periodStart: z.coerce.date(),
       totalAlimTry: z.number(),
       totalOdemeTry: z.number(),
