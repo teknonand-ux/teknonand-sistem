@@ -45,6 +45,7 @@ model Employee {
   whatsappChatMessages WhatsappChatMessage[]
   instagramChatMessages InstagramChatMessage[]
   labelPrintJobs  LabelPrintJob[]
+  cashboxResets   CashboxReset[]
 
   @@map("employees")
 }
@@ -382,6 +383,25 @@ model Expense {
   createdAt   DateTime @default(now())
 
   @@map("expenses")
+}
+
+// Kasa sıfırlama: yönetici "Kasayı Sıfırla" dediğinde kapanan dönemin
+// (bir önceki sıfırlamadan bu ana kadar) gelir/gider/net özeti burada
+// arşivlenir. Ödeme/gider kayıtları silinmez — Kasa ekranı bir sonraki
+// sıfırlamaya kadar yalnızca bu tarihten sonrasını gösterir.
+model CashboxReset {
+  id           String    @id @default(uuid())
+  periodStart  DateTime
+  periodEnd    DateTime  @default(now())
+  totalIncome  Decimal   @db.Decimal(12, 2)
+  totalExpense Decimal   @db.Decimal(12, 2)
+  net          Decimal   @db.Decimal(12, 2)
+  note         String?
+  employeeId   String?
+  employee     Employee? @relation(fields: [employeeId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  @@map("cashbox_resets")
 }
 
 // ---------------------------------------------------------------------------

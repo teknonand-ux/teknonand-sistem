@@ -910,8 +910,14 @@
 
     <!-- CASHBOX -->
     <div class="view" id="view-cashbox">
-      <h1>Kasa</h1>
-      <p class="subtitle">Gelir, gider ve yöntem bazında kasa durumu</p>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h1>Kasa</h1>
+          <p class="subtitle">Gelir, gider ve yöntem bazında kasa durumu</p>
+        </div>
+        <button class="ghost" style="color:var(--red); border-color:var(--red); white-space:nowrap;" onclick="resetCashbox()">Kasayı Sıfırla</button>
+      </div>
+      <p class="login-hint" id="cashPeriodInfo" style="margin-top:0;"></p>
       <div class="stat-grid" id="cashStatGrid"></div>
 
       <div class="card">
@@ -948,6 +954,26 @@
         <h3>Giderler</h3>
         <table><thead><tr><th>Tarih</th><th>Kategori</th><th>Açıklama</th><th>Yöntem</th><th>Tutar</th><th></th></tr></thead>
           <tbody id="expenseTable" class="mini-list"></tbody></table>
+      </div>
+
+      <div class="card">
+        <h3>Aylık İşlem Raporu</h3>
+        <p class="login-hint" style="margin-top:0;">Seçilen ayın tüm gelir ve gider hareketlerini listeler — kasa sıfırlamadan bağımsız çalışır, geçmiş herhangi bir ay için de rapor alabilirsiniz.</p>
+        <div class="form-grid">
+          <div class="field"><label>Ay</label><input id="report-month" type="month"></div>
+          <div class="field" style="align-self:flex-end; display:flex; gap:8px;">
+            <button class="primary" onclick="generateMonthlyReport()">Rapor Oluştur</button>
+            <button class="ghost" id="report-csv-btn" style="display:none;" onclick="downloadMonthlyReportCSV()">CSV İndir</button>
+          </div>
+        </div>
+        <div id="monthlyReportResult"></div>
+      </div>
+
+      <div class="card">
+        <h3>Kasa Sıfırlama Geçmişi</h3>
+        <p class="login-hint" style="margin-top:0;">"Kasayı Sıfırla" ile kapatılan dönemlerin özeti — her biri o dönemin ay sonu raporu gibi kullanılabilir.</p>
+        <table><thead><tr><th>Dönem</th><th>Gelir</th><th>Gider</th><th>Net</th><th>Kim</th><th>Not</th></tr></thead>
+          <tbody id="cashboxResetTable" class="mini-list"></tbody></table>
       </div>
     </div>
 
@@ -1075,6 +1101,7 @@ let employees = [];
 let dealers = [];
 let customers = [];
 let expenses = [];
+let cashboxResets = [];
 let exchangeRate = 47.89; // Harem Altın USD/TL satış kuru - varsayılan, elle güncellenebilir
 let currentDeviceId = null;
 let customerEditOpen = false;
@@ -1141,7 +1168,7 @@ async function apiFetch(path, options = {}){
 
 async function loadAll(){
   const isAdmin = currentUserPermission === 'ADMIN';
-  [devices, stock, suppliers, appointments, employees, dealers, customers, expenses] = await Promise.all([
+  [devices, stock, suppliers, appointments, employees, dealers, customers, expenses, cashboxResets] = await Promise.all([
     apiFetch('/devices'),
     apiFetch('/stock'),
     apiFetch('/suppliers'),
@@ -1150,6 +1177,7 @@ async function loadAll(){
     apiFetch('/dealers'),
     apiFetch('/customers'),
     isAdmin ? apiFetch('/reports/cashbox').then(r => r.expenses) : Promise.resolve([]),
+    isAdmin ? apiFetch('/reports/cashbox/resets') : Promise.resolve([]),
   ]);
   await loadExchangeRate();
   await loadLabelDesign();
@@ -4477,18 +4505,45 @@ function renderExpenseSupplierSelect(){
   sel.value = current;
 }
 
+// En son "Kasayı Sıfırla" işleminin kapattığı an — bu tarihten öncesi Kasa
+// ekranında gösterilmez (ama veri silinmez, geçmişi Aylık Rapor'dan görülebilir).
+function lastCashboxResetAt(){
+  if(!cashboxResets.length) return null;
+  return cashboxResets.reduce((latest,r)=> !latest || new Date(r.periodEnd) > new Date(latest) ? r.periodEnd : latest, null);
+}
+
+function cashboxPeriodStart(){
+  const resetAt = lastCashboxResetAt();
+  if(resetAt) return new Date(resetAt);
+  const all = [...allPayments().map(p=>p.at), ...expenses.map(e=>e.createdAt)];
+  if(!all.length) return null;
+  return new Date(Math.min(...all.map(d=>new Date(d).getTime())));
+}
+
 function renderCashbox(){
   const grid = document.getElementById('cashStatGrid');
   const cashTbody = document.getElementById('cashTable');
   const exTbody = document.getElementById('expenseTable');
+  const periodInfo = document.getElementById('cashPeriodInfo');
   if(!grid || !cashTbody || !exTbody) return;
 
-  const all = allPayments();
+  const resetAt = lastCashboxResetAt();
+  const sinceMs = resetAt ? new Date(resetAt).getTime() : -Infinity;
+  const all = allPayments().filter(p => new Date(p.at).getTime() > sinceMs);
+  const periodExpenses = expenses.filter(e => new Date(e.createdAt).getTime() > sinceMs);
+
+  if(periodInfo){
+    const start = cashboxPeriodStart();
+    periodInfo.textContent = start
+      ? `Bu dönem: ${start.toLocaleString('tr-TR')} — şimdi${resetAt ? ' (en son sıfırlama: '+new Date(resetAt).toLocaleString('tr-TR')+')' : ''}`
+      : 'Bu dönem: henüz hareket yok';
+  }
+
   const income = all.reduce((s,p)=>s+p.amount,0);
   const byMethod = {};
   all.forEach(p=>{ byMethod[p.method] = (byMethod[p.method]||0) + p.amount; });
 
-  const totalExpense = expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const totalExpense = periodExpenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
   const net = income - totalExpense;
 
   grid.innerHTML = `
@@ -4502,14 +4557,111 @@ function renderCashbox(){
   `;
 
   cashTbody.innerHTML = all.length ? all.map(p=>`
-    <tr><td>${new Date(p.at).toLocaleString('tr-TR')}</td><td>${esc(p.source)}</td><td>${esc(p.method)}</td><td class="code">₺${p.amount.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Henüz tahsilat yok</td></tr>`;
+    <tr><td>${new Date(p.at).toLocaleString('tr-TR')}</td><td>${esc(p.source)}</td><td>${esc(p.method)}</td><td class="code">₺${p.amount.toFixed(2)}</td></tr>`).join('') : `<tr><td colspan="4" class="empty">Bu dönemde henüz tahsilat yok</td></tr>`;
 
-  exTbody.innerHTML = expenses.length ? expenses.map(e=>`
+  exTbody.innerHTML = periodExpenses.length ? periodExpenses.map(e=>`
     <tr><td>${new Date(e.createdAt).toLocaleString('tr-TR')}</td><td>${esc(e.category)}${e.supplier?` · ${esc(e.supplier.name)}`:''}</td>
     <td>${esc(e.description)||'—'}</td><td>${esc(e.method)}</td><td class="code">₺${(parseFloat(e.amount)||0).toFixed(2)}</td>
-    <td><button class="ghost" onclick="removeItem('expenses','${e.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="6" class="empty">Henüz gider kaydı yok</td></tr>`;
+    <td><button class="ghost" onclick="removeItem('expenses','${e.id}')">Sil</button></td></tr>`).join('') : `<tr><td colspan="6" class="empty">Bu dönemde gider kaydı yok</td></tr>`;
 
   renderExpenseSupplierSelect();
+  renderCashboxResetHistory();
+}
+
+function renderCashboxResetHistory(){
+  const tbody = document.getElementById('cashboxResetTable');
+  if(!tbody) return;
+  tbody.innerHTML = cashboxResets.length ? cashboxResets.map(r=>`
+    <tr><td>${new Date(r.periodStart).toLocaleDateString('tr-TR')} — ${new Date(r.periodEnd).toLocaleDateString('tr-TR')}</td>
+    <td class="code">₺${(parseFloat(r.totalIncome)||0).toFixed(2)}</td>
+    <td class="code" style="color:var(--red);">₺${(parseFloat(r.totalExpense)||0).toFixed(2)}</td>
+    <td class="code" style="color:${parseFloat(r.net)>=0?'var(--green)':'var(--red)'}">₺${(parseFloat(r.net)||0).toFixed(2)}</td>
+    <td>${esc(r.employee?.name)||'—'}</td>
+    <td>${esc(r.note)||'—'}</td></tr>`).join('') : `<tr><td colspan="6" class="empty">Henüz kasa sıfırlanmadı</td></tr>`;
+}
+
+async function resetCashbox(){
+  const resetAt = lastCashboxResetAt();
+  const sinceMs = resetAt ? new Date(resetAt).getTime() : -Infinity;
+  const all = allPayments().filter(p => new Date(p.at).getTime() > sinceMs);
+  const periodExpenses = expenses.filter(e => new Date(e.createdAt).getTime() > sinceMs);
+  const income = all.reduce((s,p)=>s+p.amount,0);
+  const totalExpense = periodExpenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const net = income - totalExpense;
+  const start = cashboxPeriodStart();
+
+  if(!confirm(`Kasa sıfırlanacak.\n\nBu dönem: ${start ? start.toLocaleDateString('tr-TR') : '—'} — ${new Date().toLocaleDateString('tr-TR')}\nGelir: ₺${income.toFixed(2)}  Gider: ₺${totalExpense.toFixed(2)}  Net: ₺${net.toFixed(2)}\n\nBu özet geçmişe arşivlenecek ve Kasa ekranı sıfırdan başlayacak. Devam edilsin mi?`)) return;
+
+  const note = prompt('Bu sıfırlama için not eklemek ister misiniz? (opsiyonel, boş bırakabilirsiniz)', '') || undefined;
+
+  try{
+    const reset = await apiFetch('/reports/cashbox/reset', {
+      method: 'POST',
+      body: JSON.stringify({ periodStart: (start || new Date()).toISOString(), totalIncome: income, totalExpense, net, note })
+    });
+    cashboxResets.unshift(reset);
+    toast('Kasa sıfırlandı');
+    renderCashbox();
+  }catch(e){ toast(e.message || 'Kasa sıfırlanamadı'); }
+}
+
+function monthlyReportRange(){
+  const val = document.getElementById('report-month').value; // "YYYY-MM"
+  if(!val) return null;
+  const [y,m] = val.split('-').map(Number);
+  const from = new Date(y, m-1, 1);
+  const to = new Date(y, m, 1); // sonraki ayın 1'i (üst sınır, dahil değil)
+  return { from, to, label: from.toLocaleDateString('tr-TR', {month:'long', year:'numeric'}) };
+}
+
+let lastMonthlyReport = null;
+
+function generateMonthlyReport(){
+  const range = monthlyReportRange();
+  const box = document.getElementById('monthlyReportResult');
+  const csvBtn = document.getElementById('report-csv-btn');
+  if(!range){ toast('Bir ay seçin'); return; }
+
+  const income = allPayments().filter(p=>{ const t=new Date(p.at); return t>=range.from && t<range.to; });
+  const exp = expenses.filter(e=>{ const t=new Date(e.createdAt); return t>=range.from && t<range.to; });
+  const totalIncome = income.reduce((s,p)=>s+p.amount,0);
+  const totalExpense = exp.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const net = totalIncome - totalExpense;
+
+  lastMonthlyReport = { range, income, exp, totalIncome, totalExpense, net };
+
+  box.innerHTML = `
+    <h4 style="margin:14px 0 6px;">${esc(range.label)}</h4>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">₺${totalIncome.toFixed(0)}</div><div class="lbl">Toplam Gelir</div></div>
+      <div class="stat"><div class="num" style="color:var(--red);">₺${totalExpense.toFixed(0)}</div><div class="lbl">Toplam Gider</div></div>
+      <div class="stat"><div class="num" style="color:${net>=0?'var(--green)':'var(--red)'}">₺${net.toFixed(0)}</div><div class="lbl">Net</div></div>
+      <div class="stat"><div class="num">${income.length + exp.length}</div><div class="lbl">Toplam Hareket</div></div>
+    </div>
+    <table><thead><tr><th>Tarih</th><th>Tür</th><th>Kaynak / Kategori</th><th>Yöntem</th><th>Tutar</th></tr></thead>
+      <tbody>
+        ${income.map(p=>`<tr><td>${new Date(p.at).toLocaleString('tr-TR')}</td><td>Gelir</td><td>${esc(p.source)}</td><td>${esc(p.method)}</td><td class="code">₺${p.amount.toFixed(2)}</td></tr>`).join('')}
+        ${exp.map(e=>`<tr><td>${new Date(e.createdAt).toLocaleString('tr-TR')}</td><td>Gider</td><td>${esc(e.category)}${e.supplier?` · ${esc(e.supplier.name)}`:''}${e.description?` (${esc(e.description)})`:''}</td><td>${esc(e.method)}</td><td class="code" style="color:var(--red);">₺${(parseFloat(e.amount)||0).toFixed(2)}</td></tr>`).join('')}
+        ${(income.length+exp.length)===0 ? '<tr><td colspan="5" class="empty">Bu ayda hareket yok</td></tr>' : ''}
+      </tbody></table>
+  `;
+  csvBtn.style.display = (income.length+exp.length) ? 'inline-block' : 'none';
+}
+
+function downloadMonthlyReportCSV(){
+  if(!lastMonthlyReport) return;
+  const { range, income, exp, totalIncome, totalExpense, net } = lastMonthlyReport;
+  const header = ['Tarih','Tür','Kaynak / Kategori','Yöntem','Tutar'];
+  const rows = [
+    ...income.map(p=>[new Date(p.at).toLocaleString('tr-TR'), 'Gelir', p.source, p.method, p.amount.toFixed(2)]),
+    ...exp.map(e=>[new Date(e.createdAt).toLocaleString('tr-TR'), 'Gider', e.category + (e.supplier?` · ${e.supplier.name}`:'') + (e.description?` (${e.description})`:''), e.method, (parseFloat(e.amount)||0).toFixed(2)]),
+  ];
+  const csv = '﻿' + [header, ...rows].map(r=>r.map(csvEscape).join(';')).join('\r\n')
+    + `\r\n\r\n${csvEscape('Toplam Gelir')};;;;${totalIncome.toFixed(2)}`
+    + `\r\n${csvEscape('Toplam Gider')};;;;${totalExpense.toFixed(2)}`
+    + `\r\n${csvEscape('Net')};;;;${net.toFixed(2)}`;
+  downloadBlob(`kasa-rapor-${range.from.toISOString().slice(0,7)}.csv`, csv, 'text/csv;charset=utf-8;');
+  toast('Aylık rapor indirildi');
 }
 
 function renderProfit(){

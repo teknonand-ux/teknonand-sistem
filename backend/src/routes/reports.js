@@ -69,6 +69,44 @@ router.delete('/cashbox/expense/:id', async (req, res, next) => {
   }
 });
 
+// GET /api/reports/cashbox/resets — geçmiş kasa sıfırlama kayıtları (en yeni önce)
+router.get('/cashbox/resets', async (req, res, next) => {
+  try {
+    const resets = await prisma.cashboxReset.findMany({
+      orderBy: { periodEnd: 'desc' },
+      include: { employee: { select: { name: true } } },
+    });
+    res.json(resets);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/reports/cashbox/reset — kapanan dönemin özetini arşivler; ödeme/gider
+// kayıtları silinmez, Kasa ekranı bundan sonra yalnızca periodEnd'den sonrasını gösterir.
+// Dönem toplamları (gelir/gider/net) panel tarafında hesaplanıp gönderilir — Kasa
+// ekranındaki gelir toplamı bayi tahsilatlarını da içerdiği için (bkz. allPayments())
+// burada yeniden hesaplamak yerine gönderileni arşivliyoruz.
+router.post('/cashbox/reset', async (req, res, next) => {
+  try {
+    const schema = z.object({
+      periodStart: z.coerce.date(),
+      totalIncome: z.number(),
+      totalExpense: z.number(),
+      net: z.number(),
+      note: z.string().optional(),
+    });
+    const data = schema.parse(req.body);
+    const reset = await prisma.cashboxReset.create({
+      data: { ...data, employeeId: req.user.sub },
+      include: { employee: { select: { name: true } } },
+    });
+    res.status(201).json(reset);
+  } catch (e) {
+    next(e);
+  }
+});
+
 // GET /api/reports/profit — personel bazında tahsilat + cihaz bazında kâr
 router.get('/profit', async (req, res, next) => {
   try {
