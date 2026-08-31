@@ -171,7 +171,11 @@ router.post('/:id/stock-pdf-whatsapp', async (req, res, next) => {
     const { supplier, items, fromLabel, toLabel, pdfBuffer, filename } = built;
 
     const phone = target === 'supplier' ? supplier.phone : SUPPLIER_STOCK_PDF_EXTRA_PHONE;
-    if (!phone) return res.status(400).json({ error: 'Toptancının telefon numarası kayıtlı değil' });
+    if (!phone) {
+      return res
+        .status(400)
+        .json({ error: target === 'supplier' ? 'Toptancının telefon numarası kayıtlı değil' : 'SUPPLIER_STOCK_PDF_EXTRA_PHONE ortam değişkeni tanımlı değil' });
+    }
 
     const result = await sendSupplierStockPdfToPhone(phone, pdfBuffer, filename, [supplier.name, fromLabel, toLabel]);
     if (!result.ok) return res.status(502).json({ error: result.error || 'Mesaj gönderilemedi' });

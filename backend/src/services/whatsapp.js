@@ -435,7 +435,7 @@ async function sendDealerBalanceReminder(dealer) {
 // target: 'supplier' | 'extra'). Cihaz/müşteri bağlamı olmadığından
 // sendDocumentWhatsapp'tan (whatsappMessage kaydı, device/customer zorunluluğu)
 // bağımsız, kendi belge gönderimini yapar.
-const SUPPLIER_STOCK_PDF_EXTRA_PHONE = '05342024037';
+const SUPPLIER_STOCK_PDF_EXTRA_PHONE = process.env.SUPPLIER_STOCK_PDF_EXTRA_PHONE || '';
 
 async function sendSupplierStockPdfToPhone(phone, pdfBuffer, filename, bodyParams) {
   const templateName = process.env.WHATSAPP_TEMPLATE_SUPPLIER_STOCK;
