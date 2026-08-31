@@ -40,15 +40,25 @@ router.post('/', requireAuth, requireEmployee, async (req, res, next) => {
   }
 });
 
-// POST /api/dealers/:id/transactions — veresiye satış / tahsilat
+// POST /api/dealers/:id/transactions — veresiye satış / tahsilat. TAHSILAT'ta
+// ödeme yöntemi zorunlu — Kasa'nın gelir dökümü (yonetici-paneli.html
+// allPayments()) bu bayi tahsilatlarını yönteme göre TL/Nakit/Banka/Kredi/Sanal
+// POS sütunlarına dağıtırken kullanır.
 router.post('/:id/transactions', requireAuth, requireEmployee, async (req, res, next) => {
   try {
-    const schema = z.object({ type: z.enum(['VERESIYE_SATIS', 'TAHSILAT']), amount: z.number().positive(), description: z.string().optional() });
-    const { type, amount, description } = schema.parse(req.body);
+    const schema = z
+      .object({
+        type: z.enum(['VERESIYE_SATIS', 'TAHSILAT']),
+        amount: z.number().positive(),
+        method: z.string().min(1).optional(),
+        description: z.string().optional(),
+      })
+      .refine((d) => d.type !== 'TAHSILAT' || !!d.method, { message: 'Ödeme yöntemi seçilmelidir', path: ['method'] });
+    const { type, amount, method, description } = schema.parse(req.body);
     const delta = type === 'VERESIYE_SATIS' ? amount : -amount;
     await prisma.$transaction([
       prisma.dealer.update({ where: { id: req.params.id }, data: { balance: { increment: delta } } }),
-      prisma.dealerTransaction.create({ data: { dealerId: req.params.id, type, amount, description } }),
+      prisma.dealerTransaction.create({ data: { dealerId: req.params.id, type, amount, method, description } }),
     ]);
     const dealer = await prisma.dealer.findUnique({
       where: { id: req.params.id },
