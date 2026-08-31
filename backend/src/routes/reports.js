@@ -241,9 +241,10 @@ router.get('/suppliers/resets', async (req, res, next) => {
 });
 
 // POST /api/reports/suppliers/reset — kapanan dönemin alım/ödeme özetini (₺ ve $
-// ayrı) arşivler. supplierId verilirse yalnızca o toptancıya özel bir dönem
-// sıfırlamasıdır. Toptancı bakiyeleri (gerçek borç) bu işlemden ETKİLENMEZ —
-// yalnızca ilgili ekranın dönem raporu görünümü sıfırlanır.
+// ayrı) arşivler. supplierId BOŞSA (toplu "Toptancılar" ekranı) hiçbir bakiyeye
+// dokunmaz. supplierId DOLUYSA (Toptancı Detay sayfası) o toptancının gerçek
+// borç bakiyesini (₺ ve $) sıfırlama anındaki değeriyle arşivleyip 0'a çeker —
+// bu değer DELETE'te ("Geri Al") bakiyeyi eski haline getirmek için kullanılır.
 router.post('/suppliers/reset', async (req, res, next) => {
   try {
     const schema = z.object({
@@ -256,19 +257,64 @@ router.post('/suppliers/reset', async (req, res, next) => {
       note: z.string().optional(),
     });
     const data = schema.parse(req.body);
-    const reset = await prisma.supplierReset.create({
-      data: { ...data, employeeId: req.user.sub },
-      include: { employee: { select: { name: true } } },
-    });
+
+    let reset;
+    if (data.supplierId) {
+      reset = await prisma.$transaction(async (tx) => {
+        const supplier = await tx.supplier.findUnique({ where: { id: data.supplierId } });
+        if (!supplier) throw Object.assign(new Error('Toptancı bulunamadı'), { status: 404 });
+        const created = await tx.supplierReset.create({
+          data: {
+            ...data,
+            employeeId: req.user.sub,
+            balanceTryBefore: supplier.currentBalance,
+            balanceUsdBefore: supplier.currentBalanceUsd,
+          },
+          include: { employee: { select: { name: true } } },
+        });
+        await tx.supplier.update({ where: { id: data.supplierId }, data: { currentBalance: 0, currentBalanceUsd: 0 } });
+        return created;
+      });
+    } else {
+      reset = await prisma.supplierReset.create({
+        data: { ...data, employeeId: req.user.sub },
+        include: { employee: { select: { name: true } } },
+      });
+    }
     res.status(201).json(reset);
   } catch (e) {
     next(e);
   }
 });
 
-// DELETE /api/reports/suppliers/reset/:id — bir dönem sıfırlamasını geri alır
+// DELETE /api/reports/suppliers/reset/:id — bir dönem sıfırlamasını geri alır.
+// Bakiye sıfırlanmış bir toptancı sıfırlamasıysa VE bu, o toptancının EN SON
+// sıfırlamasıysa, bakiye sıfırlama öncesindeki değerine geri yüklenir — aradan
+// yeni alım/ödeme hareketi eklendiyse (yani bu artık en son sıfırlama değilse)
+// eski bakiyeyi geri yazmak güncel hareketleri yok sayar, o yüzden o durumda
+// yalnızca arşiv kaydı silinir, bakiyeye dokunulmaz.
 router.delete('/suppliers/reset/:id', async (req, res, next) => {
   try {
+    const reset = await prisma.supplierReset.findUnique({ where: { id: req.params.id } });
+    if (!reset) return res.status(204).end();
+
+    if (reset.supplierId && reset.balanceTryBefore !== null) {
+      const latest = await prisma.supplierReset.findFirst({
+        where: { supplierId: reset.supplierId },
+        orderBy: { periodEnd: 'desc' },
+      });
+      if (latest && latest.id === reset.id) {
+        await prisma.$transaction([
+          prisma.supplier.update({
+            where: { id: reset.supplierId },
+            data: { currentBalance: reset.balanceTryBefore, currentBalanceUsd: reset.balanceUsdBefore },
+          }),
+          prisma.supplierReset.delete({ where: { id: req.params.id } }),
+        ]);
+        return res.status(204).end();
+      }
+    }
+
     await prisma.supplierReset.delete({ where: { id: req.params.id } });
     res.status(204).end();
   } catch (e) {

@@ -4410,7 +4410,7 @@ function renderSupplierDetail(){
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
         <div>
           <h3 style="margin:0;">Bu Toptancı İçin Dönem</h3>
-          <p class="login-hint" style="margin-top:4px;">Yalnızca bu toptancının alım/ödeme dönemi — "Toptancılar" sayfasındaki toplu dönemden bağımsızdır ve bakiyeyi etkilemez.</p>
+          <p class="login-hint" style="margin-top:4px;">Yalnızca bu toptancının alım/ödeme dönemi — "Toptancılar" sayfasındaki toplu dönemden bağımsızdır. Sıfırlandığında bu toptancının güncel borç bakiyesi de (₺/$) 0'a çekilir.</p>
         </div>
         <button class="ghost" style="color:var(--red); border-color:var(--red); white-space:nowrap;" onclick="resetSupplierPeriodFor('${s.id}')">Bu Toptancı İçin Dönemi Sıfırla</button>
       </div>
@@ -4694,8 +4694,10 @@ async function resetSupplierPeriodFor(supplierId){
     else { if(t.type==='ALIM') totalAlimTry+=amt; else totalOdemeTry+=amt; }
   });
   const start = lastResetAt ? new Date(lastResetAt) : ((s.transactions||[]).length ? new Date(Math.min(...s.transactions.map(t=>new Date(t.createdAt).getTime()))) : null);
+  const balTry = parseFloat(s.currentBalance)||0;
+  const balUsd = parseFloat(s.currentBalanceUsd)||0;
 
-  if(!confirm(`${s.name} için dönem sıfırlanacak.\n\nBu dönem: ${start ? start.toLocaleDateString('tr-TR') : '—'} — ${new Date().toLocaleDateString('tr-TR')}\nAlım: ₺${totalAlimTry.toFixed(2)} / $${totalAlimUsd.toFixed(2)}\nÖdeme: ₺${totalOdemeTry.toFixed(2)} / $${totalOdemeUsd.toFixed(2)}\n\nBu özet geçmişe arşivlenecek ve bu toptancının dönem raporu sıfırdan başlayacak. Bakiye DEĞİŞMEZ. Devam edilsin mi?`)) return;
+  if(!confirm(`${s.name} için dönem sıfırlanacak.\n\nBu dönem: ${start ? start.toLocaleDateString('tr-TR') : '—'} — ${new Date().toLocaleDateString('tr-TR')}\nAlım: ₺${totalAlimTry.toFixed(2)} / $${totalAlimUsd.toFixed(2)}\nÖdeme: ₺${totalOdemeTry.toFixed(2)} / $${totalOdemeUsd.toFixed(2)}\n\nBu özet geçmişe arşivlenecek, dönem raporu sıfırdan başlayacak VE toptancının güncel borç bakiyesi (₺${balTry.toFixed(2)} / $${balUsd.toFixed(2)}) 0'a çekilecek. Devam edilsin mi?`)) return;
 
   const note = prompt('Bu sıfırlama için not eklemek ister misiniz? (opsiyonel, boş bırakabilirsiniz)', '') || undefined;
 
@@ -4706,22 +4708,31 @@ async function resetSupplierPeriodFor(supplierId){
     });
     if(!supplierPeriodResets[supplierId]) supplierPeriodResets[supplierId] = [];
     supplierPeriodResets[supplierId].unshift(reset);
-    toast(`${s.name} için dönem sıfırlandı`);
+    s.currentBalance = 0;
+    s.currentBalanceUsd = 0;
+    toast(`${s.name} için dönem sıfırlandı, bakiye 0'a çekildi`);
     renderSupplierDetail();
+    renderAll();
   }catch(e){ toast(e.message || 'Dönem sıfırlanamadı'); }
 }
 
 async function undoSupplierPeriodResetFor(supplierId, resetId, isLatest){
   const msg = isLatest
-    ? 'Bu sıfırlama geri alınacak — bu toptancının dönem raporu bir önceki sıfırlamaya (veya en başına) dönecek. Bakiye etkilenmez. Devam edilsin mi?'
-    : 'Bu geçmiş sıfırlama kaydı silinecek. En son sıfırlama olmadığı için güncel dönemi etkilemez, yalnızca geçmiş listesinden kaldırılır. Devam edilsin mi?';
+    ? 'Bu sıfırlama geri alınacak — bu toptancının dönem raporu bir önceki sıfırlamaya (veya en başına) dönecek ve bakiye sıfırlama öncesindeki değerine geri yüklenecek. Devam edilsin mi?'
+    : 'Bu geçmiş sıfırlama kaydı silinecek. En son sıfırlama olmadığı için güncel dönemi ve bakiyeyi etkilemez (aradan yeni hareket eklenmiş olabilir), yalnızca geçmiş listesinden kaldırılır. Devam edilsin mi?';
   if(!confirm(msg)) return;
   try{
     await apiFetch(`/reports/suppliers/reset/${resetId}`, { method: 'DELETE' });
   }catch(e){ toast(e.message || 'Sıfırlama geri alınamadı'); return; }
+  const resetRecord = (supplierPeriodResets[supplierId]||[]).find(x=>x.id===resetId);
+  if(isLatest && resetRecord && resetRecord.balanceTryBefore!=null){
+    const s = suppliers.find(x=>x.id===supplierId);
+    if(s){ s.currentBalance = resetRecord.balanceTryBefore; s.currentBalanceUsd = resetRecord.balanceUsdBefore; }
+  }
   supplierPeriodResets[supplierId] = (supplierPeriodResets[supplierId]||[]).filter(x=>x.id!==resetId);
   toast('Sıfırlama geri alındı');
   renderSupplierDetail();
+  renderAll();
 }
 
 function monthlySupplierReportRange(){
