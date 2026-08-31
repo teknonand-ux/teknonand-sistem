@@ -972,7 +972,7 @@
       <div class="card">
         <h3>Kasa Sıfırlama Geçmişi</h3>
         <p class="login-hint" style="margin-top:0;">"Kasayı Sıfırla" ile kapatılan dönemlerin özeti — her biri o dönemin ay sonu raporu gibi kullanılabilir.</p>
-        <table><thead><tr><th>Dönem</th><th>Gelir</th><th>Gider</th><th>Net</th><th>Kim</th><th>Not</th></tr></thead>
+        <table><thead><tr><th>Dönem</th><th>Gelir</th><th>Gider</th><th>Net</th><th>Kim</th><th>Not</th><th></th></tr></thead>
           <tbody id="cashboxResetTable" class="mini-list"></tbody></table>
       </div>
     </div>
@@ -4571,13 +4571,28 @@ function renderCashbox(){
 function renderCashboxResetHistory(){
   const tbody = document.getElementById('cashboxResetTable');
   if(!tbody) return;
+  const latestId = lastCashboxResetAt() ? cashboxResets.reduce((a,b)=> new Date(a.periodEnd)>new Date(b.periodEnd)?a:b).id : null;
   tbody.innerHTML = cashboxResets.length ? cashboxResets.map(r=>`
-    <tr><td>${new Date(r.periodStart).toLocaleDateString('tr-TR')} — ${new Date(r.periodEnd).toLocaleDateString('tr-TR')}</td>
+    <tr><td>${new Date(r.periodStart).toLocaleDateString('tr-TR')} — ${new Date(r.periodEnd).toLocaleDateString('tr-TR')}${r.id===latestId?' <span class="pill" style="color:var(--green); background:rgba(46,158,109,0.12);">güncel</span>':''}</td>
     <td class="code">₺${(parseFloat(r.totalIncome)||0).toFixed(2)}</td>
     <td class="code" style="color:var(--red);">₺${(parseFloat(r.totalExpense)||0).toFixed(2)}</td>
     <td class="code" style="color:${parseFloat(r.net)>=0?'var(--green)':'var(--red)'}">₺${(parseFloat(r.net)||0).toFixed(2)}</td>
     <td>${esc(r.employee?.name)||'—'}</td>
-    <td>${esc(r.note)||'—'}</td></tr>`).join('') : `<tr><td colspan="6" class="empty">Henüz kasa sıfırlanmadı</td></tr>`;
+    <td>${esc(r.note)||'—'}</td>
+    <td><button class="ghost" onclick="undoCashboxReset('${r.id}', ${r.id===latestId})">Geri Al</button></td></tr>`).join('') : `<tr><td colspan="7" class="empty">Henüz kasa sıfırlanmadı</td></tr>`;
+}
+
+async function undoCashboxReset(id, isLatest){
+  const msg = isLatest
+    ? 'Bu sıfırlama geri alınacak — Kasa ekranı bu sıfırlamadan önceki döneme (bir önceki sıfırlamaya veya kasanın en başına) dönecek. Ödeme/gider kayıtlarına dokunulmaz, sadece bu arşiv kaydı silinir. Devam edilsin mi?'
+    : 'Bu geçmiş sıfırlama kaydı silinecek. Bu, en son sıfırlama olmadığı için Kasa ekranındaki güncel dönemi etkilemez, yalnızca geçmiş listesinden kaldırılır. Devam edilsin mi?';
+  if(!confirm(msg)) return;
+  try{
+    await apiFetch(`/reports/cashbox/reset/${id}`, { method: 'DELETE' });
+  }catch(e){ toast(e.message || 'Sıfırlama geri alınamadı'); return; }
+  cashboxResets = cashboxResets.filter(x=>x.id!==id);
+  toast('Sıfırlama geri alındı');
+  renderCashbox();
 }
 
 async function resetCashbox(){

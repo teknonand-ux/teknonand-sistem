@@ -82,6 +82,20 @@ router.get('/cashbox/resets', async (req, res, next) => {
   }
 });
 
+// DELETE /api/reports/cashbox/reset/:id — bir sıfırlama kaydını geri alır (arşiv
+// kaydı silinir, ödeme/gider verisi zaten hiç silinmemişti). Silinen kayıt en son
+// sıfırlamaysa Kasa ekranı otomatik olarak bir önceki sıfırlamanın (varsa) veya
+// dönem başının gösterdiği duruma geri döner — çünkü ekran her zaman kalan
+// kayıtlar arasındaki en yeni periodEnd'i baz alır.
+router.delete('/cashbox/reset/:id', async (req, res, next) => {
+  try {
+    await prisma.cashboxReset.delete({ where: { id: req.params.id } });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
 // POST /api/reports/cashbox/reset — kapanan dönemin özetini arşivler; ödeme/gider
 // kayıtları silinmez, Kasa ekranı bundan sonra yalnızca periodEnd'den sonrasını gösterir.
 // Dönem toplamları (gelir/gider/net) panel tarafında hesaplanıp gönderilir — Kasa
