@@ -4288,17 +4288,21 @@ function renderSupplierDetail(){
     <div class="card">
       <h3>Borç / Ödeme Hareketi Ekle</h3>
       ${txs.length ? `<div class="dealer-tx mini-list">${txs.map(t=>`
-        <div class="dealer-tx-line"><span style="color:${t.type==='ALIM'?'var(--red)':'var(--green)'}; font-weight:600;">${t.type==='ALIM'?'Borç (Alım)':'Ödeme'}</span><span>${t.currency==='USD'?'$':'₺'}${(parseFloat(t.amount)||0).toFixed(2)} · ${new Date(t.createdAt).toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})}${t.description?` · ${esc(t.description)}`:''} <button class="ghost" style="padding:2px 7px; margin-left:6px;" onclick="removeSupplierTx('${s.id}','${t.id}')">Sil</button></span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
+        <div class="dealer-tx-line"><span style="color:${t.type==='ALIM'?'var(--red)':'var(--green)'}; font-weight:600;">${t.type==='ALIM'?'Borç (Alım)':'Ödeme'}</span><span>${t.currency==='USD'?'$':'₺'}${(parseFloat(t.amount)||0).toFixed(2)}${t.method?` · ${esc(t.method)}`:''} · ${new Date(t.createdAt).toLocaleString('tr-TR', {dateStyle:'medium', timeStyle:'short'})}${t.description?` · ${esc(t.description)}`:''} <button class="ghost" style="padding:2px 7px; margin-left:6px;" onclick="removeSupplierTx('${s.id}','${t.id}')">Sil</button></span></div>`).join('')}</div>` : `<p class="empty">Henüz hareket yok</p>`}
       <div class="dealer-form" style="margin-top:12px;">
         <div class="field"><label>Tür</label>
-          <select id="stx-type-${s.id}"><option value="ODEME">Ödeme</option><option value="ALIM">Borç (Alım)</option></select>
+          <select id="stx-type-${s.id}" onchange="onSupplierTxTypeChange('${s.id}')"><option value="ODEME">Ödeme</option><option value="ALIM">Borç (Alım)</option></select>
         </div>
         <div class="field"><label>Para Birimi</label>
           <select id="stx-currency-${s.id}"><option value="TRY">₺ TL</option><option value="USD">$ USD</option></select>
         </div>
         <div class="field"><label>Tutar</label><input id="stx-amount-${s.id}" type="number" placeholder="500"></div>
+        <div class="field" id="stx-method-wrap-${s.id}"><label>Ödeme Yöntemi</label>
+          <select id="stx-method-${s.id}"><option>Nakit</option><option>Banka Hesabı</option><option>Kredi Kartı</option><option>Sanal POS</option></select>
+        </div>
         <button class="primary" style="margin-top:0;" onclick="addSupplierTx('${s.id}')">Ekle</button>
       </div>
+      <p class="login-hint" style="margin-top:8px;">TL ödemeler, seçilen yöntemle birlikte Kasa'ya gider olarak otomatik yansır.</p>
       <button class="ghost" style="margin-top:12px;" onclick="removeItem('suppliers','${s.id}'); switchView('suppliers');">Toptancıyı Sil</button>
     </div>
 
@@ -4387,28 +4391,42 @@ async function viewSupplierStockPdf(id){
   }
 }
 
+function onSupplierTxTypeChange(id){
+  const type = document.getElementById('stx-type-'+id).value;
+  const wrap = document.getElementById('stx-method-wrap-'+id);
+  if(wrap) wrap.style.display = type==='ODEME' ? 'block' : 'none';
+}
+
 async function addSupplierTx(id){
   const amount = parseFloat(document.getElementById('stx-amount-'+id).value);
   const type = document.getElementById('stx-type-'+id).value;
   const currency = document.getElementById('stx-currency-'+id).value;
+  const method = type==='ODEME' ? document.getElementById('stx-method-'+id).value : undefined;
   if(isNaN(amount) || amount<=0){ toast('Geçerli bir tutar girin'); return; }
-  const supplier = await apiFetch(`/suppliers/${id}/transactions`, {
-    method: 'POST',
-    body: JSON.stringify({ type, currency, amount })
-  });
+  let supplier;
+  try{
+    supplier = await apiFetch(`/suppliers/${id}/transactions`, {
+      method: 'POST',
+      body: JSON.stringify({ type, currency, amount, method })
+    });
+  }catch(e){ toast(e.message || 'Hareket eklenemedi'); return; }
   const idx = suppliers.findIndex(x=>x.id===id);
   if(idx>=0) suppliers[idx] = supplier;
-  toast(type==='ALIM' ? 'Borç eklendi' : 'Ödeme kaydedildi');
+  toast(type==='ALIM' ? 'Borç eklendi' : (currency==='TRY' ? 'Ödeme kaydedildi ve Kasa\'ya gider olarak yansıtıldı' : 'Ödeme kaydedildi'));
+  document.getElementById('stx-amount-'+id).value = '';
+  // Kasa'nın gider listesi de bu ödemeyi içerebilir — panel açıkken güncel kalsın diye tazeliyoruz.
+  if(currentUserPermission==='ADMIN') expenses = await apiFetch('/reports/cashbox').then(r=>r.expenses);
   renderSupplierDetail();
   renderAll();
 }
 
 async function removeSupplierTx(supplierId, txId){
-  if(!confirm('Bu hareketi silmek istediğinize emin misiniz? Bakiye buna göre geri alınacak.')) return;
+  if(!confirm('Bu hareketi silmek istediğinize emin misiniz? Bakiye ve (varsa) bağlı Kasa gider kaydı buna göre geri alınacak.')) return;
   const supplier = await apiFetch(`/suppliers/${supplierId}/transactions/${txId}`, { method: 'DELETE' });
   const idx = suppliers.findIndex(x=>x.id===supplierId);
   if(idx>=0) suppliers[idx] = supplier;
   toast('Hareket silindi');
+  if(currentUserPermission==='ADMIN') expenses = await apiFetch('/reports/cashbox').then(r=>r.expenses);
   renderSupplierDetail();
   renderAll();
 }

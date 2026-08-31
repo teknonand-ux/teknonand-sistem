@@ -4,6 +4,7 @@ const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee } = require('../middleware/auth');
 const { sendSupplierStockPdfToPhone, SUPPLIER_STOCK_PDF_EXTRA_PHONE } = require('../services/whatsapp');
 const { buildSupplierStockPdfBuffer } = require('../services/pdfGenerator');
+const { recordSupplierPayment, reverseSupplierTransaction } = require('../lib/supplierPayments');
 
 const router = express.Router();
 router.use(requireAuth, requireEmployee);
@@ -102,22 +103,32 @@ router.patch('/:id', async (req, res, next) => {
   }
 });
 
-// POST /api/suppliers/:id/transactions — borç ekle (ALIM) veya ödeme (ODEME), TL veya USD
+// POST /api/suppliers/:id/transactions — borç ekle (ALIM) veya ödeme (ODEME), TL veya USD.
+// ODEME'de ödeme yöntemi zorunlu — TRY ödemeler recordSupplierPayment ile Kasa'ya
+// gider olarak da yansır (bkz. lib/supplierPayments.js).
 router.post('/:id/transactions', async (req, res, next) => {
   try {
-    const schema = z.object({
-      type: z.enum(['ALIM', 'ODEME']),
-      currency: z.enum(['TRY', 'USD']).default('TRY'),
-      amount: z.number().positive(),
-      description: z.string().optional(),
+    const schema = z
+      .object({
+        type: z.enum(['ALIM', 'ODEME']),
+        currency: z.enum(['TRY', 'USD']).default('TRY'),
+        amount: z.number().positive(),
+        method: z.string().min(1).optional(),
+        description: z.string().optional(),
+      })
+      .refine((d) => d.type !== 'ODEME' || !!d.method, { message: 'Ödeme yöntemi seçilmelidir', path: ['method'] });
+    const { type, currency, amount, method, description } = schema.parse(req.body);
+
+    await prisma.$transaction(async (tx) => {
+      if (type === 'ODEME') {
+        await recordSupplierPayment(tx, { supplierId: req.params.id, amount, currency, method, description });
+      } else {
+        const balanceField = currency === 'USD' ? 'currentBalanceUsd' : 'currentBalance';
+        await tx.supplier.update({ where: { id: req.params.id }, data: { [balanceField]: { increment: amount } } });
+        await tx.supplierTransaction.create({ data: { supplierId: req.params.id, type, currency, amount, description } });
+      }
     });
-    const { type, currency, amount, description } = schema.parse(req.body);
-    const delta = type === 'ALIM' ? amount : -amount;
-    const balanceField = currency === 'USD' ? 'currentBalanceUsd' : 'currentBalance';
-    await prisma.$transaction([
-      prisma.supplier.update({ where: { id: req.params.id }, data: { [balanceField]: { increment: delta } } }),
-      prisma.supplierTransaction.create({ data: { supplierId: req.params.id, type, currency, amount, description } }),
-    ]);
+
     const supplier = await prisma.supplier.findUnique({
       where: { id: req.params.id },
       include: { transactions: { orderBy: { createdAt: 'desc' } } },
@@ -128,17 +139,13 @@ router.post('/:id/transactions', async (req, res, next) => {
   }
 });
 
-// DELETE /api/suppliers/:id/transactions/:txId — hareketi sil, bakiyeyi geri al
+// DELETE /api/suppliers/:id/transactions/:txId — hareketi sil, bakiyeyi geri al;
+// ödemeyse bağlı Kasa gider kaydını da siler (bkz. lib/supplierPayments.js).
 router.delete('/:id/transactions/:txId', async (req, res, next) => {
   try {
-    const tx = await prisma.supplierTransaction.findUnique({ where: { id: req.params.txId } });
-    if (!tx || tx.supplierId !== req.params.id) return res.status(404).json({ error: 'Hareket bulunamadı' });
-    const delta = tx.type === 'ALIM' ? -Number(tx.amount) : Number(tx.amount);
-    const balanceField = tx.currency === 'USD' ? 'currentBalanceUsd' : 'currentBalance';
-    await prisma.$transaction([
-      prisma.supplier.update({ where: { id: req.params.id }, data: { [balanceField]: { increment: delta } } }),
-      prisma.supplierTransaction.delete({ where: { id: req.params.txId } }),
-    ]);
+    const supplierTx = await prisma.supplierTransaction.findUnique({ where: { id: req.params.txId } });
+    if (!supplierTx || supplierTx.supplierId !== req.params.id) return res.status(404).json({ error: 'Hareket bulunamadı' });
+    await prisma.$transaction((tx) => reverseSupplierTransaction(tx, supplierTx));
     const supplier = await prisma.supplier.findUnique({
       where: { id: req.params.id },
       include: { transactions: { orderBy: { createdAt: 'desc' } } },

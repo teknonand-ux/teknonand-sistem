@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
+const { recordSupplierPayment, reverseSupplierTransaction } = require('../lib/supplierPayments');
 
 const router = express.Router();
 router.use(requireAuth, requireEmployee);
@@ -44,24 +45,43 @@ router.post('/cashbox/expense', async (req, res, next) => {
       description: z.string().optional(),
     });
     const data = schema.parse(req.body);
-    const expense = await prisma.$transaction(async (tx) => {
-      const created = await tx.expense.create({ data, include: { supplier: true } });
-      if (data.category === 'Toptancı Ödemesi' && data.supplierId) {
-        await tx.supplier.update({ where: { id: data.supplierId }, data: { currentBalance: { decrement: data.amount } } });
-        await tx.supplierTransaction.create({
-          data: { supplierId: data.supplierId, type: 'ODEME', amount: data.amount, description: data.description },
-        });
-      }
-      return created;
-    });
+    let expense;
+    if (data.category === 'Toptancı Ödemesi' && data.supplierId) {
+      // Toptancı bakiyesi ve karşı SupplierTransaction, paylaşılan mantıkla
+      // (lib/supplierPayments.js) oluşturulur — silindiğinde de ikisi birden geri alınır.
+      const created = await prisma.$transaction((tx) =>
+        recordSupplierPayment(tx, {
+          supplierId: data.supplierId,
+          amount: data.amount,
+          currency: 'TRY',
+          method: data.method,
+          description: data.description,
+        })
+      );
+      expense = await prisma.expense.findUnique({ where: { id: created.expense.id }, include: { supplier: true } });
+    } else {
+      expense = await prisma.expense.create({ data, include: { supplier: true } });
+    }
     res.status(201).json(expense);
   } catch (e) {
     next(e);
   }
 });
 
+// DELETE /api/reports/cashbox/expense/:id — gideri siler; "Toptancı Ödemesi"
+// giderleri bir SupplierTransaction'a bağlıysa (bkz. lib/supplierPayments.js)
+// toptancı bakiyesi geri yüklenir ve bağlı hareket de silinir.
 router.delete('/cashbox/expense/:id', async (req, res, next) => {
   try {
+    const expense = await prisma.expense.findUnique({ where: { id: req.params.id } });
+    if (!expense) return res.status(404).json({ error: 'Gider bulunamadı' });
+    if (expense.supplierTransactionId) {
+      const supplierTx = await prisma.supplierTransaction.findUnique({ where: { id: expense.supplierTransactionId } });
+      if (supplierTx) {
+        await prisma.$transaction((tx) => reverseSupplierTransaction(tx, supplierTx));
+        return res.status(204).end();
+      }
+    }
     await prisma.expense.delete({ where: { id: req.params.id } });
     res.status(204).end();
   } catch (e) {

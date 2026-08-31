@@ -362,8 +362,11 @@ model SupplierTransaction {
   type        SupplierTxType
   currency    SupplierTxCurrency  @default(TRY)
   amount      Decimal             @db.Decimal(12, 2)
+  method      String? // Nakit / Banka Hesabı / Kredi Kartı / Sanal POS — yalnızca ODEME için; TRY ödemede bağlı Expense'e de yazılır
   description String?
   createdAt   DateTime            @default(now())
+
+  expense Expense?
 
   @@map("supplier_transactions")
 }
@@ -381,6 +384,12 @@ model Expense {
   method      String // Nakit / Banka Hesabı / Kredi Kartı / Sanal POS
   description String?
   createdAt   DateTime @default(now())
+
+  // Toptancı Detay sayfasından (veya Kasa > Gider Ekle'den) yapılan bir TRY
+  // ödemesiyle otomatik oluşturulduysa, kaynak SupplierTransaction'a bağlanır —
+  // ikisinden biri silinince diğeri de (ve toptancı bakiyesi) geri alınır.
+  supplierTransactionId String?              @unique
+  supplierTransaction   SupplierTransaction? @relation(fields: [supplierTransactionId], references: [id], onDelete: SetNull)
 
   @@map("expenses")
 }
