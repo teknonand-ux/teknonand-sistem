@@ -2,7 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
-const { sendStatusWhatsapp, sendDocumentWhatsapp } = require('../services/whatsapp');
+const { sendStatusWhatsapp, sendDocumentWhatsapp, sendGoogleReviewRequest } = require('../services/whatsapp');
 const { buildDeliveryFormPdfBuffer } = require('../services/pdfGenerator');
 
 const router = express.Router();
@@ -664,6 +664,23 @@ router.post('/:id/send-invoice-whatsapp', async (req, res, next) => {
       templateType: 'INVOICE',
     });
     res.json(message);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/devices/:id/google-review-whatsapp — "⭐ Google Yorum İste" butonu:
+// onaylı WHATSAPP_TEMPLATE_GOOGLE_REVIEW şablonuyla müşteriden Google değerlendirmesi
+// istemesini otomatik gönderir. Yalnızca panelde bu butona basıldığında tetiklenir,
+// otomatik durum bildirimlerinden bağımsızdır.
+router.post('/:id/google-review-whatsapp', async (req, res, next) => {
+  try {
+    const device = await prisma.device.findUnique({ where: { id: req.params.id }, include: { customer: true } });
+    if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
+    if (!device.customer.phone && !device.backupPhone) return res.status(400).json({ error: 'Müşterinin telefon numarası kayıtlı değil' });
+    const result = await sendGoogleReviewRequest(device, device.customer);
+    if (!result.ok) return res.status(502).json({ error: result.error || 'Mesaj gönderilemedi' });
+    res.json({ ok: true });
   } catch (e) {
     next(e);
   }

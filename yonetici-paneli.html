@@ -2689,6 +2689,7 @@ function renderDeviceDetail(){
       <div style="display:flex; gap:8px; margin-top:10px;">
         <button class="ghost" onclick="toggleCustomerEdit()">Müşteri Bilgilerini Düzenle</button>
         <button class="ghost" onclick="sendTrackingLinkWhatsApp('${d.id}')">WhatsApp ile Takip Linki Gönder</button>
+        <button class="ghost" onclick="sendGoogleReviewWhatsApp('${d.id}')">⭐ Google Yorum İste</button>
       </div>
       `}
     </div>
@@ -4087,6 +4088,19 @@ function sendPaymentReminderWhatsApp(id){
   }));
   const number = d.customer.phone ? toWhatsAppNumber(d.customer.phone) : '';
   window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
+}
+
+async function sendGoogleReviewWhatsApp(id){
+  const d = devices.find(x=>x.id===id);
+  if(!d) return;
+  if(!d.customer.phone && !d.backupPhone){ toast('Müşterinin telefon numarası kayıtlı değil'); return; }
+  if(!confirm(`${d.customer.fullName} adlı müşteriye Google yorum isteği WhatsApp'tan otomatik gönderilsin mi?`)) return;
+  try{
+    await apiFetch(`/devices/${id}/google-review-whatsapp`, { method: 'POST' });
+    toast('Google yorum isteği WhatsApp\'tan gönderildi');
+  }catch(e){
+    toast(e.message || 'Mesaj gönderilemedi');
+  }
 }
 
 function openDealer(id){
@@ -5826,6 +5840,7 @@ function renderDeviceTable(){
       <td>${parts.length} kalem · ₺${total.toFixed(0)}${unpaidDelivered ? `<br><span style="color:var(--red); font-size:11px; font-weight:600;">⚠ Kalan ₺${(total-paid).toFixed(0)}</span>` : ''}</td>
       <td onclick="event.stopPropagation()">
         <button class="ghost" onclick="printDeviceLabel('${d.id}')">Etiket Bas</button>
+        <button class="ghost" style="margin-top:4px;" onclick="sendGoogleReviewWhatsApp('${d.id}')">⭐ Yorum İste</button>
         ${unpaidDelivered ? `<button class="ghost" style="color:var(--red); border-color:var(--red); margin-top:4px;" onclick="sendPaymentReminderWhatsApp('${d.id}')">Ödeme Hatırlat</button>` : ''}
       </td>
     </tr>`;

@@ -1,5 +1,8 @@
 const { prisma } = require('../lib/prisma');
 
+// Google İşletme Profili değerlendirme linki — "⭐ Google Yorum İste" butonunda kullanılır.
+const GOOGLE_REVIEW_URL = 'https://g.page/r/CS9o9puT8mePEBM/review';
+
 // sistem-plani.md § 3: WhatsApp Business Cloud API (Meta) kullanılıyor.
 // Serbest metin sadece müşterinin son 24 saat içinde bize mesaj attığı "customer
 // service window" içinde gönderilebilir; bizim durum bildirimlerimiz işletme
@@ -429,6 +432,19 @@ async function sendDealerBalanceReminder(dealer) {
   return result;
 }
 
+// Panelden "⭐ Google Yorum İste" butonu — onaylı WHATSAPP_TEMPLATE_GOOGLE_REVIEW
+// şablonuyla müşteriden Google İşletme Profili üzerinden değerlendirme istemesini
+// otomatik gönderir (diğer tek-parametreli bildirimler gibi sendNamedTemplateMessage
+// kullanır, bkz. sendDealerBalanceReminder).
+async function sendGoogleReviewRequest(device, customer) {
+  const templateName = process.env.WHATSAPP_TEMPLATE_GOOGLE_REVIEW;
+  const phone = customer.phone || device.backupPhone;
+  const body = `Sayın ${customer.fullName}, cihazınızla (${device.model}) ilgili hizmetimizden memnun kaldıysanız bizi Google üzerinden değerlendirmenizden mutluluk duyarız: ${GOOGLE_REVIEW_URL}`;
+  const result = await sendNamedTemplateMessage(phone, templateName, [customer.fullName, GOOGLE_REVIEW_URL]);
+  await recordOutboundInInbox({ phone, customerId: customer.id, body, ok: result.ok, errorMessage: result.error });
+  return result;
+}
+
 // "Bu Toptancıdan Alınan Stok Kalemleri" kartındaki tarih aralığı PDF'i — panelde
 // ayrı iki düğmeyle ya toptancının kendi numarasına ya da sabit muhasebe/ofis
 // hattına gönderilir (bkz. routes/suppliers.js POST /:id/stock-pdf-whatsapp,
@@ -470,6 +486,7 @@ module.exports = {
   sendNewAppointmentStaffAlert,
   sendAppointmentConfirmation,
   sendDealerBalanceReminder,
+  sendGoogleReviewRequest,
   sendSupplierStockPdfToPhone,
   SUPPLIER_STOCK_PDF_EXTRA_PHONE,
   toCloudApiPhone,
