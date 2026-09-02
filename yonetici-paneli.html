@@ -527,6 +527,9 @@
     <div class="view" id="view-devices">
       <h1>Cihazlar</h1>
       <p class="subtitle">Tüm servis kayıtları ve durum güncelleme</p>
+      <button id="notif-filter-btn" onclick="toggleNotifFilter()" style="display:none; width:100%; margin-bottom:12px; padding:10px 14px; border-radius:10px; border:1.5px solid var(--red); background:#FDEAE6; color:var(--red); font-weight:700; font-size:13.5px; cursor:pointer; text-align:left;">
+        🔔 Yanıt Bekleyen Bildirim: <span id="notif-filter-count">0</span> cihaz — görmek için tıklayın
+      </button>
       <div class="card" style="margin-bottom:12px;">
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
           <button class="ghost search-mode-btn active" data-mode="imei" onclick="setSearchMode('imei')">IMEI / Seri No ile Bul</button>
@@ -1165,6 +1168,7 @@ let supplierResets = [];
 let supplierPeriodResets = {}; // { [supplierId]: SupplierReset[] } — Toptancı Detay sayfasının kendi dönem sıfırlamaları
 let exchangeRate = 47.89; // Harem Altın USD/TL satış kuru - varsayılan, elle güncellenebilir
 let currentDeviceId = null;
+let notifFilterActive = false;
 let customerEditOpen = false;
 let openDealerId = null;
 let currentUserId = null;
@@ -5762,7 +5766,7 @@ function renderDeviceTable(){
 
   // Arama sorgusu, arama modu veya durum filtresi değiştiyse sayfayı başa al — aksi
   // halde 5. sayfadayken filtre değiştirince bos bir sayfa görünebilir.
-  const searchKey = deviceSearchMode + '::' + query + '::' + statusFilter;
+  const searchKey = deviceSearchMode + '::' + query + '::' + statusFilter + '::' + notifFilterActive;
   if(searchKey !== lastDeviceSearchKey){ deviceCurrentPage = 0; lastDeviceSearchKey = searchKey; }
 
   let list = devices;
@@ -5777,6 +5781,11 @@ function renderDeviceTable(){
   }
   if(statusFilter){
     list = list.filter(d => d.status === statusFilter);
+  }
+  if(notifFilterActive){
+    list = list.filter(d => d.approvalSeenByStaff === false)
+      .slice()
+      .sort((a,b) => new Date(b.updatedAt||b.createdAt) - new Date(a.updatedAt||a.createdAt));
   }
 
   const totalPages = Math.max(1, Math.ceil(list.length / DEVICE_PAGE_SIZE));
@@ -5803,10 +5812,11 @@ function renderDeviceTable(){
     // Bayiye ait cihazlarda odeme veresiye hesabindan takip edilir, musteri bazli
     // "Odeme Hatirlat" uyarisi sadece bayisiz (dogrudan musteri) cihazlarda gosterilir.
     const unpaidDelivered = !d.dealerId && (d.status === 'DELIVERED' || d.status === 'SHIPPED') && (total - paid) > 0.01;
+    const unseenNotif = d.approvalSeenByStaff === false;
     return `
-    <tr class="row-click" onclick="openDevice('${d.id}')">
+    <tr class="row-click" onclick="openDevice('${d.id}')" ${unseenNotif ? 'style="background:#FDEAE6;"' : ''}>
       <td onclick="event.stopPropagation()"><input type="checkbox" class="device-row-check" data-id="${d.id}" ${selectedDeviceIds.has(d.id)?'checked':''} onchange="toggleDeviceSelect('${d.id}', this.checked)"></td>
-      <td class="code">${esc(d.trackingCode)}</td>
+      <td class="code">${unseenNotif ? '🔔 ' : ''}${esc(d.trackingCode)}</td>
       <td>${regDatePill(d.createdAt)}<br><span style="color:var(--ink-soft); font-size:11px;">${new Date(d.createdAt).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}</span></td>
       <td>${esc(d.model)}${d.devicePassword?`<br><span style="color:var(--ink-soft); font-size:11px;">Şifre: ${esc(d.devicePassword)}</span>`:''}</td>
       <td>${esc(d.issueDescription)||'—'}</td>
@@ -5819,7 +5829,7 @@ function renderDeviceTable(){
         ${unpaidDelivered ? `<button class="ghost" style="color:var(--red); border-color:var(--red); margin-top:4px;" onclick="sendPaymentReminderWhatsApp('${d.id}')">Ödeme Hatırlat</button>` : ''}
       </td>
     </tr>`;
-  }).join('') : ((query || statusFilter) ? `<tr><td colspan="10" class="empty">Eşleşen kayıt bulunamadı</td></tr>` : `<tr><td colspan="10" class="empty">Henüz cihaz kaydı yok — "Cihaz Kabul"tan ekleyin</td></tr>`);
+  }).join('') : ((query || statusFilter || notifFilterActive) ? `<tr><td colspan="10" class="empty">Eşleşen kayıt bulunamadı</td></tr>` : `<tr><td colspan="10" class="empty">Henüz cihaz kaydı yok — "Cihaz Kabul"tan ekleyin</td></tr>`);
 
   const selectAllBox = document.getElementById('select-all-devices');
   if(selectAllBox){
@@ -5833,9 +5843,27 @@ function renderDeviceTable(){
 function updateDevicesNavBadge(){
   const total = devices.filter(d=>d.approvalSeenByStaff===false).length;
   const badge = document.getElementById('devicesNavBadge');
-  if(!badge) return;
-  if(total > 0){ badge.style.display = 'inline-block'; badge.textContent = total > 99 ? '99+' : String(total); }
-  else badge.style.display = 'none';
+  if(badge){
+    if(total > 0){ badge.style.display = 'inline-block'; badge.textContent = total > 99 ? '99+' : String(total); }
+    else badge.style.display = 'none';
+  }
+  const filterBtn = document.getElementById('notif-filter-btn');
+  const filterCount = document.getElementById('notif-filter-count');
+  if(filterCount) filterCount.textContent = String(total);
+  if(filterBtn) filterBtn.style.display = total > 0 ? 'block' : 'none';
+  // Bildirimler kapanmışsa (hepsi görüldüyse) filtre açık kalmasın, boş tabloya bakılmasın
+  if(total === 0 && notifFilterActive){ notifFilterActive = false; }
+}
+
+// Nav rozetindeki "onaylandı / iade istendi ama personel henüz görmedi" cihazları tek
+// tıkla listeler — aksi halde bu cihazı bulmak için tüm listede aramak gerekiyordu.
+function toggleNotifFilter(){
+  notifFilterActive = !notifFilterActive;
+  const filterBtn = document.getElementById('notif-filter-btn');
+  if(filterBtn) filterBtn.style.outline = notifFilterActive ? '2px solid var(--red)' : 'none';
+  const statusFilterEl = document.getElementById('device-status-filter');
+  if(statusFilterEl) statusFilterEl.value = '';
+  renderDeviceTable();
 }
 
 function renderAll(){
