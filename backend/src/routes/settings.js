@@ -3,6 +3,7 @@ const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
 const { fetchUsdTryRate } = require('../services/exchangeRate');
+const { GOOGLE_REVIEW_TEMPLATE_DEFINITION } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -52,6 +53,34 @@ router.post('/exchangeRate/refresh', requireAuth, requireEmployee, async (req, r
     res.json(setting.value);
   } catch (e) {
     res.status(502).json({ error: e.message || 'Kur çekilemedi' });
+  }
+});
+
+// POST /api/settings/whatsapp-templates/create-google-review-template — TEK SEFERLİK
+// KURULUM UCU: "⭐ Google Yorum İste" şablonunu Meta'ya (WhatsApp Cloud API) submit
+// eder. Panelde kimse çağırmaz; WHATSAPP_TEMPLATE_SETUP_KEY env değişkeni Railway'de
+// tanımlıyken ve istekteki x-setup-key header'ı ona eşitken çalışır — env değişkeni
+// yoksa (kurulum tamamlanıp kaldırıldıktan sonraki hal) 404 döner. Şablon Meta'da
+// onaylandıktan sonra hem bu env değişkeni hem bu route güvenlik için kaldırılabilir.
+router.post('/whatsapp-templates/create-google-review-template', async (req, res, next) => {
+  try {
+    const setupKey = process.env.WHATSAPP_TEMPLATE_SETUP_KEY;
+    if (!setupKey || req.headers['x-setup-key'] !== setupKey) return res.status(404).json({ error: 'Uç nokta bulunamadı' });
+
+    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+    const wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+    if (!accessToken || !wabaId) return res.status(500).json({ error: 'WHATSAPP_ACCESS_TOKEN / WHATSAPP_BUSINESS_ACCOUNT_ID tanımlı değil' });
+
+    const metaRes = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/message_templates`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(GOOGLE_REVIEW_TEMPLATE_DEFINITION),
+    });
+    const json = await metaRes.json();
+    if (!metaRes.ok) return res.status(502).json({ error: json.error?.message || `HTTP ${metaRes.status}`, details: json });
+    res.json({ ok: true, templateName: GOOGLE_REVIEW_TEMPLATE_DEFINITION.name, meta: json });
+  } catch (e) {
+    next(e);
   }
 });
 

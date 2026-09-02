@@ -1,7 +1,27 @@
 const { prisma } = require('../lib/prisma');
 
-// Google İşletme Profili değerlendirme linki — "⭐ Google Yorum İste" butonunda kullanılır.
+// Google İşletme Profili değerlendirme linki ve Meta'ya gönderilecek şablon tanımı —
+// "⭐ Google Yorum İste" butonunda (bkz. sendGoogleReviewRequest) ve şablonun Meta'da
+// bir kereliğine oluşturulmasında (bkz. routes/settings.js POST
+// /whatsapp-templates/create-google-review-template) ortak kullanılır.
 const GOOGLE_REVIEW_URL = 'https://g.page/r/CS9o9puT8mePEBM/review';
+const GOOGLE_REVIEW_TEMPLATE_NAME = 'google_yorum_istegi';
+const GOOGLE_REVIEW_TEMPLATE_DEFINITION = {
+  name: GOOGLE_REVIEW_TEMPLATE_NAME,
+  language: 'tr',
+  category: 'MARKETING',
+  components: [
+    {
+      type: 'BODY',
+      text: 'Sayın {{1}}, hizmetimizden memnun kaldıysanız bizi Google üzerinden değerlendirmenizden mutluluk duyarız.',
+      example: { body_text: [['Ahmet Yılmaz']] },
+    },
+    {
+      type: 'BUTTONS',
+      buttons: [{ type: 'URL', text: "Google'da Değerlendir", url: GOOGLE_REVIEW_URL }],
+    },
+  ],
+};
 
 // sistem-plani.md § 3: WhatsApp Business Cloud API (Meta) kullanılıyor.
 // Serbest metin sadece müşterinin son 24 saat içinde bize mesaj attığı "customer
@@ -436,11 +456,14 @@ async function sendDealerBalanceReminder(dealer) {
 // şablonuyla müşteriden Google İşletme Profili üzerinden değerlendirme istemesini
 // otomatik gönderir (diğer tek-parametreli bildirimler gibi sendNamedTemplateMessage
 // kullanır, bkz. sendDealerBalanceReminder).
+// Şablonun linki gövdede değil, sabit (statik) bir "Google'da Değerlendir" URL
+// düğmesinde taşıması için gövdede tek değişken (müşteri adı) yeterli — bkz.
+// GOOGLE_REVIEW_TEMPLATE_DEFINITION ve routes/settings.js'teki tek seferlik kurulum ucu.
 async function sendGoogleReviewRequest(device, customer) {
   const templateName = process.env.WHATSAPP_TEMPLATE_GOOGLE_REVIEW;
   const phone = customer.phone || device.backupPhone;
-  const body = `Sayın ${customer.fullName}, cihazınızla (${device.model}) ilgili hizmetimizden memnun kaldıysanız bizi Google üzerinden değerlendirmenizden mutluluk duyarız: ${GOOGLE_REVIEW_URL}`;
-  const result = await sendNamedTemplateMessage(phone, templateName, [customer.fullName, GOOGLE_REVIEW_URL]);
+  const body = `Sayın ${customer.fullName}, cihazınızla (${device.model}) ilgili hizmetimizden memnun kaldıysanız bizi Google üzerinden değerlendirmenizden mutluluk duyarız (buton: Google'da Değerlendir — ${GOOGLE_REVIEW_URL})`;
+  const result = await sendNamedTemplateMessage(phone, templateName, [customer.fullName]);
   await recordOutboundInInbox({ phone, customerId: customer.id, body, ok: result.ok, errorMessage: result.error });
   return result;
 }
@@ -487,6 +510,7 @@ module.exports = {
   sendAppointmentConfirmation,
   sendDealerBalanceReminder,
   sendGoogleReviewRequest,
+  GOOGLE_REVIEW_TEMPLATE_DEFINITION,
   sendSupplierStockPdfToPhone,
   SUPPLIER_STOCK_PDF_EXTRA_PHONE,
   toCloudApiPhone,
