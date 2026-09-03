@@ -143,7 +143,7 @@ async function sendViaCloudApi(templateType, data, phone, templatesConfig = CLOU
     if (!res.ok) {
       return { ok: false, error: json.error?.message || `HTTP ${res.status}` };
     }
-    return { ok: true };
+    return { ok: true, waMessageId: json.messages?.[0]?.id };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -203,7 +203,7 @@ async function sendDocumentTemplateMessage(phone, templateName, mediaId, filenam
 // Otomatik durum/belge bildirimlerini de panelin "WhatsApp" gelen kutusu sohbetine
 // işler — personel oraya gidip müşteriyle olan TÜM yazışmayı (bizim otomatik
 // bildirimlerimiz + serbest yazışma) tek yerden takip edebilsin diye.
-async function recordOutboundInInbox({ phone, customerId, body, ok, errorMessage }) {
+async function recordOutboundInInbox({ phone, customerId, body, ok, errorMessage, waMessageId }) {
   const waPhone = toCloudApiPhone(phone);
   if (!waPhone) return;
   const text = ok ? body : `${body}\n\n⚠️ Gönderilemedi: ${errorMessage}`;
@@ -213,7 +213,14 @@ async function recordOutboundInInbox({ phone, customerId, body, ok, errorMessage
       existing ||
       (await prisma.whatsappConversation.create({ data: { phone: waPhone, customerId: customerId || null } }));
     await prisma.whatsappChatMessage.create({
-      data: { conversationId: conversation.id, direction: 'OUT', body: text },
+      data: {
+        conversationId: conversation.id,
+        direction: 'OUT',
+        body: text,
+        waMessageId: ok ? waMessageId : null,
+        status: ok ? 'GONDERILDI' : 'BASARISIZ',
+        statusError: ok ? null : errorMessage,
+      },
     });
     await prisma.whatsappConversation.update({
       where: { id: conversation.id },
@@ -236,6 +243,7 @@ async function sendDocumentWhatsapp({ device, customer, pdfBuffer, filename, tem
 
   let status_ = 'GONDERILDI';
   let errorMessage = null;
+  let waMessageId = null;
 
   if (!accessToken || !phoneNumberId || !templateName) {
     status_ = 'BASARISIZ';
@@ -243,7 +251,8 @@ async function sendDocumentWhatsapp({ device, customer, pdfBuffer, filename, tem
   } else {
     try {
       const mediaId = await uploadMediaToMeta(pdfBuffer, filename, 'application/pdf');
-      await sendDocumentTemplateMessage(phone, templateName, mediaId, filename, bodyParams);
+      const sendResult = await sendDocumentTemplateMessage(phone, templateName, mediaId, filename, bodyParams);
+      waMessageId = sendResult.messages?.[0]?.id;
     } catch (e) {
       status_ = 'BASARISIZ';
       errorMessage = e.message;
@@ -256,6 +265,7 @@ async function sendDocumentWhatsapp({ device, customer, pdfBuffer, filename, tem
     body: `[Belge] ${filename}`,
     ok: status_ === 'GONDERILDI',
     errorMessage,
+    waMessageId,
   });
 
   return prisma.whatsappMessage.create({
@@ -294,6 +304,7 @@ async function sendStatusWhatsapp(device, customer, status) {
     body: content,
     ok: status_ === 'GONDERILDI',
     errorMessage,
+    waMessageId: result.waMessageId,
   });
 
   return prisma.whatsappMessage.create({
@@ -407,7 +418,7 @@ async function sendNamedTemplateMessage(phone, templateName, params) {
     });
     const json = await res.json();
     if (!res.ok) return { ok: false, error: json.error?.message || `HTTP ${res.status}` };
-    return { ok: true };
+    return { ok: true, waMessageId: json.messages?.[0]?.id };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -426,7 +437,7 @@ async function sendNewAppointmentStaffAlert(appointment) {
     formatApptDateTime(appointment.datetime),
     appointment.phone,
   ]);
-  await recordOutboundInInbox({ phone: staffPhone, customerId: null, body, ok: result.ok, errorMessage: result.error });
+  await recordOutboundInInbox({ phone: staffPhone, customerId: null, body, ok: result.ok, errorMessage: result.error, waMessageId: result.waMessageId });
   return result;
 }
 
@@ -436,7 +447,7 @@ async function sendAppointmentConfirmation(appointment) {
   const whenStr = formatApptDateTime(appointment.datetime);
   const body = `Sayın ${appointment.customerName}, ${whenStr} tarihindeki randevunuz onaylanmıştır. Sizi bekliyoruz!`;
   const result = await sendNamedTemplateMessage(appointment.phone, templateName, [appointment.customerName, whenStr]);
-  await recordOutboundInInbox({ phone: appointment.phone, customerId: null, body, ok: result.ok, errorMessage: result.error });
+  await recordOutboundInInbox({ phone: appointment.phone, customerId: null, body, ok: result.ok, errorMessage: result.error, waMessageId: result.waMessageId });
   return result;
 }
 
@@ -448,7 +459,7 @@ async function sendDealerBalanceReminder(dealer) {
   const balance = (parseFloat(dealer.balance) || 0).toFixed(2);
   const body = `Sayın ${dealer.name}, toplam bakiyeniz ₺${balance}. Ödeme yapmanız rica olunur. Bakiye detayını bayi portalından görüntüleyebilirsiniz.`;
   const result = await sendNamedTemplateMessage(dealer.phone, templateName, [dealer.name, balance]);
-  await recordOutboundInInbox({ phone: dealer.phone, customerId: null, body, ok: result.ok, errorMessage: result.error });
+  await recordOutboundInInbox({ phone: dealer.phone, customerId: null, body, ok: result.ok, errorMessage: result.error, waMessageId: result.waMessageId });
   return result;
 }
 
@@ -464,7 +475,7 @@ async function sendGoogleReviewRequest(device, customer) {
   const phone = customer.phone || device.backupPhone;
   const body = `Sayın ${customer.fullName}, cihazınızla (${device.model}) ilgili hizmetimizden memnun kaldıysanız bizi Google üzerinden değerlendirmenizden mutluluk duyarız (buton: Google'da Değerlendir — ${GOOGLE_REVIEW_URL})`;
   const result = await sendNamedTemplateMessage(phone, templateName, [customer.fullName]);
-  await recordOutboundInInbox({ phone, customerId: customer.id, body, ok: result.ok, errorMessage: result.error });
+  await recordOutboundInInbox({ phone, customerId: customer.id, body, ok: result.ok, errorMessage: result.error, waMessageId: result.waMessageId });
   return result;
 }
 
@@ -480,13 +491,15 @@ async function sendSupplierStockPdfToPhone(phone, pdfBuffer, filename, bodyParam
   const templateName = process.env.WHATSAPP_TEMPLATE_SUPPLIER_STOCK;
   let status_ = 'GONDERILDI';
   let errorMessage = null;
+  let waMessageId = null;
   if (!templateName) {
     status_ = 'BASARISIZ';
     errorMessage = 'Bu belge için onaylı şablon tanımlı değil (WHATSAPP_TEMPLATE_SUPPLIER_STOCK)';
   } else {
     try {
       const mediaId = await uploadMediaToMeta(pdfBuffer, filename, 'application/pdf');
-      await sendDocumentTemplateMessage(phone, templateName, mediaId, filename, bodyParams);
+      const sendResult = await sendDocumentTemplateMessage(phone, templateName, mediaId, filename, bodyParams);
+      waMessageId = sendResult.messages?.[0]?.id;
     } catch (e) {
       status_ = 'BASARISIZ';
       errorMessage = e.message;
@@ -498,6 +511,7 @@ async function sendSupplierStockPdfToPhone(phone, pdfBuffer, filename, bodyParam
     body: `[Belge] ${filename}`,
     ok: status_ === 'GONDERILDI',
     errorMessage,
+    waMessageId,
   });
   return { ok: status_ === 'GONDERILDI', error: errorMessage };
 }

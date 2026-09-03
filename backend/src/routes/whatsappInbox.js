@@ -23,6 +23,10 @@ function normalizePhoneDigits(phone) {
   return String(phone || '').replace(/\D/g, '');
 }
 
+// Meta'nın webhook'tan gönderdiği mesaj durumu ("statuses") olayları — mavi tik için.
+const STATUS_MAP = { sent: 'GONDERILDI', delivered: 'ILETILDI', read: 'OKUNDU', failed: 'BASARISIZ' };
+const STATUS_RANK = { GONDERILDI: 1, ILETILDI: 2, OKUNDU: 3 };
+
 async function findCustomerByPhone(waPhoneDigits) {
   // Customer.phone serbest formatta saklanıyor (bkz. devices.js) — normalize edip karşılaştırıyoruz.
   const candidates = await prisma.customer.findMany({ where: { phone: { contains: waPhoneDigits.slice(-10) } } });
@@ -102,6 +106,26 @@ router.post('/webhook', verifyMetaSignature('WHATSAPP_APP_SECRET'), async (req, 
               ...(contactName && !conversation.contactName ? { contactName } : {}),
             },
           });
+        }
+
+        for (const status of value.statuses || []) {
+          const mapped = STATUS_MAP[status.status];
+          if (!status.id || !mapped) continue;
+          try {
+            const existing = await prisma.whatsappChatMessage.findUnique({ where: { waMessageId: status.id } });
+            if (!existing) continue;
+            const isFailure = mapped === 'BASARISIZ';
+            if (isFailure ? existing.status !== 'GONDERILDI' : STATUS_RANK[mapped] <= STATUS_RANK[existing.status]) continue;
+            await prisma.whatsappChatMessage.update({
+              where: { waMessageId: status.id },
+              data: {
+                status: mapped,
+                statusError: isFailure ? (status.errors?.[0]?.title || status.errors?.[0]?.message || null) : null,
+              },
+            });
+          } catch (e) {
+            console.error('[whatsapp webhook] mesaj durumu güncellenemedi:', e.message);
+          }
         }
       }
     }

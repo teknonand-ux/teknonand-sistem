@@ -517,6 +517,15 @@ enum WhatsappDirection {
   OUT // bizden müşteriye
 }
 
+// Yalnızca OUT (bizden müşteriye) mesajlarda anlamlı — Meta'nın webhook'tan
+// gönderdiği statuses olaylarıyla güncellenir (bkz. whatsappInbox.js webhook).
+enum WhatsappChatMessageStatus {
+  GONDERILDI // sunucuya iletildi
+  ILETILDI // müşterinin telefonuna ulaştı
+  OKUNDU // müşteri mesajı okudu (mavi tik)
+  BASARISIZ
+}
+
 model WhatsappConversation {
   id                 String    @id @default(uuid())
   phone              String    @unique // wa_id — 90XXXXXXXXXX formatında
@@ -545,6 +554,8 @@ model WhatsappChatMessage {
   mediaFilename  String?
   employeeId     String? // OUT mesajını panelden gönderen personel
   employee       Employee?            @relation(fields: [employeeId], references: [id])
+  status         WhatsappChatMessageStatus @default(GONDERILDI)
+  statusError    String? // status BASARISIZ ise Meta'nın döndüğü hata metni
   createdAt      DateTime             @default(now())
 
   @@index([conversationId])

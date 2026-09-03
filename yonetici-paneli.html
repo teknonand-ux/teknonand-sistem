@@ -330,7 +330,10 @@
   .wa-bubble{max-width:72%; padding:8px 12px; border-radius:12px; font-size:13px; line-height:1.4; white-space:pre-wrap; word-break:break-word;}
   .wa-bubble.in{align-self:flex-start; background:var(--paper); border:1px solid var(--line); border-bottom-left-radius:3px;}
   .wa-bubble.out{align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:3px;}
-  .wa-bubble-meta{font-size:10px; opacity:.65; margin-top:4px;}
+  .wa-bubble-meta{font-size:10px; opacity:.65; margin-top:4px; display:flex; align-items:center; gap:3px;}
+  .wa-tick{font-size:11px; letter-spacing:-2px; opacity:.9;}
+  .wa-tick-read{color:#53BDEB; opacity:1;}
+  .wa-tick-failed{letter-spacing:0; color:#FFD3C7; opacity:1; cursor:help;}
   .wa-bubble-img{display:block; max-width:220px; max-height:220px; width:100%; border-radius:8px; margin-bottom:6px; cursor:pointer; object-fit:cover;}
   .wa-bubble-file{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:8px; background:rgba(0,0,0,0.08); text-decoration:none; color:inherit; font-weight:600; margin-bottom:4px;}
   .wa-thread-empty{flex:1; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:13px;}
@@ -1266,6 +1269,16 @@ function waTime(iso){
   return new Date(iso).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
 }
 
+// Bizden müşteriye giden mesajlarda WhatsApp benzeri tik göstergesi — tek tik: sunucuya
+// iletildi, çift gri tik: telefona ulaştı, çift mavi tik: müşteri okudu.
+function waStatusTicks(m){
+  if(m.direction !== 'OUT') return '';
+  if(m.status === 'BASARISIZ') return `<span class="wa-tick wa-tick-failed" title="${esc(m.statusError || 'Gönderilemedi')}">⚠ Gönderilemedi</span>`;
+  if(m.status === 'OKUNDU') return `<span class="wa-tick wa-tick-read" title="Okundu">✓✓</span>`;
+  if(m.status === 'ILETILDI') return `<span class="wa-tick" title="Telefona iletildi">✓✓</span>`;
+  return `<span class="wa-tick" title="Sunucuya gönderildi">✓</span>`;
+}
+
 async function loadWhatsappConversations(){
   waConversations = await apiFetch('/whatsapp/conversations');
   renderWaConvList();
@@ -1323,7 +1336,7 @@ function renderWaThread(data){
           ? `<img src="${esc(m.mediaUrl)}" class="wa-bubble-img" onclick="openLightbox('${esc(m.mediaUrl)}')">`
           : `<a href="${esc(m.mediaUrl)}" target="_blank" rel="noopener" class="wa-bubble-file">📎 ${esc(m.mediaFilename || 'Belgeyi Aç')}</a>`);
         return `
-        <div class="wa-bubble ${m.direction==='IN'?'in':'out'}">${mediaHtml}${esc(m.body)}<div class="wa-bubble-meta">${m.direction==='OUT' && m.employee ? esc(m.employee.name)+' · ' : ''}${waTime(m.createdAt)}</div></div>
+        <div class="wa-bubble ${m.direction==='IN'?'in':'out'}">${mediaHtml}${esc(m.body)}<div class="wa-bubble-meta"><span>${m.direction==='OUT' && m.employee ? esc(m.employee.name)+' · ' : ''}${waTime(m.createdAt)}</span>${waStatusTicks(m)}</div></div>
       `;
       }).join('') || '<div style="color:var(--ink-soft); font-size:12.5px;">Henüz mesaj yok</div>'}
     </div>
