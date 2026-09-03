@@ -60,6 +60,9 @@ router.post('/webhook', verifyMetaSignature('WHATSAPP_APP_SECRET'), async (req, 
               console.error('[whatsapp webhook] medya indirilemedi:', e.message);
               body += `\n⚠️ Medya indirilemedi: ${e.message}`;
             }
+          } else if (msg.type === 'reaction') {
+            const emoji = msg.reaction?.emoji;
+            body = emoji ? `${emoji} (tepki)` : 'Tepkisini geri aldı';
           } else {
             body = `[desteklenmeyen mesaj türü: ${msg.type}]`;
           }
