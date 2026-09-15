@@ -41,11 +41,14 @@
 //      değil. Bu genelde sunucu tarafında yakalanmamış bir istisna (ör.
 //      enum.valueOf() gibi bir eşleme başarısız olup exception fırlatması)
 //      anlamına gelir — o yüzden şüpheli #1 paymentOptions[].type kodu.
-//   2) Şimdi Türkçe kodlar (NAKIT/HAVALE_EFT) deneniyor — docs sayfalarının
-//      URL'leri Türkçe olduğundan (nakit-sepet-aktar, havale-eft-sepet-aktar).
-//      Bu da 500 verirse type kodu muhtemelen suçlu değildir, Ödeal destek
-//      hattına (bu response'u göstererek) başvurulmalı — genel dokümantasyon
-//      olmadan daha fazla kör tahmin verimsiz.
+//   2) Türkçe kodlarla (NAKIT/HAVALE_EFT) tekrar denendi → AYNI HTTP 500
+//      SERVER_ERROR. İki farklı type koduyla aynı çökme alınması, sorunun
+//      type kodunda OLMADIĞINI gösteriyor — kullanıcıya bu noktada Ödeal
+//      destek hattına başvurması önerildi.
+//   3) basketType hiç gönderilmiyordu (dokümantasyonda opsiyonel), şimdi
+//      "STANDARD" ile deneniyor — ihtimal düşük ama ucuz bir deneme.
+//      Bu da başarısız olursa kör tahminle devam etmek anlamsız, Ödeal'in
+//      gerçek şemayı (Postman koleksiyonu/örnek istek) paylaşması gerekiyor.
 const { prisma } = require('../lib/prisma');
 
 // Fatura taslağı oluşturmamız gereken ödeme yöntemleri — panelin ödeme
@@ -156,6 +159,13 @@ async function requestInvoiceForPayment(payment, device) {
     referenceCode: payment.id, // webhook geri döndüğünde eşleştirmek için (bkz. routes/odealWebhook.js)
     externalDeviceKey: deviceKey,
     siparisNo: device.trackingCode || undefined, // webhook'ta ikinci eşleştirme yolu olarak da kullanılıyor
+    // TODO: basketType dokümantasyonda opsiyonel görünüyor ama iki farklı
+    // paymentOptions[].type denemesi de aynı genel HTTP 500 SERVER_ERROR ile
+    // sonuçlandığından, sunucunun (opsiyonel işaretlenmiş olsa bile) bunu
+    // zımnen beklediği/eksikliğinde çöktüğü ihtimaline karşı deneniyor.
+    // Değer "STANDARD" — Ödeal'in D2D dokümantasyonunda geçen sepet türleri
+    // (Standard/Advance/Account Receivable/Meal Card) grubundan en genel olanı.
+    basketType: 'STANDARD',
     city: companyInfo.city,
     town: companyInfo.town,
     price: draft.amount,
