@@ -5,6 +5,19 @@ const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/au
 const { sendStatusWhatsapp, sendDocumentWhatsapp, sendGoogleReviewRequest } = require('../services/whatsapp');
 const { buildDeliveryFormPdfBuffer } = require('../services/pdfGenerator');
 const { isAutoInvoiceMethod, requestInvoiceForPayment } = require('../services/odeal');
+const { isValidTcKimlikNo } = require('../lib/tckn');
+
+// invoice-draft (PATCH) ve approve-invoice (POST) — ikisi de aynı taslak
+// alanlarını kabul ediyor, tek yerden tanımlanır.
+const invoiceDraftSchema = z.object({
+  invoiceDescription: z.string().max(500).optional(),
+  invoiceCustomerName: z.string().max(200).optional(),
+  invoiceCustomerTcKimlikNo: z
+    .string()
+    .refine((v) => v === '' || isValidTcKimlikNo(v), 'Geçersiz TC Kimlik No')
+    .optional(),
+  invoiceAmount: z.number().positive().optional(),
+});
 
 const router = express.Router();
 router.use(requireAuth, requireEmployee);
@@ -889,12 +902,7 @@ router.patch('/:id/payments/:paymentId/invoice-draft', async (req, res, next) =>
     if (!['TASLAK', 'HATA'].includes(payment.invoiceStatus)) {
       return res.status(400).json({ error: 'Fatura zaten gönderildi/kesildi, taslak düzenlenemez' });
     }
-    const schema = z.object({
-      invoiceDescription: z.string().max(500).optional(),
-      invoiceCustomerName: z.string().max(200).optional(),
-      invoiceAmount: z.number().positive().optional(),
-    });
-    const input = schema.parse(req.body);
+    const input = invoiceDraftSchema.parse(req.body);
     const updated = await prisma.payment.update({ where: { id: payment.id }, data: input });
     res.json(updated);
   } catch (e) {
@@ -923,12 +931,7 @@ router.post('/:id/payments/:paymentId/approve-invoice', async (req, res, next) =
     const device = await prisma.device.findUnique({ where: { id: req.params.id }, include: { customer: true } });
     if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
 
-    const schema = z.object({
-      invoiceDescription: z.string().max(500).optional(),
-      invoiceCustomerName: z.string().max(200).optional(),
-      invoiceAmount: z.number().positive().optional(),
-    });
-    const draftEdits = schema.parse(req.body || {});
+    const draftEdits = invoiceDraftSchema.parse(req.body || {});
 
     const updated = await prisma.payment.update({
       where: { id: payment.id },

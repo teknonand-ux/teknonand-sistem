@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
+const { isValidTcKimlikNo } = require('../lib/tckn');
 
 const router = express.Router();
 router.use(requireAuth, requireEmployee);
@@ -11,6 +12,13 @@ const customerSchema = z.object({
   phone: z.string().min(1),
   backupPhone: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
+  // Fatura kesimi için (bkz. routes/devices.js invoice-draft/approve-invoice,
+  // services/odeal.js) — boş string kabul edilir (henüz girilmemiş), doluysa
+  // resmi TC Kimlik No checksum'ı geçmeli.
+  tcKimlikNo: z
+    .string()
+    .refine((v) => v === '' || isValidTcKimlikNo(v), 'Geçersiz TC Kimlik No')
+    .optional(),
 });
 
 // GET /api/customers?query=  — verilmezse Müşteriler sayfası için TÜM kayıtları
