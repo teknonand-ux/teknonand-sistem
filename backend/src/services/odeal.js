@@ -45,10 +45,11 @@
 //      SERVER_ERROR. İki farklı type koduyla aynı çökme alınması, sorunun
 //      type kodunda OLMADIĞINI gösteriyor — kullanıcıya bu noktada Ödeal
 //      destek hattına başvurması önerildi.
-//   3) basketType hiç gönderilmiyordu (dokümantasyonda opsiyonel), şimdi
-//      "STANDARD" ile deneniyor — ihtimal düşük ama ucuz bir deneme.
-//      Bu da başarısız olursa kör tahminle devam etmek anlamsız, Ödeal'in
-//      gerçek şemayı (Postman koleksiyonu/örnek istek) paylaşması gerekiyor.
+//   3) basketType="STANDARD" eklendi → AYNI HTTP 500. Bu noktada docs.odeal.com
+//      SSS sayfası (entegrasyon/tr/guide/faq) tarandı ve şu madde bulundu:
+//      "Efatura/Earşiv tanımlamalarınız eksiktir hatası — konfigürasyon
+//      metodunu kullanıyorsanız isteğin body'sinde eInvoiceIntegrator:"ODEAL"
+//      alanı gönderilmelidir." Bu alan hiç gönderilmiyordu — 4. deneme bununla.
 const { prisma } = require('../lib/prisma');
 
 // Fatura taslağı oluşturmamız gereken ödeme yöntemleri — panelin ödeme
@@ -156,6 +157,10 @@ async function requestInvoiceForPayment(payment, device) {
   const { name, surname } = splitFullName(draft.customerName);
 
   const requestBody = {
+    // docs.odeal.com SSS'de teyit edildi: "Efatura/Earşiv tanımlamalarınız
+    // eksiktir" hatası bu alan gönderilmediğinde çıkıyor — önceki 3 denemede
+    // hiç göndermiyorduk, muhtemelen HTTP 500'lerin asıl sebebi buydu.
+    eInvoiceIntegrator: 'ODEAL',
     referenceCode: payment.id, // webhook geri döndüğünde eşleştirmek için (bkz. routes/odealWebhook.js)
     externalDeviceKey: deviceKey,
     siparisNo: device.trackingCode || undefined, // webhook'ta ikinci eşleştirme yolu olarak da kullanılıyor
