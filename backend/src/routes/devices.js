@@ -895,7 +895,8 @@ router.post('/:id/payments', async (req, res, next) => {
 // onaylamadan önce (TASLAK) ya da bir hatadan sonra tekrar denemeden önce (HATA)
 // açıklama/müşteri adı/tutarı düzenleyip kaydeder. Ödeal'e hiçbir şey göndermez —
 // sadece taslağı günceller, cihaza gönderme işi approve-invoice'ta.
-router.patch('/:id/payments/:paymentId/invoice-draft', async (req, res, next) => {
+// requireAdmin: fatura kesme yalnızca yöneticide — bkz. approve-invoice altındaki not.
+router.patch('/:id/payments/:paymentId/invoice-draft', requireAdmin, async (req, res, next) => {
   try {
     const payment = await prisma.payment.findUnique({ where: { id: req.params.paymentId } });
     if (!payment || payment.deviceId !== req.params.id) {
@@ -918,7 +919,11 @@ router.patch('/:id/payments/:paymentId/invoice-draft', async (req, res, next) =>
 // gönderir (bkz. services/odeal.js requestInvoiceForPayment). Body ile son anda
 // düzenlenen taslak alanları da (isteğe bağlı) tek istekte gönderilebilir —
 // panel "Onayla ve Fatura Kes" butonunda ikisini birleştirip tek çağrı yapıyor.
-router.post('/:id/payments/:paymentId/approve-invoice', async (req, res, next) => {
+// requireAdmin: gerçek fatura kesme (para/vergi sonucu doğuran işlem) sadece
+// yöneticide — kısıtlı personel "Fatura Onayı" kartını panelde hiç görmüyor
+// (bkz. yonetici-paneli.html odealInvoiceCard), ama uç nokta da ayrıca
+// kilitli: biri doğrudan API'ye istek atsa bile yönetici değilse reddedilir.
+router.post('/:id/payments/:paymentId/approve-invoice', requireAdmin, async (req, res, next) => {
   try {
     const payment = await prisma.payment.findUnique({ where: { id: req.params.paymentId } });
     if (!payment || payment.deviceId !== req.params.id) {

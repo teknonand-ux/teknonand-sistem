@@ -3789,7 +3789,11 @@ async function removePayment(paymentId){
 // hiçbir şey göstermiyoruz — kredi kartı zaten cihazdan kendiliğinden fatura
 // kesiyor, Sanal POS Ödeal'in ayrı/bağımsız bir ürünü olduğundan D2D sepet
 // API'sinin kapsamı dışında (fatura personel tarafından elle yüklenir).
+// Fatura kesme yalnızca yönetici işi (bkz. odealInvoiceCard) — kısıtlı
+// personelde bu rozet de hiç görünmüyor, ilgili ödeme sıradan bir tahsilat
+// satırı gibi kalıyor.
 function invoiceStatusBadge(p){
+  if(currentUserPermission!=='ADMIN') return '';
   if(!p.invoiceStatus || p.invoiceStatus==='YOK') return '';
   if(p.invoiceStatus==='TASLAK') return `<span class="badge invoice-draft" title="Henüz Ödeal'e gönderilmedi, aşağıdaki Fatura Onayı bölümünden onaylayın.">📝 Fatura Taslağı — Onay Bekliyor</span>`;
   if(p.invoiceStatus==='BEKLIYOR') return `<span class="badge invoice-pending" title="Ödeal cihazına sepet isteği gönderildi, fatura kesilmesi bekleniyor.">⏳ Fatura Kesiliyor</span>`;
@@ -3801,9 +3805,13 @@ function invoiceStatusBadge(p){
 // Cihaz detayında "Ödeme / Tahsilat" kartının hemen altına, otomatik fatura
 // akışına giren (invoiceStatus 'YOK' olmayan) her ödeme için ayrı bir satır
 // çizer. TASLAK/HATA durumundaki ödemelerde açıklama/müşteri adı/tutar
-// DÜZENLENEBİLİR — personel gözden geçirip "Onayla ve Fatura Kes" demeden
-// Ödeal'e hiçbir istek gitmez (bkz. approveInvoice, backend approve-invoice route'u).
+// DÜZENLENEBİLİR — yönetici gözden geçirip "Onayla ve Fatura Kes" demeden
+// Ödeal'e hiçbir istek gitmez (bkz. approveInvoice, backend approve-invoice
+// route'u). Fatura kesme yetkisi sadece yönetiçide — kısıtlı personel bu
+// kartı panelde hiç görmüyor (backend uç noktaları da requireAdmin ile ayrıca
+// kilitli, bkz. routes/devices.js invoice-draft/approve-invoice).
 function odealInvoiceCard(d){
+  if(currentUserPermission!=='ADMIN') return '';
   const relevant = (d.payments||[]).filter(p=>p.invoiceStatus && p.invoiceStatus!=='YOK');
   if(!relevant.length) return '';
   return `<div class="card">
