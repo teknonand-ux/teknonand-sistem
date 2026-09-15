@@ -862,36 +862,53 @@ router.post('/:id/payments', async (req, res, next) => {
     const input = schema.parse(req.body);
     // Kredi Kartı hariç ödeme yöntemlerinde (Nakit / Banka Hesabı / Sanal POS)
     // para Ödeal cihazından geçmediği için fatura kendiliğinden kesilmiyor —
-    // kayıt oluşurken durumu hemen 'BEKLIYOR' işaretleyip panelin bunu anında
-    // göstermesini sağlıyoruz; asıl sepet isteği aşağıda fire-and-forget gider.
+    // AMA Ödeal'e de hemen gönderilmiyor: ödeme 'TASLAK' durumunda oluşuyor,
+    // personel panelin "Fatura" kartında açıklama/müşteri adı/tutarı gözden
+    // geçirip gerekirse düzenleyip onaylayana kadar cihaza hiçbir istek gitmez
+    // (bkz. POST .../approve-invoice altında).
     const needsAutoInvoice = isAutoInvoiceMethod(input.method);
     const payment = await prisma.payment.create({
-      data: { deviceId: req.params.id, ...input, invoiceStatus: needsAutoInvoice ? 'BEKLIYOR' : 'YOK' },
+      data: { deviceId: req.params.id, ...input, invoiceStatus: needsAutoInvoice ? 'TASLAK' : 'YOK' },
     });
     res.status(201).json(payment);
-
-    // Ödeal'e sepet isteği göndererek cihazın faturayı kestirmesini tetikliyoruz.
-    // Yanıtı beklemeden (fire-and-forget) yapıyoruz: Ödeal API'si yavaş/kapalı
-    // olsa bile ödeme kaydı kullanıcıya zaten döndü. Başarısızlıkta odeal.js
-    // ödemeyi 'HATA'ya çeker; başarılı sepet isteğinde fatura sonucu ayrıca
-    // webhooks/odeal üzerinden işlenip 'KESILDI'ye çekilir ve device.invoicePdf'e
-    // yazılır (bkz. services/odeal.js, routes/odealWebhook.js).
-    if (needsAutoInvoice) {
-      prisma.device
-        .findUnique({ where: { id: req.params.id } })
-        .then((device) => device && requestInvoiceForPayment(payment, device))
-        .catch((e) => console.error(`[odeal] Cihaz sorgulanırken hata (ödeme ${payment.id}): ${e.message}`));
-    }
   } catch (e) {
     next(e);
   }
 });
 
-// POST /api/devices/:id/payments/:paymentId/retry-invoice — bir ödemenin otomatik
-// fatura isteği HATA ile sonuçlandıysa (ör. Ödeal servis anahtarı henüz .env'e
-// eklenmemişken kaydedilmiş bir tahsilat), anahtar eklendikten sonra ödemeyi
-// silip yeniden girmeye gerek kalmadan aynı isteği tekrar denetmek için.
-router.post('/:id/payments/:paymentId/retry-invoice', async (req, res, next) => {
+// PATCH /api/devices/:id/payments/:paymentId/invoice-draft — personel faturayı
+// onaylamadan önce (TASLAK) ya da bir hatadan sonra tekrar denemeden önce (HATA)
+// açıklama/müşteri adı/tutarı düzenleyip kaydeder. Ödeal'e hiçbir şey göndermez —
+// sadece taslağı günceller, cihaza gönderme işi approve-invoice'ta.
+router.patch('/:id/payments/:paymentId/invoice-draft', async (req, res, next) => {
+  try {
+    const payment = await prisma.payment.findUnique({ where: { id: req.params.paymentId } });
+    if (!payment || payment.deviceId !== req.params.id) {
+      return res.status(404).json({ error: 'Ödeme kaydı bulunamadı' });
+    }
+    if (!['TASLAK', 'HATA'].includes(payment.invoiceStatus)) {
+      return res.status(400).json({ error: 'Fatura zaten gönderildi/kesildi, taslak düzenlenemez' });
+    }
+    const schema = z.object({
+      invoiceDescription: z.string().max(500).optional(),
+      invoiceCustomerName: z.string().max(200).optional(),
+      invoiceAmount: z.number().positive().optional(),
+    });
+    const input = schema.parse(req.body);
+    const updated = await prisma.payment.update({ where: { id: payment.id }, data: input });
+    res.json(updated);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/devices/:id/payments/:paymentId/approve-invoice — personel panelde
+// faturayı (varsa düzenledikten sonra) onayladığında çağrılır: 'TASLAK'/'HATA'
+// durumundaki bir ödemeyi 'BEKLIYOR'a çekip ANCAK O ZAMAN Ödeal'e sepet isteği
+// gönderir (bkz. services/odeal.js requestInvoiceForPayment). Body ile son anda
+// düzenlenen taslak alanları da (isteğe bağlı) tek istekte gönderilebilir —
+// panel "Onayla ve Fatura Kes" butonunda ikisini birleştirip tek çağrı yapıyor.
+router.post('/:id/payments/:paymentId/approve-invoice', async (req, res, next) => {
   try {
     const payment = await prisma.payment.findUnique({ where: { id: req.params.paymentId } });
     if (!payment || payment.deviceId !== req.params.id) {
@@ -900,19 +917,29 @@ router.post('/:id/payments/:paymentId/retry-invoice', async (req, res, next) => 
     if (!isAutoInvoiceMethod(payment.method)) {
       return res.status(400).json({ error: 'Bu ödeme yöntemi için otomatik fatura uygulanmıyor' });
     }
-    const device = await prisma.device.findUnique({ where: { id: req.params.id } });
+    if (!['TASLAK', 'HATA'].includes(payment.invoiceStatus)) {
+      return res.status(400).json({ error: 'Bu ödemenin faturası zaten gönderilmiş/kesilmiş' });
+    }
+    const device = await prisma.device.findUnique({ where: { id: req.params.id }, include: { customer: true } });
     if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
+
+    const schema = z.object({
+      invoiceDescription: z.string().max(500).optional(),
+      invoiceCustomerName: z.string().max(200).optional(),
+      invoiceAmount: z.number().positive().optional(),
+    });
+    const draftEdits = schema.parse(req.body || {});
 
     const updated = await prisma.payment.update({
       where: { id: payment.id },
-      data: { invoiceStatus: 'BEKLIYOR', invoiceError: null },
+      data: { ...draftEdits, invoiceStatus: 'BEKLIYOR', invoiceError: null },
     });
     res.json(updated);
     // Yanıt gönderildikten sonra fire-and-forget — hata olursa odeal.js zaten
     // ödemeyi kendi içinde 'HATA'ya çekip logluyor, burada next(e) çağırıp
     // yanıt gönderildikten sonra ikinci kez cevap vermeye çalışmıyoruz.
     requestInvoiceForPayment(updated, device).catch((e) =>
-      console.error(`[odeal] retry-invoice sırasında beklenmeyen hata (ödeme ${updated.id}): ${e.message}`)
+      console.error(`[odeal] approve-invoice sırasında beklenmeyen hata (ödeme ${updated.id}): ${e.message}`)
     );
   } catch (e) {
     next(e);
