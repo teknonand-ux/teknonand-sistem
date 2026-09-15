@@ -44,11 +44,13 @@ router.post('/', express.json(), async (req, res) => {
     const body = req.body || {};
     console.log('[odeal webhook] Gelen istek:', JSON.stringify(body).slice(0, 2000));
 
-    // TODO: Gerçek alan adları Ödeal API referansı görülünce teyit edilmeli.
-    // requestInvoiceForPayment'ın gönderdiği externalReferenceId, Ödeal'in
-    // bunu olduğu gibi geri yansıttığı varsayımıyla ödeme kaydını eşleştirmek
-    // için kullanılıyor.
-    const paymentId = body.externalReferenceId || body.paymentId;
+    // referenceCode — docs.odeal.com/entegrasyon/tr/api/d2d/nakit-sepet-aktar'da
+    // teyit edilen gerçek alan adı, requestInvoiceForPayment sepet isteğinde bunu
+    // payment.id olarak gönderiyor (bkz. services/odeal.js). Webhook body'sinde
+    // aynı adla mı yoksa başka bir sarmalayıcı alanda mı geri geldiği henüz
+    // teyit edilmedi (webhook payload şeması dokümante değil) — birkaç olası
+    // adı deniyoruz.
+    const paymentId = body.referenceCode || body.externalReferenceId || body.paymentId;
     const invoicePdfBase64 = body.invoicePdfBase64 || body.eInvoicePdfBase64;
     const invoicePdfUrl = body.invoicePdfUrl || body.eInvoicePdfUrl;
     // TODO: Ödeal'in başarısızlığı hangi alanla bildirdiği (ör. status/success)
@@ -60,17 +62,19 @@ router.post('/', express.json(), async (req, res) => {
 
     if (!payment) {
       // Kredi Kartı ile ödemeler cihazda kasiyer tarafından bizim sepet API'mizden
-      // GEÇMEDEN doğrudan okutulup fatura kesiliyor — bu yüzden externalReferenceId
-      // hiç gelmiyor/eşleşmiyor. Yine de faturayı otomatik "Fatura (PDF)" alanına
-      // düşürebilmek için son çare: açıklama/sipariş no alanında geçen takip koduna
-      // (TKN-2026-0342 biçimi) göre cihazı buluyoruz. Bunun çalışması için kasiyerin
-      // kart geçişinde cihazın açıklama/not alanına takip kodunu yazması gerekiyor —
-      // yazılmazsa (ör. eski alışkanlıkla boş bırakılırsa) personel yine elle
-      // yükleyebilir, akış bozulmaz.
+      // GEÇMEDEN doğrudan okutulup fatura kesiliyor — bu yüzden referenceCode hiç
+      // gelmiyor/eşleşmiyor. Yine de faturayı otomatik "Fatura (PDF)" alanına
+      // düşürebilmek için son çare: siparisNo alanına (D2D sepet şemasında
+      // teyit edilen gerçek alan, bkz. services/odeal.js) ya da açıklamada geçen
+      // takip koduna (TKN-2026-0342 biçimi) göre cihazı buluyoruz. Bunun çalışması
+      // için kasiyerin kart geçişinde cihazın sipariş no/açıklama alanına takip
+      // kodunu yazması gerekiyor — yazılmazsa personel yine elle yükleyebilir,
+      // akış bozulmaz.
+      const siparisNo = String(body.siparisNo || '').trim().toUpperCase();
       const desc = String(body.description || body.orderDescription || body.note || body.explanation || '');
-      const trackingMatch = desc.match(/TKN-\d{4}-\d{3,}/i);
+      const trackingMatch = /^TKN-\d{4}-\d{3,}$/i.test(siparisNo) ? [siparisNo] : desc.match(/TKN-\d{4}-\d{3,}/i);
       if (!trackingMatch) {
-        console.warn('[odeal webhook] Ödeme kaydı (externalReferenceId) veya açıklamada takip kodu bulunamadı, eşleştirme yapılamadı.');
+        console.warn('[odeal webhook] Ödeme kaydı (referenceCode) veya siparisNo/açıklamada takip kodu bulunamadı, eşleştirme yapılamadı.');
         return res.sendStatus(200); // Ödeal'in aynı isteği tekrar tekrar denemesini önlemek için 200 dönüyoruz
       }
       const deviceByTracking = await prisma.device.findUnique({ where: { trackingCode: trackingMatch[0].toUpperCase() } });

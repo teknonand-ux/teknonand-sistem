@@ -2,37 +2,56 @@
 //
 // Kredi Kartı ödemesi cihazdan (fiziksel POS'tan) geçtiği için Ödeal zaten
 // kendiliğinden e-fatura/e-arşiv kesiyor, bizim hiçbir şey yapmamıza gerek yok.
-// Nakit, Banka Hesabı (Havale/EFT) ve Sanal POS ödemelerinde ise para cihazdan
-// geçmediğinden, cihazın yine de fatura kesmesi için Ödeal'in Device2Device
-// ("Cihazlar arası sepet aktarımı") API'sine bizim sepeti göndermemiz gerekiyor.
+// Nakit ve Banka Hesabı (Havale/EFT) ödemelerinde ise para cihazdan geçmediğinden,
+// cihazın yine de fatura kesmesi için Ödeal'in Device2Device ("Cihazlar arası
+// sepet aktarımı") API'sine bizim sepeti göndermemiz gerekiyor. (Sanal POS,
+// Ödeal'in ayrı/bağımsız bir ürünü — bu API'nin kapsamında değil, bu yüzden
+// otomatik fatura listesinden çıkarıldı; Sanal POS tahsilatlarında personel
+// faturayı elle "Fatura (PDF)" alanından yükler.)
 //
-// Bu üç yöntemden biriyle ödeme girildiğinde Ödeal'e HİÇBİR ŞEY otomatik
-// gönderilmiyor — ödeme 'TASLAK' durumunda oluşuyor, panelde "Fatura" kartında
-// personel açıklama/müşteri adı/tutarı gözden geçirip gerekirse düzenliyor,
-// "Onayla ve Fatura Kes" dediğinde ancak o zaman routes/devices.js
+// Bu iki yöntemden biriyle ödeme girildiğinde Ödeal'e HİÇBİR ŞEY otomatik
+// gönderilmiyor — ödeme 'TASLAK' durumunda oluşuyor, panelde "Fatura Onayı"
+// kartında personel açıklama/müşteri adı/tutarı gözden geçirip gerekirse
+// düzenliyor, "Onayla ve Fatura Kes" dediğinde ancak o zaman routes/devices.js
 // POST /:id/payments/:paymentId/approve-invoice bu dosyadaki
 // requestInvoiceForPayment'ı çağırıyor (bkz. o route).
 //
-// ÖNEMLİ — Ödeal'e giden sepet isteğinin tam API şeması (endpoint yolu, header
-// adı, sepet alanları, ödeme tipi kodları) docs.odeal.com/reference/sepet
-// sayfasında giriş/servis anahtarı gerektiriyor, genel dokümantasyonda yayınlı
-// değil. Servis anahtarı (ODEAL_SERVICE_KEY) ve cihaz kodu (ODEAL_DEVICE_KEY)
-// alınıp Ödeal Developer Portal'daki gerçek API referansı görülünce, aşağıdaki
-// TODO'lar gerçek değerlerle güncellenmeli — akışın geri kalanı (taslak/onay,
-// durum takibi, panel gösterimi, webhook) zaten çalışır durumda.
+// API ŞEMASI (docs.odeal.com/entegrasyon/tr/api/d2d/nakit-sepet-aktar ve
+// .../havale-eft-sepet-aktar sayfalarından TEYİT EDİLDİ — 15 Eylül 2026):
+//   POST https://api.odeal.com/api/v1/basket  (stage: https://stage.odealapp.com/api/v1/basket)
+//   Header: X-ODEAL-MERCHANT-KEY, X-ODEAL-SECRET-KEY
+//   (bkz. https://portal.odeal.com/giris > Ayarlar > Entegrasyon Bilgileri)
+//   Body (zorunlu): referenceCode, customer{}, city, town, price, grossPrice,
+//     items[], paymentOptions[]. (opsiyonel): externalDeviceKey, basketType,
+//     receiptInfo, receiptNumber, receiptDate, siparisNo, garson.
+//   customer{}: referenceCode, type (INDIVIDUAL/CORPORATE), name, surname,
+//     identityNumber, title, taxNumber, taxOffice, gsmNumber, email, address.
+//
+// ÖNEMLİ — HÂLÂ TEYİT EDİLEMEYEN KISIMLAR: "items" ve "paymentOptions"
+// dizilerinin alt alan adları (ör. items[].name/price/quantity,
+// paymentOptions[].type/amount) ile paymentOptions[].type için kabul edilen
+// değerler (nakit/havale kodları) docs.odeal.com'un etkileşimli "+ Ekle"
+// form alanlarında JS ile render ediliyor, statik sayfa taramasıyla
+// okunamadı — aşağıdaki alan adları/kodlar EN İYİ TAHMİNdir. İlk canlı
+// denemede Ödeal'in döndüreceği 400 hatası gerçek alan adlarını byword
+// byword verecektir (bkz. markFailed ile panelde görünen invoiceError) —
+// o hataya göre bu TODO'lar güncellenmeli.
 const { prisma } = require('../lib/prisma');
 
 // Fatura taslağı oluşturmamız gereken ödeme yöntemleri — panelin ödeme
 // yöntemi seçenekleriyle birebir eşleşmeli (bkz. yonetici-paneli.html
-// #pay-method) ve prisma/schema.prisma Payment.method yorum satırı.
-const AUTO_INVOICE_METHODS = new Set(['Nakit', 'Banka Hesabı', 'Sanal POS']);
+// #pay-method) ve prisma/schema.prisma Payment.method yorum satırı. Sanal
+// POS burada YOK — Ödeal'in D2D sepet API'si sadece fiziksel cihaz üzerinden
+// kesilen (Nakit/Kredi Kartı/Havale-EFT/Açık Hesap/Cari Hesap/Avans/Yemek
+// Kartı) satışları kapsıyor, online Sanal POS ayrı bir üründür.
+const AUTO_INVOICE_METHODS = new Set(['Nakit', 'Banka Hesabı']);
 
-// Bizim ödeme yöntemi adlarımızdan Ödeal'in beklediği ödeme tipi koduna eşleme.
-// TODO: Bu değerler EN İYİ TAHMİNdir, gerçek API şeması görülünce teyit/güncelle.
+// Bizim ödeme yöntemi adlarımızdan Ödeal'in paymentOptions[].type alanına
+// eşleme. TODO: Kod değerleri EN İYİ TAHMİNdir, ilk canlı denemenin
+// hata/başarı sonucuna göre teyit/güncelle.
 const PAYMENT_TYPE_MAP = {
-  Nakit: 'Nakit',
-  'Banka Hesabı': 'HavaleEft',
-  'Sanal POS': 'SanalPos',
+  Nakit: 'CASH',
+  'Banka Hesabı': 'BANK_TRANSFER',
 };
 
 function isAutoInvoiceMethod(method) {
@@ -63,6 +82,17 @@ async function markFailed(paymentId, message) {
   }
 }
 
+// "Ahmet Yılmaz" → { name: 'Ahmet', surname: 'Yılmaz' }. Ödeal customer
+// nesnesi name/surname'i ayrı alanlar olarak istiyor, biz tek fullName
+// tutuyoruz — son kelimeyi soyad, kalanını ad kabul ediyoruz. Tek kelimelik
+// isimlerde surname boş kalır (bazı API'ler bunu reddedebilir, teyit edilmeli).
+function splitFullName(fullName) {
+  const parts = (fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { name: '', surname: '' };
+  if (parts.length === 1) return { name: parts[0], surname: '' };
+  return { name: parts.slice(0, -1).join(' '), surname: parts[parts.length - 1] };
+}
+
 // Personel panelde "Onayla ve Fatura Kes" dedikten SONRA çağrılır — Ödeal
 // cihazına sepet gönderip fatura kesilmesini tetikler. Çağrıldığında
 // payment.invoiceStatus zaten 'BEKLIYOR' olarak ayarlanmış olur (bkz.
@@ -71,19 +101,21 @@ async function markFailed(paymentId, message) {
 // faturanın gerçekten kesildiği yalnızca webhooks/odeal ile teyit edilip
 // 'KESILDI'ye çekilir.
 //
-// Servis anahtarı/cihaz kodu henüz tanımlı değilse (kurulumun bu aşamasında
-// beklenen durum) 'HATA' + açıklayıcı mesajla işaretlenir. Çağıran taraf bunu
-// "fire-and-forget" çağırır: Ödeal API'si yavaş/kapalıysa bile onay isteği
-// kullanıcıya hemen döner.
+// Anahtarlar/cihaz kodu/il-ilçe henüz tanımlı değilse (kurulumun bu
+// aşamasında beklenen durum) 'HATA' + açıklayıcı mesajla işaretlenir. Çağıran
+// taraf bunu "fire-and-forget" çağırır: Ödeal API'si yavaş/kapalıysa bile
+// onay isteği kullanıcıya hemen döner.
 async function requestInvoiceForPayment(payment, device) {
   const draft = buildInvoiceDraft(payment, device);
 
-  const serviceKey = process.env.ODEAL_SERVICE_KEY;
+  const merchantKey = process.env.ODEAL_MERCHANT_KEY;
+  const secretKey = process.env.ODEAL_SECRET_KEY;
   const deviceKey = process.env.ODEAL_DEVICE_KEY; // externalDeviceKey — Ödeal Stage uygulaması > Cihazlarım
-  const apiBase = process.env.ODEAL_API_BASE_URL || 'https://api.odeal.com'; // TODO: gerçek host teyit edilmeli
+  // Prod varsayılan; test için ODEAL_API_BASE_URL=https://stage.odealapp.com/api/v1 verilebilir.
+  const apiBase = process.env.ODEAL_API_BASE_URL || 'https://api.odeal.com/api/v1';
 
-  if (!serviceKey || !deviceKey) {
-    const msg = 'ODEAL_SERVICE_KEY/ODEAL_DEVICE_KEY tanımlı değil — Ödeal Developer Portal üzerinden servis anahtarını, cihazın Cihazlarım menüsünden de cihaz kodunu alıp .env dosyasına ekleyin.';
+  if (!merchantKey || !secretKey || !deviceKey) {
+    const msg = 'ODEAL_MERCHANT_KEY/ODEAL_SECRET_KEY/ODEAL_DEVICE_KEY tanımlı değil — portal.odeal.com > Ayarlar > Entegrasyon Bilgileri\'nden API/Secret anahtarını, cihazın Cihazlarım menüsünden de cihaz kodunu alıp Railway ortam değişkenlerine ekleyin.';
     console.warn(`[odeal] ${msg} (ödeme ${payment.id}, ${payment.method})`);
     await markFailed(payment.id, msg);
     return null;
@@ -97,26 +129,57 @@ async function requestInvoiceForPayment(payment, device) {
     return null;
   }
 
+  // city/town Ödeal'in şemasında zorunlu — burada işletmenin kendi il/ilçesini
+  // kullanıyoruz (Ayarlar > Belge Tasarımı > Firma Bilgileri), müşterininkini
+  // değil: bu fiziksel dükkanda gerçekleşen bir satış, "işlem yeri" anlamında.
+  const companyInfoSetting = await prisma.appSetting.findUnique({ where: { key: 'companyInfo' } });
+  const companyInfo = companyInfoSetting?.value || {};
+  if (!companyInfo.city || !companyInfo.town) {
+    const msg = 'Ayarlar > Belge Tasarımı > Firma Bilgileri\'nde İl/İlçe girilmemiş — Ödeal bunu zorunlu istiyor.';
+    console.warn(`[odeal] ${msg}`);
+    await markFailed(payment.id, msg);
+    return null;
+  }
+
+  const { name, surname } = splitFullName(draft.customerName);
+
   try {
-    // TODO: Gerçek endpoint yolu ve gövde alan adları docs.odeal.com/reference/sepet
-    // (Device2Device sepet oluşturma) referansından teyit edilip güncellenmeli —
-    // özellikle customerName alanının gerçek adı (alıcı/buyer bilgisi) teyit edilmeli.
-    const res = await fetch(`${apiBase}/api/d2d/basket`, {
+    const res = await fetch(`${apiBase}/basket`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${serviceKey}`, // TODO: gerçek auth şeması (header adı/biçimi) teyit edilmeli
+        'X-ODEAL-MERCHANT-KEY': merchantKey,
+        'X-ODEAL-SECRET-KEY': secretKey,
       },
       body: JSON.stringify({
+        referenceCode: payment.id, // webhook geri döndüğünde eşleştirmek için (bkz. routes/odealWebhook.js)
         externalDeviceKey: deviceKey,
-        amount: draft.amount,
-        paymentType: paymentTypeCode,
-        description: draft.description,
-        customerName: draft.customerName || undefined,
-        customerTcKimlikNo: draft.tcKimlikNo || undefined, // TODO: gerçek alan adı teyit edilmeli
-        // Webhook geri döndüğünde ödeme kaydıyla eşleştirmek için — Ödeal bu
-        // alanı olduğu gibi geri yansıtıyorsa routes/odealWebhook.js bununla eşleştirir.
-        externalReferenceId: payment.id,
+        siparisNo: device.trackingCode || undefined, // webhook'ta ikinci eşleştirme yolu olarak da kullanılıyor
+        city: companyInfo.city,
+        town: companyInfo.town,
+        price: draft.amount,
+        grossPrice: draft.amount, // KDV dahil fiyatlandırma kullanıyoruz (bkz. DevicePart vatMode DAHIL) — TODO: price'ın net mi brüt mü beklendiği teyit edilmeli
+        customer: {
+          type: 'INDIVIDUAL', // TODO: kurumsal müşteri (taxNumber/taxOffice) desteği eklenmedi
+          name: name || draft.customerName || 'Müşteri',
+          surname: surname || undefined,
+          identityNumber: draft.tcKimlikNo || undefined,
+          gsmNumber: device.customer?.phone || undefined,
+          email: device.customer?.email || undefined,
+        },
+        items: [
+          {
+            name: draft.description,
+            price: draft.amount,
+            quantity: 1,
+          },
+        ],
+        paymentOptions: [
+          {
+            type: paymentTypeCode,
+            amount: draft.amount,
+          },
+        ],
       }),
     });
 

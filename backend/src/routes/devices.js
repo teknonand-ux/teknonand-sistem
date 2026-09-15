@@ -873,8 +873,10 @@ router.post('/:id/payments', async (req, res, next) => {
       type: z.enum(['KAPORA', 'ARA_ODEME', 'FINAL']).default('ARA_ODEME'),
     });
     const input = schema.parse(req.body);
-    // Kredi Kartı hariç ödeme yöntemlerinde (Nakit / Banka Hesabı / Sanal POS)
-    // para Ödeal cihazından geçmediği için fatura kendiliğinden kesilmiyor —
+    // Nakit / Banka Hesabı ödemelerinde para Ödeal cihazından geçmediği için
+    // fatura kendiliğinden kesilmiyor (Kredi Kartı cihazdan zaten otomatik
+    // kesiyor; Sanal POS Ödeal'in D2D sepet API'sinin kapsamı dışında, ayrı
+    // bir üründür — elle yüklenir) —
     // AMA Ödeal'e de hemen gönderilmiyor: ödeme 'TASLAK' durumunda oluşuyor,
     // personel panelin "Fatura" kartında açıklama/müşteri adı/tutarı gözden
     // geçirip gerekirse düzenleyip onaylayana kadar cihaza hiçbir istek gitmez
