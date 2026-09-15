@@ -97,6 +97,7 @@ model Customer {
   phone       String
   backupPhone String?
   email       String?
+  tcKimlikNo  String? // 11 haneli TC Kimlik No — fatura kesimi için (bkz. lib/tckn.js, services/odeal.js)
   createdAt   DateTime @default(now())
 
   devices Device[]
@@ -299,9 +300,10 @@ model Payment {
   // buildInvoiceDraft): açıklama "Teknonand Teknik Servis — <takip kodu>",
   // müşteri adı cihazın müşterisi, tutar bu ödemenin tutarı. Onaylanınca Ödeal'e
   // gönderilen değerler bunlardır — gerçek tahsilat tutarını (amount) etkilemez.
-  invoiceDescription  String?
-  invoiceCustomerName String?
-  invoiceAmount       Decimal? @db.Decimal(12, 2)
+  invoiceDescription       String?
+  invoiceCustomerName      String?
+  invoiceCustomerTcKimlikNo String? // boşsa customer.tcKimlikNo kullanılır (bkz. lib/tckn.js)
+  invoiceAmount            Decimal? @db.Decimal(12, 2)
 
   @@map("payments")
 }

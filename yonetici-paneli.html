@@ -139,6 +139,11 @@
   .badge.invoice-error{color:var(--red); background:#FBE4E4; cursor:help;}
   .invoice-row{padding:10px 0; border-top:1px solid #EEEDE7;}
   .invoice-row:first-of-type{border-top:none; padding-top:2px;}
+  .invoice-preview{border:1px dashed #D8D5CC; border-radius:10px; padding:12px 14px; margin-top:10px; background:#FBFAF7;}
+  .invoice-preview-head{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding-bottom:8px; border-bottom:1px solid #EEEDE7; margin-bottom:8px;}
+  .invoice-preview-body div{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:3px 0;}
+  .invoice-preview-body span{color:var(--ink-soft); flex-shrink:0;}
+  .invoice-preview-total{display:flex; justify-content:space-between; align-items:center; font-size:14px; font-weight:700; padding-top:8px; margin-top:6px; border-top:1px solid #EEEDE7;}
   .add-line-form{display:grid; grid-template-columns:1.4fr 1.4fr 1fr 1fr 1fr auto; gap:8px; align-items:end; margin-top:14px;}
   .add-line-form .field{margin-bottom:0;}
   .summary-box{margin-top:16px; padding-top:14px; border-top:1px solid var(--line); display:flex; flex-direction:column; align-items:flex-end; gap:3px;}
@@ -2461,13 +2466,15 @@ async function saveCustomerEdit(customerId, deviceId){
   const phone = document.getElementById('ce-phone').value.trim();
   const backupPhone = document.getElementById('ce-backup').value.trim();
   const email = document.getElementById('ce-email').value.trim();
+  const tcKimlikNo = document.getElementById('ce-tc').value.trim();
   const dealerSel = document.getElementById('ce-dealer');
   const newDealerId = dealerSel ? (dealerSel.value || null) : undefined;
   if(!fullName || !phone){ toast('Ad soyad ve telefon gerekli'); return; }
+  if(tcKimlikNo && !/^\d{11}$/.test(tcKimlikNo)){ toast('TC Kimlik No 11 haneli olmalı'); return; }
 
   const updated = await apiFetch(`/customers/${customerId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ fullName, phone, backupPhone: backupPhone || undefined, email: email || undefined })
+    body: JSON.stringify({ fullName, phone, backupPhone: backupPhone || undefined, email: email || undefined, tcKimlikNo: tcKimlikNo || undefined })
   });
   // Bu musteriye ait tum cihazlarin bellekteki (devices dizisindeki) musteri
   // bilgisini de guncelle, sayfa yenilemeden her yerde tutarli gorunsun.
@@ -2662,6 +2669,7 @@ function renderDeviceDetail(){
         <div class="field"><label>Telefon</label><input id="ce-phone" value="${esc(d.customer.phone)}"></div>
         <div class="field"><label>Yedek Telefon</label><input id="ce-backup" value="${esc(d.customer.backupPhone)}"></div>
         <div class="field"><label>E-posta</label><input id="ce-email" value="${esc(d.customer.email)}"></div>
+        <div class="field"><label>TC Kimlik No</label><input id="ce-tc" maxlength="11" inputmode="numeric" placeholder="Fatura için gerekir" value="${esc(d.customer.tcKimlikNo)}"></div>
         <div class="field">
           <label>Bayi</label>
           <select id="ce-dealer" onchange="onCustomerEditDealerChange()">
@@ -2694,6 +2702,7 @@ function renderDeviceDetail(){
         <div><span>Telefon</span>${esc(d.customer.phone) || '—'}</div>
         <div><span>Yedek Telefon (Müşteri)</span>${esc(d.customer.backupPhone) || '—'}</div>
         <div><span>E-posta</span>${esc(d.customer.email) || '—'}</div>
+        <div><span>TC Kimlik No</span>${esc(d.customer.tcKimlikNo) || '—'}</div>
         <div><span>Yedek Telefon (Bu Kayıt)</span>${esc(d.backupPhone) || '—'}</div>
         <div><span>Cihaz Şifresi</span>${esc(d.devicePassword) || '—'}</div>
         <div><span>IMEI / Seri No</span>${esc(d.imeiSerial) || '—'}</div>
@@ -3803,6 +3812,7 @@ function odealInvoiceRow(d,p){
   const editable = p.invoiceStatus==='TASLAK' || p.invoiceStatus==='HATA';
   const desc = p.invoiceDescription || `Teknonand Teknik Servis — ${d.trackingCode}`;
   const custName = p.invoiceCustomerName || (d.customer && d.customer.fullName) || '';
+  const tcNo = p.invoiceCustomerTcKimlikNo || (d.customer && d.customer.tcKimlikNo) || '';
   const amount = p.invoiceAmount!=null ? p.invoiceAmount : p.amount;
   const head = `<div class="pay-row"><span class="pay-method">${esc(p.method)}</span><span>₺${(parseFloat(p.amount)||0).toFixed(2)} · ${invoiceStatusBadge(p)}</span></div>`;
 
@@ -3815,25 +3825,67 @@ function odealInvoiceRow(d,p){
     ${head}
     ${p.invoiceStatus==='HATA' ? `<p class="empty" style="color:var(--red); margin:4px 0 8px;">${esc(p.invoiceError||'Bilinmeyen hata')}</p>` : ''}
     <div class="pay-add" style="margin-top:8px;">
-      <div class="field"><label>Müşteri Adı</label><input id="inv-customer-${p.id}" value="${esc(custName)}"></div>
-      <div class="field"><label>Açıklama</label><input id="inv-desc-${p.id}" value="${esc(desc)}"></div>
-      <div class="field"><label>Tutar (₺)</label><input id="inv-amount-${p.id}" type="number" value="${amount}"></div>
+      <div class="field"><label>Müşteri Adı</label><input id="inv-customer-${p.id}" value="${esc(custName)}" oninput="updateInvoicePreview('${p.id}')"></div>
+      <div class="field"><label>TC Kimlik No</label><input id="inv-tc-${p.id}" maxlength="11" inputmode="numeric" placeholder="opsiyonel" value="${esc(tcNo)}" oninput="updateInvoicePreview('${p.id}')"></div>
+      <div class="field"><label>Açıklama</label><input id="inv-desc-${p.id}" value="${esc(desc)}" oninput="updateInvoicePreview('${p.id}')"></div>
+      <div class="field"><label>Tutar (₺)</label><input id="inv-amount-${p.id}" type="number" value="${amount}" oninput="updateInvoicePreview('${p.id}')"></div>
       <button class="primary" style="margin-top:0;" onclick="approveInvoice('${p.id}')">✓ Onayla ve Fatura Kes</button>
     </div>
+    <div id="inv-preview-${p.id}" class="invoice-preview">${invoicePreviewBody({customerName:custName, tcKimlikNo:tcNo, description:desc, amount, method:p.method})}</div>
   </div>`;
+}
+
+// Formdaki alanlar değiştikçe canlı güncellenen "kesilecek fatura" ön izlemesi —
+// personel onaylamadan önce gerçekte neyin Ödeal cihazına gideceğini görsün diye.
+// Şirket bilgileri (ad/adres/telefon/vergi no) Ayarlar > Belge Tasarımı'ndaki
+// companyInfo'dan geliyor (bkz. loadCompanyDesign, DEFAULT_COMPANY_INFO).
+function invoicePreviewBody({customerName, tcKimlikNo, description, amount, method}){
+  const amt = parseFloat(amount)||0;
+  return `
+    <div style="font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--ink-soft); margin-bottom:8px;">🧾 FATURA ÖN İZLEME</div>
+    <div class="invoice-preview-head">
+      <div>
+        <div style="font-weight:700;">${esc(companyInfo.name||'Teknonand')}</div>
+        <div style="font-size:11px; color:var(--ink-soft);">${[companyInfo.address, companyInfo.phone].filter(Boolean).map(esc).join(' · ')||'&nbsp;'}</div>
+        ${companyInfo.tax ? `<div style="font-size:11px; color:var(--ink-soft);">Vergi No: ${esc(companyInfo.tax)}</div>` : ''}
+      </div>
+      <div style="text-align:right; font-size:11px; color:var(--ink-soft); white-space:nowrap;">
+        ${new Date().toLocaleDateString('tr-TR')}<br>${esc(method)}
+      </div>
+    </div>
+    <div class="invoice-preview-body">
+      <div><span>Müşteri</span>${esc(customerName)||'—'}</div>
+      <div><span>TC Kimlik No</span>${esc(tcKimlikNo)||'—'}</div>
+      <div><span>Açıklama</span>${esc(description)||'—'}</div>
+    </div>
+    <div class="invoice-preview-total">TOPLAM <b>₺${amt.toFixed(2)}</b> <span style="font-weight:400; font-size:11px; color:var(--ink-soft);">(KDV Dahil)</span></div>
+    <p class="empty" style="margin:8px 0 0; font-size:10.5px;">Bu bir ön izlemedir — onayladığınızda gerçek e-fatura Ödeal E-FaturaPos cihazından kesilir.</p>
+  `;
+}
+
+function updateInvoicePreview(paymentId){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  const p = d.payments.find(x=>x.id===paymentId);
+  const customerName = document.getElementById(`inv-customer-${paymentId}`).value;
+  const tcKimlikNo = document.getElementById(`inv-tc-${paymentId}`).value;
+  const description = document.getElementById(`inv-desc-${paymentId}`).value;
+  const amount = document.getElementById(`inv-amount-${paymentId}`).value;
+  document.getElementById(`inv-preview-${paymentId}`).innerHTML = invoicePreviewBody({customerName, tcKimlikNo, description, amount, method: p.method});
 }
 
 async function approveInvoice(paymentId){
   const d = devices.find(x=>x.id===currentDeviceId);
   const customerName = document.getElementById(`inv-customer-${paymentId}`).value.trim();
+  const tcKimlikNo = document.getElementById(`inv-tc-${paymentId}`).value.trim();
   const description = document.getElementById(`inv-desc-${paymentId}`).value.trim();
   const amount = parseFloat(document.getElementById(`inv-amount-${paymentId}`).value);
   if(!description){ toast('Fatura açıklaması boş olamaz'); return; }
   if(isNaN(amount) || amount<=0){ toast('Geçerli bir fatura tutarı girin'); return; }
+  if(tcKimlikNo && !/^\d{11}$/.test(tcKimlikNo)){ toast('TC Kimlik No 11 haneli olmalı'); return; }
   if(!confirm(`₺${amount.toFixed(2)} tutarında fatura Ödeal cihazından kesilecek. Onaylıyor musunuz?`)) return;
   const updated = await apiFetch(`/devices/${d.id}/payments/${paymentId}/approve-invoice`, {
     method: 'POST',
-    body: JSON.stringify({ invoiceCustomerName: customerName, invoiceDescription: description, invoiceAmount: amount })
+    body: JSON.stringify({ invoiceCustomerName: customerName, invoiceCustomerTcKimlikNo: tcKimlikNo || undefined, invoiceDescription: description, invoiceAmount: amount })
   });
   const idx = d.payments.findIndex(p=>p.id===paymentId);
   if(idx>-1) d.payments[idx] = updated;

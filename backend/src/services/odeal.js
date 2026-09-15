@@ -40,12 +40,13 @@ function isAutoInvoiceMethod(method) {
 }
 
 // Panelin fatura taslağı formunda göstereceği/onaylayacağı değerler — ödemenin
-// invoiceDescription/invoiceCustomerName/invoiceAmount alanları boşsa (personel
-// henüz düzenlemediyse) makul varsayılanlara düşer.
+// invoiceDescription/invoiceCustomerName/invoiceCustomerTcKimlikNo/invoiceAmount
+// alanları boşsa (personel henüz düzenlemediyse) makul varsayılanlara düşer.
 function buildInvoiceDraft(payment, device) {
   return {
     description: payment.invoiceDescription || `Teknonand Teknik Servis — ${device.trackingCode || device.id}`,
     customerName: payment.invoiceCustomerName || device.customer?.fullName || '',
+    tcKimlikNo: payment.invoiceCustomerTcKimlikNo || device.customer?.tcKimlikNo || '',
     amount: payment.invoiceAmount != null ? Number(payment.invoiceAmount) : Number(payment.amount),
   };
 }
@@ -112,6 +113,7 @@ async function requestInvoiceForPayment(payment, device) {
         paymentType: paymentTypeCode,
         description: draft.description,
         customerName: draft.customerName || undefined,
+        customerTcKimlikNo: draft.tcKimlikNo || undefined, // TODO: gerçek alan adı teyit edilmeli
         // Webhook geri döndüğünde ödeme kaydıyla eşleştirmek için — Ödeal bu
         // alanı olduğu gibi geri yansıtıyorsa routes/odealWebhook.js bununla eşleştirir.
         externalReferenceId: payment.id,
