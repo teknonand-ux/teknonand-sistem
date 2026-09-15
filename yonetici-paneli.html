@@ -796,9 +796,12 @@
           <div class="field"><label>Firma Adı</label><input id="doc-company-name" placeholder="Teknonand"></div>
           <div class="field"><label>Telefon</label><input id="doc-company-phone" placeholder="0212 000 00 00"></div>
           <div class="field" style="grid-column:1/-1;"><label>Adres</label><input id="doc-company-address" placeholder="Mahalle, Cadde No, İlçe/İl"></div>
+          <div class="field"><label>İl</label><input id="doc-company-city" placeholder="İstanbul"></div>
+          <div class="field"><label>İlçe</label><input id="doc-company-town" placeholder="Kadıköy"></div>
           <div class="field"><label>E-posta</label><input id="doc-company-email" placeholder="info@teknonand.com"></div>
           <div class="field"><label>Vergi Dairesi / No (opsiyonel)</label><input id="doc-company-tax" placeholder="opsiyonel"></div>
         </div>
+        <p class="empty" style="margin:8px 0 0;">İl/İlçe, Ödeal E-FaturaPos'a otomatik fatura isteği gönderirken zorunlu — doldurulmazsa "Onayla ve Fatura Kes" başarısız olur.</p>
         <button class="primary" onclick="saveDocDesign()">Belge Bilgilerini Kaydet</button>
       </div>
 
@@ -1217,7 +1220,7 @@ const DEFAULT_LABEL_SETTINGS = {
 let labelSettings = JSON.parse(JSON.stringify(DEFAULT_LABEL_SETTINGS));
 
 const DEFAULT_COMPANY_INFO = {
-  name:'Teknonand', phone:'', address:'', email:'', tax:''
+  name:'Teknonand', phone:'', address:'', city:'', town:'', email:'', tax:''
 };
 let companyInfo = JSON.parse(JSON.stringify(DEFAULT_COMPANY_INFO));
 let companyLogo = null; // dataURL veya null (null ise varsayılan logo.png kullanılır)
@@ -3780,10 +3783,12 @@ async function removePayment(paymentId){
   renderDeviceDetail();
 }
 
-// Nakit/Banka Hesabı/Sanal POS ödemelerinde Ödeal E-FaturaPos fatura durumunu
-// gösterir (bkz. backend services/odeal.js, routes/odealWebhook.js). Kredi
-// Kartı/Cari Hesap gibi bu akışa girmeyen yöntemlerde (invoiceStatus 'YOK')
-// hiçbir şey göstermiyoruz — kredi kartı zaten cihazdan kendiliğinden fatura kesiyor.
+// Nakit/Banka Hesabı ödemelerinde Ödeal E-FaturaPos fatura durumunu gösterir
+// (bkz. backend services/odeal.js, routes/odealWebhook.js). Kredi Kartı/Sanal
+// POS/Cari Hesap gibi bu akışa girmeyen yöntemlerde (invoiceStatus 'YOK')
+// hiçbir şey göstermiyoruz — kredi kartı zaten cihazdan kendiliğinden fatura
+// kesiyor, Sanal POS Ödeal'in ayrı/bağımsız bir ürünü olduğundan D2D sepet
+// API'sinin kapsamı dışında (fatura personel tarafından elle yüklenir).
 function invoiceStatusBadge(p){
   if(!p.invoiceStatus || p.invoiceStatus==='YOK') return '';
   if(p.invoiceStatus==='TASLAK') return `<span class="badge invoice-draft" title="Henüz Ödeal'e gönderilmedi, aşağıdaki Fatura Onayı bölümünden onaylayın.">📝 Fatura Taslağı — Onay Bekliyor</span>`;
@@ -3803,7 +3808,7 @@ function odealInvoiceCard(d){
   if(!relevant.length) return '';
   return `<div class="card">
     <h3>Fatura Onayı (Ödeal E-FaturaPos)</h3>
-    <p class="empty" style="margin:-4px 0 10px;">Nakit / Banka Hesabı / Sanal POS ile alınan ödemelerde fatura, siz "Onayla ve Fatura Kes" demeden cihaza gönderilmez.</p>
+    <p class="empty" style="margin:-4px 0 10px;">Nakit / Banka Hesabı ile alınan ödemelerde fatura, siz "Onayla ve Fatura Kes" demeden cihaza gönderilmez.</p>
     ${relevant.map(p=>odealInvoiceRow(d,p)).join('')}
   </div>`;
 }
@@ -5653,6 +5658,8 @@ function populateDocDesignForm(){
   document.getElementById('doc-company-name').value = companyInfo.name || '';
   document.getElementById('doc-company-phone').value = companyInfo.phone || '';
   document.getElementById('doc-company-address').value = companyInfo.address || '';
+  document.getElementById('doc-company-city').value = companyInfo.city || '';
+  document.getElementById('doc-company-town').value = companyInfo.town || '';
   document.getElementById('doc-company-email').value = companyInfo.email || '';
   document.getElementById('doc-company-tax').value = companyInfo.tax || '';
   document.getElementById('doc-logo-preview').src = companyLogo || 'logo.png';
@@ -5699,12 +5706,14 @@ function renderDocDesignPreview(){
     name: document.getElementById('doc-company-name').value.trim() || 'Teknonand',
     phone: document.getElementById('doc-company-phone').value.trim(),
     address: document.getElementById('doc-company-address').value.trim(),
+    city: document.getElementById('doc-company-city').value.trim(),
+    town: document.getElementById('doc-company-town').value.trim(),
     email: document.getElementById('doc-company-email').value.trim(),
     tax: document.getElementById('doc-company-tax').value.trim()
   };
   box.innerHTML = buildCompanyHeaderHTML() + `<div class="fp-sub" style="margin-top:0;">Cihaz Teslim Formu / Bayi Raporu belgelerinde bu başlık görünecek</div>`;
 }
-['doc-company-name','doc-company-phone','doc-company-address','doc-company-email','doc-company-tax'].forEach(id=>{
+['doc-company-name','doc-company-phone','doc-company-address','doc-company-city','doc-company-town','doc-company-email','doc-company-tax'].forEach(id=>{
   document.addEventListener('input', (e)=>{ if(e.target && e.target.id===id) renderDocDesignPreview(); });
 });
 
@@ -5713,6 +5722,8 @@ async function saveDocDesign(){
     name: document.getElementById('doc-company-name').value.trim() || 'Teknonand',
     phone: document.getElementById('doc-company-phone').value.trim(),
     address: document.getElementById('doc-company-address').value.trim(),
+    city: document.getElementById('doc-company-city').value.trim(),
+    town: document.getElementById('doc-company-town').value.trim(),
     email: document.getElementById('doc-company-email').value.trim(),
     tax: document.getElementById('doc-company-tax').value.trim()
   };
