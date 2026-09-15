@@ -12,7 +12,13 @@ function errorHandler(err, req, res, next) {
     return res.status(404).json({ error: 'Kayıt bulunamadı' });
   }
   console.error(err);
-  res.status(err.status || 500).json({ error: err.message || 'Sunucu hatası' });
+  const status = err.status || 500;
+  // 500 (beklenmeyen/işlenmemiş) hatalarda err.message istemciye sızdırılmıyor —
+  // DB bağlantı dizesi, dosya yolu gibi iç detaylar içerebilir; sunucu logunda
+  // (yukarıdaki console.error) zaten tam haliyle duruyor. 4xx'lerde mesaj
+  // korunuyor — route'ların next(Object.assign(new Error('...'), {status}))
+  // ile kasıtlı fırlattığı, kullanıcıya gösterilmek üzere yazılmış metinler bunlar.
+  res.status(status).json({ error: status >= 500 ? 'Sunucu hatası, lütfen tekrar deneyin' : (err.message || 'İstek işlenemedi') });
 }
 
 module.exports = { errorHandler };

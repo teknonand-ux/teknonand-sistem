@@ -1,7 +1,18 @@
 const express = require('express');
+const crypto = require('crypto');
 const { prisma } = require('../lib/prisma');
 
 const router = express.Router();
+
+// query string'deki token'ı sabit zamanlı (timing-safe) karşılaştırır — düz
+// !== ile karşılaştırmak, karakterlerin ne kadarının eşleştiğine göre yanıt
+// süresinde ölçülebilir farklar yaratıp token'ın byte byte tahmin edilmesine
+// (timing attack) açık kapı bırakır. verifyMetaSignature.js'teki aynı desen.
+function isValidWebhookToken(provided, expected) {
+  const providedBuf = Buffer.from(String(provided || ''));
+  const expectedBuf = Buffer.from(expected);
+  return providedBuf.length === expectedBuf.length && crypto.timingSafeEqual(providedBuf, expectedBuf);
+}
 
 // Webhook body'sindeki base64 veya URL biçimindeki fatura PDF'ini panelin
 // beklediği data URL biçimine (data:application/pdf;base64,...) çevirir.
@@ -33,7 +44,7 @@ async function extractInvoicePdfDataUrl(invoicePdfBase64, invoicePdfUrl) {
 router.post('/', express.json(), async (req, res) => {
   try {
     const expectedToken = process.env.ODEAL_WEBHOOK_TOKEN;
-    if (expectedToken && req.query.token !== expectedToken) {
+    if (expectedToken && !isValidWebhookToken(req.query.token, expectedToken)) {
       console.warn('[odeal webhook] Geçersiz/eksik token ile istek, reddedildi.');
       return res.sendStatus(401);
     }
