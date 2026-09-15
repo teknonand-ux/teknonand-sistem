@@ -133,9 +133,12 @@
   .badge.vat{color:var(--accent); background:#E9EEFF;}
   .badge.warranty{color:var(--green); background:#E4F3EC;}
   .badge.no-warranty{color:var(--ink-soft); background:#EEEDE7;}
+  .badge.invoice-draft{color:var(--accent); background:#E9EEFF;}
   .badge.invoice-pending{color:#946200; background:#FFF1D6;}
   .badge.invoice-ok{color:var(--green); background:#E4F3EC;}
   .badge.invoice-error{color:var(--red); background:#FBE4E4; cursor:help;}
+  .invoice-row{padding:10px 0; border-top:1px solid #EEEDE7;}
+  .invoice-row:first-of-type{border-top:none; padding-top:2px;}
   .add-line-form{display:grid; grid-template-columns:1.4fr 1.4fr 1fr 1fr 1fr auto; gap:8px; align-items:end; margin-top:14px;}
   .add-line-form .field{margin-bottom:0;}
   .summary-box{margin-top:16px; padding-top:14px; border-top:1px solid var(--line); display:flex; flex-direction:column; align-items:flex-end; gap:3px;}
@@ -2980,6 +2983,8 @@ function renderDeviceDetail(){
       </div>
     </div>
 
+    ${odealInvoiceCard(d)}
+
     <div class="card">
       <h3>Fatura (PDF)</h3>
       ${d.invoicePdf ? `
@@ -3766,24 +3771,73 @@ async function removePayment(paymentId){
   renderDeviceDetail();
 }
 
-// Nakit/Banka Hesabı/Sanal POS ödemelerinde Ödeal E-FaturaPos'un otomatik fatura
-// kestirme durumunu gösterir (bkz. backend services/odeal.js, routes/odealWebhook.js).
-// Kredi Kartı/Cari Hesap gibi otomatik tetiklenmeyen yöntemlerde (invoiceStatus
-// 'YOK') hiçbir şey göstermiyoruz — kredi kartı zaten cihazdan kendiliğinden fatura kesiyor.
+// Nakit/Banka Hesabı/Sanal POS ödemelerinde Ödeal E-FaturaPos fatura durumunu
+// gösterir (bkz. backend services/odeal.js, routes/odealWebhook.js). Kredi
+// Kartı/Cari Hesap gibi bu akışa girmeyen yöntemlerde (invoiceStatus 'YOK')
+// hiçbir şey göstermiyoruz — kredi kartı zaten cihazdan kendiliğinden fatura kesiyor.
 function invoiceStatusBadge(p){
   if(!p.invoiceStatus || p.invoiceStatus==='YOK') return '';
-  if(p.invoiceStatus==='BEKLIYOR') return `<span class="badge invoice-pending" title="Ödeal cihazına sepet isteği gönderildi, fatura kesilmesi bekleniyor.">⏳ Fatura Bekleniyor</span>`;
-  if(p.invoiceStatus==='KESILDI') return `<span class="badge invoice-ok" title="Fatura Ödeal cihazından otomatik kesildi.">✓ Fatura Kesildi</span>`;
-  if(p.invoiceStatus==='HATA') return `<span class="badge invoice-error" title="${esc(p.invoiceError||'Bilinmeyen hata')}">⚠ Fatura Hatası — Tekrar Dene</span> <button class="ghost" style="padding:3px 8px;" onclick="retryInvoice('${p.id}')">↻</button>`;
+  if(p.invoiceStatus==='TASLAK') return `<span class="badge invoice-draft" title="Henüz Ödeal'e gönderilmedi, aşağıdaki Fatura Onayı bölümünden onaylayın.">📝 Fatura Taslağı — Onay Bekliyor</span>`;
+  if(p.invoiceStatus==='BEKLIYOR') return `<span class="badge invoice-pending" title="Ödeal cihazına sepet isteği gönderildi, fatura kesilmesi bekleniyor.">⏳ Fatura Kesiliyor</span>`;
+  if(p.invoiceStatus==='KESILDI') return `<span class="badge invoice-ok" title="Fatura Ödeal cihazından kesildi.">✓ Fatura Kesildi</span>`;
+  if(p.invoiceStatus==='HATA') return `<span class="badge invoice-error" title="${esc(p.invoiceError||'Bilinmeyen hata')}">⚠ Fatura Hatası</span>`;
   return '';
 }
 
-async function retryInvoice(paymentId){
+// Cihaz detayında "Ödeme / Tahsilat" kartının hemen altına, otomatik fatura
+// akışına giren (invoiceStatus 'YOK' olmayan) her ödeme için ayrı bir satır
+// çizer. TASLAK/HATA durumundaki ödemelerde açıklama/müşteri adı/tutar
+// DÜZENLENEBİLİR — personel gözden geçirip "Onayla ve Fatura Kes" demeden
+// Ödeal'e hiçbir istek gitmez (bkz. approveInvoice, backend approve-invoice route'u).
+function odealInvoiceCard(d){
+  const relevant = (d.payments||[]).filter(p=>p.invoiceStatus && p.invoiceStatus!=='YOK');
+  if(!relevant.length) return '';
+  return `<div class="card">
+    <h3>Fatura Onayı (Ödeal E-FaturaPos)</h3>
+    <p class="empty" style="margin:-4px 0 10px;">Nakit / Banka Hesabı / Sanal POS ile alınan ödemelerde fatura, siz "Onayla ve Fatura Kes" demeden cihaza gönderilmez.</p>
+    ${relevant.map(p=>odealInvoiceRow(d,p)).join('')}
+  </div>`;
+}
+
+function odealInvoiceRow(d,p){
+  const editable = p.invoiceStatus==='TASLAK' || p.invoiceStatus==='HATA';
+  const desc = p.invoiceDescription || `Teknonand Teknik Servis — ${d.trackingCode}`;
+  const custName = p.invoiceCustomerName || (d.customer && d.customer.fullName) || '';
+  const amount = p.invoiceAmount!=null ? p.invoiceAmount : p.amount;
+  const head = `<div class="pay-row"><span class="pay-method">${esc(p.method)}</span><span>₺${(parseFloat(p.amount)||0).toFixed(2)} · ${invoiceStatusBadge(p)}</span></div>`;
+
+  if(!editable){
+    const note = p.invoiceStatus==='BEKLIYOR' ? 'Ödeal cihazına gönderildi, fatura kesilmesi bekleniyor…' : 'Fatura kesildi — aşağıdaki "Fatura (PDF)" bölümünden görüntüleyebilirsiniz.';
+    return `<div class="invoice-row">${head}<p class="empty" style="margin:4px 0 0;">${note}</p></div>`;
+  }
+
+  return `<div class="invoice-row">
+    ${head}
+    ${p.invoiceStatus==='HATA' ? `<p class="empty" style="color:var(--red); margin:4px 0 8px;">${esc(p.invoiceError||'Bilinmeyen hata')}</p>` : ''}
+    <div class="pay-add" style="margin-top:8px;">
+      <div class="field"><label>Müşteri Adı</label><input id="inv-customer-${p.id}" value="${esc(custName)}"></div>
+      <div class="field"><label>Açıklama</label><input id="inv-desc-${p.id}" value="${esc(desc)}"></div>
+      <div class="field"><label>Tutar (₺)</label><input id="inv-amount-${p.id}" type="number" value="${amount}"></div>
+      <button class="primary" style="margin-top:0;" onclick="approveInvoice('${p.id}')">✓ Onayla ve Fatura Kes</button>
+    </div>
+  </div>`;
+}
+
+async function approveInvoice(paymentId){
   const d = devices.find(x=>x.id===currentDeviceId);
-  const updated = await apiFetch(`/devices/${d.id}/payments/${paymentId}/retry-invoice`, { method: 'POST' });
+  const customerName = document.getElementById(`inv-customer-${paymentId}`).value.trim();
+  const description = document.getElementById(`inv-desc-${paymentId}`).value.trim();
+  const amount = parseFloat(document.getElementById(`inv-amount-${paymentId}`).value);
+  if(!description){ toast('Fatura açıklaması boş olamaz'); return; }
+  if(isNaN(amount) || amount<=0){ toast('Geçerli bir fatura tutarı girin'); return; }
+  if(!confirm(`₺${amount.toFixed(2)} tutarında fatura Ödeal cihazından kesilecek. Onaylıyor musunuz?`)) return;
+  const updated = await apiFetch(`/devices/${d.id}/payments/${paymentId}/approve-invoice`, {
+    method: 'POST',
+    body: JSON.stringify({ invoiceCustomerName: customerName, invoiceDescription: description, invoiceAmount: amount })
+  });
   const idx = d.payments.findIndex(p=>p.id===paymentId);
   if(idx>-1) d.payments[idx] = updated;
-  toast('Fatura isteği tekrar gönderildi');
+  toast('Fatura onaylandı, Ödeal cihazına gönderildi');
   renderDeviceDetail();
 }
 

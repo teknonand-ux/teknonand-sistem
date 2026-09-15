@@ -286,15 +286,29 @@ model Payment {
   // Ödeal E-FaturaPos otomatik fatura kestirme durumu (bkz. services/odeal.js,
   // routes/odealWebhook.js). Kredi Kartı ödemesi cihazdan zaten otomatik fatura
   // kestiği için bu alanlarla ilgilenmiyor (YOK olarak kalır) — sadece Nakit /
-  // Banka Hesabı / Sanal POS ödemelerinde BEKLIYOR/KESILDI/HATA arasında geçiş yapar.
+  // Banka Hesabı / Sanal POS ödemelerinde TASLAK/BEKLIYOR/KESILDI/HATA arasında
+  // geçiş yapar. TASLAK: panelde personel faturayı gözden geçirip onaylayana
+  // kadar Ödeal'e HİÇBİR İSTEK GİTMEZ (bkz. routes/devices.js POST
+  // /:id/payments/:paymentId/approve-invoice) — kayıt oluştuğunda otomatik
+  // gönderilmiyor, personel "Onayla ve Fatura Kes" demeden cihaz fatura kesmiyor.
   invoiceStatus OdealInvoiceStatus @default(YOK)
   invoiceError  String? // HATA durumunda son hata mesajı (panelde gösterilir)
+
+  // Personelin onaydan önce panelde düzenleyebildiği fatura taslağı alanları —
+  // boşsa (null) panel/backend varsayılanı kullanır (bkz. services/odeal.js
+  // buildInvoiceDraft): açıklama "Teknonand Teknik Servis — <takip kodu>",
+  // müşteri adı cihazın müşterisi, tutar bu ödemenin tutarı. Onaylanınca Ödeal'e
+  // gönderilen değerler bunlardır — gerçek tahsilat tutarını (amount) etkilemez.
+  invoiceDescription  String?
+  invoiceCustomerName String?
+  invoiceAmount       Decimal? @db.Decimal(12, 2)
 
   @@map("payments")
 }
 
 enum OdealInvoiceStatus {
   YOK      // Kredi Kartı / Cari Hesap gibi otomatik fatura tetiklenmeyen yöntemler
+  TASLAK   // Nakit/Banka Hesabı/Sanal POS ödemesi girildi, personel onayı bekleniyor — henüz Ödeal'e gönderilmedi
   BEKLIYOR // Ödeal'e sepet isteği gönderildi, cihazdan fatura kesilmesi bekleniyor
   KESILDI  // webhooks/odeal ile fatura kesildiği onaylandı
   HATA     // sepet isteği başarısız oldu ya da servis anahtarı/cihaz kodu eksik
