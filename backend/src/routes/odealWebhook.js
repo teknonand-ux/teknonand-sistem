@@ -3,6 +3,20 @@ const { prisma } = require('../lib/prisma');
 
 const router = express.Router();
 
+// Webhook body'sindeki base64 veya URL biçimindeki fatura PDF'ini panelin
+// beklediği data URL biçimine (data:application/pdf;base64,...) çevirir.
+async function extractInvoicePdfDataUrl(invoicePdfBase64, invoicePdfUrl) {
+  if (invoicePdfBase64) return `data:application/pdf;base64,${invoicePdfBase64}`;
+  if (!invoicePdfUrl) return null;
+  const pdfRes = await fetch(invoicePdfUrl);
+  if (!pdfRes.ok) {
+    console.error(`[odeal webhook] Fatura PDF'i indirilemedi (HTTP ${pdfRes.status}): ${invoicePdfUrl}`);
+    return null;
+  }
+  const buf = Buffer.from(await pdfRes.arrayBuffer());
+  return `data:application/pdf;base64,${buf.toString('base64')}`;
+}
+
 // Ödeal, services/odeal.js'in gönderdiği sepet isteğinin sonucunu (fatura
 // kesildi/başarısız vb.) bu adrese webhook olarak POST eder. Ödeal Developer
 // Portal'daki Entegrasyon Profili ayarlarında bu URL'i "e-fatura oluşturma"
@@ -41,14 +55,35 @@ router.post('/', express.json(), async (req, res) => {
     // teyit edilince buradaki tahmini kontrol gerçek değerlerle değiştirilmeli.
     const isFailure = body.success === false || /fail|hata|basarisiz|başarısız/i.test(String(body.status || ''));
 
-    if (!paymentId) {
-      console.warn('[odeal webhook] externalReferenceId/paymentId alanı bulunamadı, eşleştirme yapılamadı.');
-      return res.sendStatus(200); // Ödeal'in aynı isteği tekrar tekrar denemesini önlemek için 200 dönüyoruz
-    }
+    let payment = null;
+    if (paymentId) payment = await prisma.payment.findUnique({ where: { id: paymentId } });
 
-    const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment) {
-      console.warn(`[odeal webhook] Eşleşen ödeme kaydı bulunamadı: ${paymentId}`);
+      // Kredi Kartı ile ödemeler cihazda kasiyer tarafından bizim sepet API'mizden
+      // GEÇMEDEN doğrudan okutulup fatura kesiliyor — bu yüzden externalReferenceId
+      // hiç gelmiyor/eşleşmiyor. Yine de faturayı otomatik "Fatura (PDF)" alanına
+      // düşürebilmek için son çare: açıklama/sipariş no alanında geçen takip koduna
+      // (TKN-2026-0342 biçimi) göre cihazı buluyoruz. Bunun çalışması için kasiyerin
+      // kart geçişinde cihazın açıklama/not alanına takip kodunu yazması gerekiyor —
+      // yazılmazsa (ör. eski alışkanlıkla boş bırakılırsa) personel yine elle
+      // yükleyebilir, akış bozulmaz.
+      const desc = String(body.description || body.orderDescription || body.note || body.explanation || '');
+      const trackingMatch = desc.match(/TKN-\d{4}-\d{3,}/i);
+      if (!trackingMatch) {
+        console.warn('[odeal webhook] Ödeme kaydı (externalReferenceId) veya açıklamada takip kodu bulunamadı, eşleştirme yapılamadı.');
+        return res.sendStatus(200); // Ödeal'in aynı isteği tekrar tekrar denemesini önlemek için 200 dönüyoruz
+      }
+      const deviceByTracking = await prisma.device.findUnique({ where: { trackingCode: trackingMatch[0].toUpperCase() } });
+      if (!deviceByTracking) {
+        console.warn(`[odeal webhook] Açıklamadaki takip koduna (${trackingMatch[0]}) sahip cihaz bulunamadı.`);
+        return res.sendStatus(200);
+      }
+      if (isFailure) return res.sendStatus(200); // eşleşen ödeme kaydı yok, HATA işaretlenecek bir yer de yok
+      const dataUrl = await extractInvoicePdfDataUrl(invoicePdfBase64, invoicePdfUrl);
+      if (dataUrl) {
+        await prisma.device.update({ where: { id: deviceByTracking.id }, data: { invoicePdf: dataUrl, invoiceUploadedAt: new Date() } });
+        console.log(`[odeal webhook] Fatura, takip koduyla eşleşen cihaz ${deviceByTracking.id} (${trackingMatch[0]}) için otomatik kaydedildi.`);
+      }
       return res.sendStatus(200);
     }
 
@@ -61,18 +96,7 @@ router.post('/', express.json(), async (req, res) => {
       return res.sendStatus(200);
     }
 
-    let dataUrl = null;
-    if (invoicePdfBase64) {
-      dataUrl = `data:application/pdf;base64,${invoicePdfBase64}`;
-    } else if (invoicePdfUrl) {
-      const pdfRes = await fetch(invoicePdfUrl);
-      if (pdfRes.ok) {
-        const buf = Buffer.from(await pdfRes.arrayBuffer());
-        dataUrl = `data:application/pdf;base64,${buf.toString('base64')}`;
-      } else {
-        console.error(`[odeal webhook] Fatura PDF'i indirilemedi (HTTP ${pdfRes.status}): ${invoicePdfUrl}`);
-      }
-    }
+    const dataUrl = await extractInvoicePdfDataUrl(invoicePdfBase64, invoicePdfUrl);
 
     if (dataUrl) {
       await prisma.$transaction([
