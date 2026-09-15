@@ -32,10 +32,20 @@
 // paymentOptions[].type/amount) ile paymentOptions[].type için kabul edilen
 // değerler (nakit/havale kodları) docs.odeal.com'un etkileşimli "+ Ekle"
 // form alanlarında JS ile render ediliyor, statik sayfa taramasıyla
-// okunamadı — aşağıdaki alan adları/kodlar EN İYİ TAHMİNdir. İlk canlı
-// denemede Ödeal'in döndüreceği 400 hatası gerçek alan adlarını byword
-// byword verecektir (bkz. markFailed ile panelde görünen invoiceError) —
-// o hataya göre bu TODO'lar güncellenmeli.
+// okunamadı — aşağıdaki alan adları/kodlar EN İYİ TAHMİNdir.
+//
+// DENEME GEÇMİŞİ:
+//   1) PAYMENT_TYPE_MAP İngilizce (CASH/BANK_TRANSFER) → HTTP 500
+//      {"code":1000,"exceptionType":"SERVER_ERROR","message":"server hatası"}
+//      — Ödeal'in kendi sunucusunda çöktü, temiz bir 400 validasyon hatası
+//      değil. Bu genelde sunucu tarafında yakalanmamış bir istisna (ör.
+//      enum.valueOf() gibi bir eşleme başarısız olup exception fırlatması)
+//      anlamına gelir — o yüzden şüpheli #1 paymentOptions[].type kodu.
+//   2) Şimdi Türkçe kodlar (NAKIT/HAVALE_EFT) deneniyor — docs sayfalarının
+//      URL'leri Türkçe olduğundan (nakit-sepet-aktar, havale-eft-sepet-aktar).
+//      Bu da 500 verirse type kodu muhtemelen suçlu değildir, Ödeal destek
+//      hattına (bu response'u göstererek) başvurulmalı — genel dokümantasyon
+//      olmadan daha fazla kör tahmin verimsiz.
 const { prisma } = require('../lib/prisma');
 
 // Fatura taslağı oluşturmamız gereken ödeme yöntemleri — panelin ödeme
@@ -47,11 +57,10 @@ const { prisma } = require('../lib/prisma');
 const AUTO_INVOICE_METHODS = new Set(['Nakit', 'Banka Hesabı']);
 
 // Bizim ödeme yöntemi adlarımızdan Ödeal'in paymentOptions[].type alanına
-// eşleme. TODO: Kod değerleri EN İYİ TAHMİNdir, ilk canlı denemenin
-// hata/başarı sonucuna göre teyit/güncelle.
+// eşleme — TODO: hâlâ teyit edilemedi, bkz. dosya başındaki DENEME GEÇMİŞİ.
 const PAYMENT_TYPE_MAP = {
-  Nakit: 'CASH',
-  'Banka Hesabı': 'BANK_TRANSFER',
+  Nakit: 'NAKIT',
+  'Banka Hesabı': 'HAVALE_EFT',
 };
 
 function isAutoInvoiceMethod(method) {
@@ -143,6 +152,42 @@ async function requestInvoiceForPayment(payment, device) {
 
   const { name, surname } = splitFullName(draft.customerName);
 
+  const requestBody = {
+    referenceCode: payment.id, // webhook geri döndüğünde eşleştirmek için (bkz. routes/odealWebhook.js)
+    externalDeviceKey: deviceKey,
+    siparisNo: device.trackingCode || undefined, // webhook'ta ikinci eşleştirme yolu olarak da kullanılıyor
+    city: companyInfo.city,
+    town: companyInfo.town,
+    price: draft.amount,
+    grossPrice: draft.amount, // KDV dahil fiyatlandırma kullanıyoruz (bkz. DevicePart vatMode DAHIL) — TODO: price'ın net mi brüt mü beklendiği teyit edilmeli
+    customer: {
+      type: 'INDIVIDUAL', // TODO: kurumsal müşteri (taxNumber/taxOffice) desteği eklenmedi
+      name: name || draft.customerName || 'Müşteri',
+      surname: surname || undefined,
+      identityNumber: draft.tcKimlikNo || undefined,
+      gsmNumber: device.customer?.phone || undefined,
+      email: device.customer?.email || undefined,
+    },
+    items: [
+      {
+        name: draft.description,
+        price: draft.amount,
+        quantity: 1,
+      },
+    ],
+    paymentOptions: [
+      {
+        type: paymentTypeCode,
+        amount: draft.amount,
+      },
+    ],
+  };
+
+  // Railway loglarında (get-logs) gidiş/dönüş birlikte görünsün diye — Ödeal
+  // opak bir 500 döndürdüğünde bu satır olmadan hangi payload'ın suçlu olduğunu
+  // ayırt etmek imkansız oluyordu.
+  console.log(`[odeal] Sepet isteği gönderiliyor (ödeme ${payment.id}):`, JSON.stringify(requestBody));
+
   try {
     const res = await fetch(`${apiBase}/basket`, {
       method: 'POST',
@@ -151,36 +196,7 @@ async function requestInvoiceForPayment(payment, device) {
         'X-ODEAL-MERCHANT-KEY': merchantKey,
         'X-ODEAL-SECRET-KEY': secretKey,
       },
-      body: JSON.stringify({
-        referenceCode: payment.id, // webhook geri döndüğünde eşleştirmek için (bkz. routes/odealWebhook.js)
-        externalDeviceKey: deviceKey,
-        siparisNo: device.trackingCode || undefined, // webhook'ta ikinci eşleştirme yolu olarak da kullanılıyor
-        city: companyInfo.city,
-        town: companyInfo.town,
-        price: draft.amount,
-        grossPrice: draft.amount, // KDV dahil fiyatlandırma kullanıyoruz (bkz. DevicePart vatMode DAHIL) — TODO: price'ın net mi brüt mü beklendiği teyit edilmeli
-        customer: {
-          type: 'INDIVIDUAL', // TODO: kurumsal müşteri (taxNumber/taxOffice) desteği eklenmedi
-          name: name || draft.customerName || 'Müşteri',
-          surname: surname || undefined,
-          identityNumber: draft.tcKimlikNo || undefined,
-          gsmNumber: device.customer?.phone || undefined,
-          email: device.customer?.email || undefined,
-        },
-        items: [
-          {
-            name: draft.description,
-            price: draft.amount,
-            quantity: 1,
-          },
-        ],
-        paymentOptions: [
-          {
-            type: paymentTypeCode,
-            amount: draft.amount,
-          },
-        ],
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const body = await res.json().catch(() => null);
