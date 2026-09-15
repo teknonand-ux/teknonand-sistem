@@ -4,6 +4,7 @@ const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
 const { sendStatusWhatsapp, sendDocumentWhatsapp, sendGoogleReviewRequest } = require('../services/whatsapp');
 const { buildDeliveryFormPdfBuffer } = require('../services/pdfGenerator');
+const { isAutoInvoiceMethod, requestInvoiceForPayment } = require('../services/odeal');
 
 const router = express.Router();
 router.use(requireAuth, requireEmployee);
@@ -859,8 +860,60 @@ router.post('/:id/payments', async (req, res, next) => {
       type: z.enum(['KAPORA', 'ARA_ODEME', 'FINAL']).default('ARA_ODEME'),
     });
     const input = schema.parse(req.body);
-    const payment = await prisma.payment.create({ data: { deviceId: req.params.id, ...input } });
+    // Kredi Kartı hariç ödeme yöntemlerinde (Nakit / Banka Hesabı / Sanal POS)
+    // para Ödeal cihazından geçmediği için fatura kendiliğinden kesilmiyor —
+    // kayıt oluşurken durumu hemen 'BEKLIYOR' işaretleyip panelin bunu anında
+    // göstermesini sağlıyoruz; asıl sepet isteği aşağıda fire-and-forget gider.
+    const needsAutoInvoice = isAutoInvoiceMethod(input.method);
+    const payment = await prisma.payment.create({
+      data: { deviceId: req.params.id, ...input, invoiceStatus: needsAutoInvoice ? 'BEKLIYOR' : 'YOK' },
+    });
     res.status(201).json(payment);
+
+    // Ödeal'e sepet isteği göndererek cihazın faturayı kestirmesini tetikliyoruz.
+    // Yanıtı beklemeden (fire-and-forget) yapıyoruz: Ödeal API'si yavaş/kapalı
+    // olsa bile ödeme kaydı kullanıcıya zaten döndü. Başarısızlıkta odeal.js
+    // ödemeyi 'HATA'ya çeker; başarılı sepet isteğinde fatura sonucu ayrıca
+    // webhooks/odeal üzerinden işlenip 'KESILDI'ye çekilir ve device.invoicePdf'e
+    // yazılır (bkz. services/odeal.js, routes/odealWebhook.js).
+    if (needsAutoInvoice) {
+      prisma.device
+        .findUnique({ where: { id: req.params.id } })
+        .then((device) => device && requestInvoiceForPayment(payment, device))
+        .catch((e) => console.error(`[odeal] Cihaz sorgulanırken hata (ödeme ${payment.id}): ${e.message}`));
+    }
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/devices/:id/payments/:paymentId/retry-invoice — bir ödemenin otomatik
+// fatura isteği HATA ile sonuçlandıysa (ör. Ödeal servis anahtarı henüz .env'e
+// eklenmemişken kaydedilmiş bir tahsilat), anahtar eklendikten sonra ödemeyi
+// silip yeniden girmeye gerek kalmadan aynı isteği tekrar denetmek için.
+router.post('/:id/payments/:paymentId/retry-invoice', async (req, res, next) => {
+  try {
+    const payment = await prisma.payment.findUnique({ where: { id: req.params.paymentId } });
+    if (!payment || payment.deviceId !== req.params.id) {
+      return res.status(404).json({ error: 'Ödeme kaydı bulunamadı' });
+    }
+    if (!isAutoInvoiceMethod(payment.method)) {
+      return res.status(400).json({ error: 'Bu ödeme yöntemi için otomatik fatura uygulanmıyor' });
+    }
+    const device = await prisma.device.findUnique({ where: { id: req.params.id } });
+    if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
+
+    const updated = await prisma.payment.update({
+      where: { id: payment.id },
+      data: { invoiceStatus: 'BEKLIYOR', invoiceError: null },
+    });
+    res.json(updated);
+    // Yanıt gönderildikten sonra fire-and-forget — hata olursa odeal.js zaten
+    // ödemeyi kendi içinde 'HATA'ya çekip logluyor, burada next(e) çağırıp
+    // yanıt gönderildikten sonra ikinci kez cevap vermeye çalışmıyoruz.
+    requestInvoiceForPayment(updated, device).catch((e) =>
+      console.error(`[odeal] retry-invoice sırasında beklenmeyen hata (ödeme ${updated.id}): ${e.message}`)
+    );
   } catch (e) {
     next(e);
   }
