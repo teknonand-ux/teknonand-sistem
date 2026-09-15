@@ -21,6 +21,7 @@ const reportRoutes = require('./routes/reports');
 const whatsappInboxRoutes = require('./routes/whatsappInbox');
 const instagramInboxRoutes = require('./routes/instagramInbox');
 const labelPrintJobRoutes = require('./routes/labelPrintJobs');
+const odealWebhookRoutes = require('./routes/odealWebhook');
 const { startExchangeRateScheduler } = require('./services/exchangeRateScheduler');
 
 const app = express();
@@ -103,6 +104,9 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/whatsapp', whatsappInboxRoutes);
 app.use('/api/instagram', instagramInboxRoutes);
 app.use('/api/label-print-jobs', labelPrintJobRoutes);
+// Ödeal E-FaturaPos sepet sonucu/fatura webhook'u — requireAuth altında değil,
+// Ödeal'in kendisi çağırıyor (bkz. routes/odealWebhook.js token doğrulaması).
+app.use('/webhooks/odeal', odealWebhookRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Uç nokta bulunamadı' }));
 app.use(errorHandler);

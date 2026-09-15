@@ -133,6 +133,9 @@
   .badge.vat{color:var(--accent); background:#E9EEFF;}
   .badge.warranty{color:var(--green); background:#E4F3EC;}
   .badge.no-warranty{color:var(--ink-soft); background:#EEEDE7;}
+  .badge.invoice-pending{color:#946200; background:#FFF1D6;}
+  .badge.invoice-ok{color:var(--green); background:#E4F3EC;}
+  .badge.invoice-error{color:var(--red); background:#FBE4E4; cursor:help;}
   .add-line-form{display:grid; grid-template-columns:1.4fr 1.4fr 1fr 1fr 1fr auto; gap:8px; align-items:end; margin-top:14px;}
   .add-line-form .field{margin-bottom:0;}
   .summary-box{margin-top:16px; padding-top:14px; border-top:1px solid var(--line); display:flex; flex-direction:column; align-items:flex-end; gap:3px;}
@@ -2961,7 +2964,7 @@ function renderDeviceDetail(){
     <div class="card">
       <h3>Ödeme / Tahsilat</h3>
       ${(d.payments||[]).length ? (d.payments.map((p)=>`
-        <div class="pay-row"><span class="pay-method">${esc(p.method)}</span><span>₺${(parseFloat(p.amount)||0).toFixed(2)} · ${new Date(p.paidAt).toLocaleString('tr-TR')} <button class="ghost" style="padding:3px 8px; margin-left:6px;" onclick="removePayment('${p.id}')">Sil</button></span></div>`).join('')) : `<p class="empty">Henüz tahsilat girilmedi</p>`}
+        <div class="pay-row"><span class="pay-method">${esc(p.method)}</span><span>₺${(parseFloat(p.amount)||0).toFixed(2)} · ${new Date(p.paidAt).toLocaleString('tr-TR')} ${invoiceStatusBadge(p)} <button class="ghost" style="padding:3px 8px; margin-left:6px;" onclick="removePayment('${p.id}')">Sil</button></span></div>`).join('')) : `<p class="empty">Henüz tahsilat girilmedi</p>`}
       <div class="pay-add">
         <div class="field"><label>Yöntem</label>
           <select id="pay-method"><option>Nakit</option><option>Banka Hesabı</option><option>Kredi Kartı</option><option>Sanal POS</option><option>Cari Hesap</option></select>
@@ -3760,6 +3763,27 @@ async function removePayment(paymentId){
   await apiFetch(`/devices/${d.id}/payments/${paymentId}`, { method: 'DELETE' });
   d.payments = d.payments.filter(p=>p.id!==paymentId);
   toast('Tahsilat silindi');
+  renderDeviceDetail();
+}
+
+// Nakit/Banka Hesabı/Sanal POS ödemelerinde Ödeal E-FaturaPos'un otomatik fatura
+// kestirme durumunu gösterir (bkz. backend services/odeal.js, routes/odealWebhook.js).
+// Kredi Kartı/Cari Hesap gibi otomatik tetiklenmeyen yöntemlerde (invoiceStatus
+// 'YOK') hiçbir şey göstermiyoruz — kredi kartı zaten cihazdan kendiliğinden fatura kesiyor.
+function invoiceStatusBadge(p){
+  if(!p.invoiceStatus || p.invoiceStatus==='YOK') return '';
+  if(p.invoiceStatus==='BEKLIYOR') return `<span class="badge invoice-pending" title="Ödeal cihazına sepet isteği gönderildi, fatura kesilmesi bekleniyor.">⏳ Fatura Bekleniyor</span>`;
+  if(p.invoiceStatus==='KESILDI') return `<span class="badge invoice-ok" title="Fatura Ödeal cihazından otomatik kesildi.">✓ Fatura Kesildi</span>`;
+  if(p.invoiceStatus==='HATA') return `<span class="badge invoice-error" title="${esc(p.invoiceError||'Bilinmeyen hata')}">⚠ Fatura Hatası — Tekrar Dene</span> <button class="ghost" style="padding:3px 8px;" onclick="retryInvoice('${p.id}')">↻</button>`;
+  return '';
+}
+
+async function retryInvoice(paymentId){
+  const d = devices.find(x=>x.id===currentDeviceId);
+  const updated = await apiFetch(`/devices/${d.id}/payments/${paymentId}/retry-invoice`, { method: 'POST' });
+  const idx = d.payments.findIndex(p=>p.id===paymentId);
+  if(idx>-1) d.payments[idx] = updated;
+  toast('Fatura isteği tekrar gönderildi');
   renderDeviceDetail();
 }
 

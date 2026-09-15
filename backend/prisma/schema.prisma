@@ -283,7 +283,21 @@ model Payment {
   paidAt   DateTime      @default(now())
   createdAt DateTime     @default(now())
 
+  // Ödeal E-FaturaPos otomatik fatura kestirme durumu (bkz. services/odeal.js,
+  // routes/odealWebhook.js). Kredi Kartı ödemesi cihazdan zaten otomatik fatura
+  // kestiği için bu alanlarla ilgilenmiyor (YOK olarak kalır) — sadece Nakit /
+  // Banka Hesabı / Sanal POS ödemelerinde BEKLIYOR/KESILDI/HATA arasında geçiş yapar.
+  invoiceStatus OdealInvoiceStatus @default(YOK)
+  invoiceError  String? // HATA durumunda son hata mesajı (panelde gösterilir)
+
   @@map("payments")
+}
+
+enum OdealInvoiceStatus {
+  YOK      // Kredi Kartı / Cari Hesap gibi otomatik fatura tetiklenmeyen yöntemler
+  BEKLIYOR // Ödeal'e sepet isteği gönderildi, cihazdan fatura kesilmesi bekleniyor
+  KESILDI  // webhooks/odeal ile fatura kesildiği onaylandı
+  HATA     // sepet isteği başarısız oldu ya da servis anahtarı/cihaz kodu eksik
 }
 
 // ---------------------------------------------------------------------------
