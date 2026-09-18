@@ -3,7 +3,7 @@ const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireDealer } = require('../middleware/auth');
 const { hashPassword } = require('../lib/auth');
-const { sendStatusWhatsapp, sendDealerBalanceReminder, sendDealerPortalNotice } = require('../services/whatsapp');
+const { sendStatusWhatsapp, sendDealerBalanceReminder } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -122,25 +122,6 @@ router.post('/:id/balance-whatsapp', requireAuth, requireEmployee, async (req, r
     const dealer = await prisma.dealer.findUniqueOrThrow({ where: { id: req.params.id } });
     if (!dealer.phone) return res.status(400).json({ error: 'Bayinin telefon numarası kayıtlı değil' });
     const result = await sendDealerBalanceReminder(dealer);
-    if (!result.ok) return res.status(502).json({ error: result.error || 'Mesaj gönderilemedi' });
-    res.json({ ok: true });
-  } catch (e) {
-    next(e);
-  }
-});
-
-// POST /api/dealers/:id/portal-notice-whatsapp — "Portal Bildirimini WhatsApp ile
-// Gönder" butonu: onaylı WHATSAPP_TEMPLATE_DEALER_PORTAL_NOTICE şablonuyla bayiye
-// hesabının aktif olduğunu ve bayi portalı linkini otomatik gönderir (bkz.
-// services/whatsapp.js sendDealerPortalNotice). Meta, kullanıcı adı/şifre içeren
-// şablonları otomatik "Kimlik Doğrulama" kategorisine sayıp reddettiği için bu mesaj
-// giriş bilgilerini içermez — kullanıcı adı ve şifre personel tarafından ayrıca
-// iletilir (bkz. panel'deki "Bayi Portal Girişi" kartında görünen düz metin şifre).
-router.post('/:id/portal-notice-whatsapp', requireAuth, requireEmployee, async (req, res, next) => {
-  try {
-    const dealer = await prisma.dealer.findUniqueOrThrow({ where: { id: req.params.id } });
-    if (!dealer.phone) return res.status(400).json({ error: 'Bayinin telefon numarası kayıtlı değil' });
-    const result = await sendDealerPortalNotice(dealer);
     if (!result.ok) return res.status(502).json({ error: result.error || 'Mesaj gönderilemedi' });
     res.json({ ok: true });
   } catch (e) {

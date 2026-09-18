@@ -4128,9 +4128,6 @@ function renderDealers(){
         </div>
         <div class="dealer-balance ${parseFloat(dl.balance)>0?'owes':'clear'}">₺${(parseFloat(dl.balance)||0).toFixed(2)}</div>
       </div>
-      <div style="margin-top:8px;">
-        <button class="ghost" onclick="event.stopPropagation(); sendDealerPortalNoticeWhatsApp('${dl.id}')">Portal Bildirimini WhatsApp ile Gönder</button>
-      </div>
     </div>`).join('') : `<p class="empty">${query ? 'Eşleşen bayi bulunamadı' : 'Henüz bayi eklenmedi'}</p>`;
 
   // Cihaz Kabul formundaki bayi seçim listelerini güncelle
@@ -4155,10 +4152,6 @@ const TRACK_PORTAL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/takip-
 const PANEL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/yonetici-paneli.html';
 const DEALER_PORTAL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/bayi-portali.html';
 
-// Meta, kullanıcı adı/şifre içeren şablonları otomatik "Kimlik Doğrulama" ihlali
-// sayıp reddettiği için (bkz. sendDealerPortalNoticeWhatsApp'ın yanındaki otomatik
-// bildirim) giriş bilgileri burada wa.me linkiyle manuel gönderiliyor — Meta onayı
-// gerektirmez, personel WhatsApp'ta açılan taslağı elle "gönder"e basarak yollar.
 function sendDealerCredentialsWhatsApp(){
   const dl = dealers.find(x=>x.id===currentDealerId);
   if(!dl || !pendingDealerCredentials || pendingDealerCredentials.dealerId !== dl.id) return;
@@ -4177,17 +4170,6 @@ function sendDealerCredentialsWhatsApp(){
   const text = encodeURIComponent(lines.join('\n'));
   const number = toWhatsAppNumber(dl.phone);
   window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
-}
-
-async function sendDealerPortalNoticeWhatsApp(id){
-  const dl = dealers.find(x=>x.id===id);
-  if(!dl) return;
-  if(!dl.phone){ toast('Bayinin telefon numarası kayıtlı değil'); return; }
-  if(!confirm(`${dl.name} adlı bayiye hesabının aktif olduğu ve bayi portalı linki WhatsApp'tan otomatik gönderilsin mi? (Kullanıcı adı/şifre bu mesaja dahil değildir — WhatsApp politikası gereği ayrıca iletilmelidir.)`)) return;
-  try{
-    await apiFetch(`/dealers/${dl.id}/portal-notice-whatsapp`, { method: 'POST' });
-    toast('Portal bildirimi WhatsApp\'tan gönderildi');
-  }catch(e){ toast(e.message || 'Gönderilemedi — şablon henüz onaylı olmayabilir'); }
 }
 
 async function uploadInvoicePdf(id, event){
@@ -4417,7 +4399,6 @@ function renderDealerDetail(){
         <button class="ghost" onclick="resetDealerPassword('${dl.id}')">Şifre Değiştir</button>
         <button class="ghost" onclick="updateDealerPhone('${dl.id}')">Doğrulama Telefonunu Güncelle</button>
         <button class="ghost" onclick="sendDealerBalanceWhatsApp('${dl.id}')">WhatsApp ile Bakiye Bildir</button>
-        <button class="ghost" onclick="sendDealerPortalNoticeWhatsApp('${dl.id}')">Portal Bildirimini WhatsApp ile Gönder</button>
       </div>
     </div>
 

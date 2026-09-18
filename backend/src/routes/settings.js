@@ -3,7 +3,7 @@ const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireAdmin } = require('../middleware/auth');
 const { fetchUsdTryRate } = require('../services/exchangeRate');
-const { GOOGLE_REVIEW_TEMPLATE_DEFINITION, DEALER_PORTAL_NOTICE_TEMPLATE_DEFINITION } = require('../services/whatsapp');
+const { GOOGLE_REVIEW_TEMPLATE_DEFINITION } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -79,35 +79,6 @@ router.post('/whatsapp-templates/create-google-review-template', async (req, res
     const json = await metaRes.json();
     if (!metaRes.ok) return res.status(502).json({ error: json.error?.message || `HTTP ${metaRes.status}`, details: json });
     res.json({ ok: true, templateName: GOOGLE_REVIEW_TEMPLATE_DEFINITION.name, meta: json });
-  } catch (e) {
-    next(e);
-  }
-});
-
-// POST /api/settings/whatsapp-templates/create-dealer-portal-notice-template — TEK
-// SEFERLİK KURULUM UCU: "Portal Bildirimini WhatsApp ile Gönder" şablonunu Meta'ya
-// (WhatsApp Cloud API) submit eder — WhatsApp Yöneticisi'nden elle de oluşturulup
-// onaya gönderilmiştir (bkz. DEALER_PORTAL_NOTICE_TEMPLATE_DEFINITION), bu uç yalnızca
-// şablonun yeniden oluşturulması gerekirse (silinir/reddedilirse) referans olarak
-// tutulur. Aynı WHATSAPP_TEMPLATE_SETUP_KEY korumasını kullanır, bkz.
-// create-google-review-template üstündeki açıklama.
-router.post('/whatsapp-templates/create-dealer-portal-notice-template', async (req, res, next) => {
-  try {
-    const setupKey = process.env.WHATSAPP_TEMPLATE_SETUP_KEY;
-    if (!setupKey || req.headers['x-setup-key'] !== setupKey) return res.status(404).json({ error: 'Uç nokta bulunamadı' });
-
-    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    const wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
-    if (!accessToken || !wabaId) return res.status(500).json({ error: 'WHATSAPP_ACCESS_TOKEN / WHATSAPP_BUSINESS_ACCOUNT_ID tanımlı değil' });
-
-    const metaRes = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/message_templates`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(DEALER_PORTAL_NOTICE_TEMPLATE_DEFINITION),
-    });
-    const json = await metaRes.json();
-    if (!metaRes.ok) return res.status(502).json({ error: json.error?.message || `HTTP ${metaRes.status}`, details: json });
-    res.json({ ok: true, templateName: DEALER_PORTAL_NOTICE_TEMPLATE_DEFINITION.name, meta: json });
   } catch (e) {
     next(e);
   }
