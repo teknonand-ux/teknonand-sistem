@@ -4153,6 +4153,31 @@ let currentDealerId = null;
 let pendingDealerCredentials = null; // az önce oluşturulan/sıfırlanan bayi şifresi (WhatsApp ile göndermek için, hash'ten geri alınamaz)
 const TRACK_PORTAL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/takip-portali.html';
 const PANEL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/yonetici-paneli.html';
+const DEALER_PORTAL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/bayi-portali.html';
+
+// Meta, kullanıcı adı/şifre içeren şablonları otomatik "Kimlik Doğrulama" ihlali
+// sayıp reddettiği için (bkz. sendDealerPortalNoticeWhatsApp'ın yanındaki otomatik
+// bildirim) giriş bilgileri burada wa.me linkiyle manuel gönderiliyor — Meta onayı
+// gerektirmez, personel WhatsApp'ta açılan taslağı elle "gönder"e basarak yollar.
+function sendDealerCredentialsWhatsApp(){
+  const dl = dealers.find(x=>x.id===currentDealerId);
+  if(!dl || !pendingDealerCredentials || pendingDealerCredentials.dealerId !== dl.id) return;
+  if(!dl.phone){ toast('Bayinin telefon numarası kayıtlı değil'); return; }
+  const lines = [
+    `Teknonand — Bayi Portalı Giriş Bilgileriniz`,
+    `Sayın ${dl.name},`,
+    `Bayi portalımıza aşağıdaki bilgilerle giriş yapabilirsiniz:`,
+    ``,
+    `Portal Adresi: ${DEALER_PORTAL_URL}`,
+    `Kullanıcı Adı: ${pendingDealerCredentials.username}`,
+    `Şifre: ${pendingDealerCredentials.password}`,
+    ``,
+    `İyi çalışmalar dileriz.`
+  ];
+  const text = encodeURIComponent(lines.join('\n'));
+  const number = toWhatsAppNumber(dl.phone);
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
+}
 
 async function sendDealerPortalNoticeWhatsApp(id){
   const dl = dealers.find(x=>x.id===id);
@@ -4385,7 +4410,8 @@ function renderDealerDetail(){
       ${pendingDealerCredentials && pendingDealerCredentials.dealerId === dl.id ? `
       <div class="approve-box" style="margin-bottom:10px;">
         Şifre: <strong>${esc(pendingDealerCredentials.password)}</strong> — bu ekranda görünür şekilde kalıyor (sayfadan çıkınca kaybolur).
-        WhatsApp politikası gereği kullanıcı adı/şifre otomatik mesaja eklenemiyor — bu şifreyi bayiye telefonla ya da kişisel WhatsApp'tan siz iletin.
+        WhatsApp politikası gereği kullanıcı adı/şifre otomatik hatta eklenemiyor — aşağıdaki butonla WhatsApp'ta hazır bir taslak açılır, göndermek için elle "gönder"e basmanız gerekir.
+        <div style="margin-top:8px;"><button class="primary" onclick="sendDealerCredentialsWhatsApp()">Giriş Bilgilerini WhatsApp ile Gönder</button></div>
       </div>` : ''}
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="ghost" onclick="resetDealerPassword('${dl.id}')">Şifre Değiştir</button>
