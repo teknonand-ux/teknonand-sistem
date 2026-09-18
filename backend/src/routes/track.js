@@ -23,6 +23,7 @@ const PUBLIC_DEVICE_SELECT = {
   status: true,
   diagnosisText: true,
   estimatedPrice: true,
+  intakeImages: true,
   diagnosingImages: true,
   diagnosisImages: true,
   diagnosisItems: { select: { id: true, description: true, price: true, approved: true, respondNote: true } },

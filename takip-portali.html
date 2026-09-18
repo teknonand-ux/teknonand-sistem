@@ -329,11 +329,12 @@ function render(d){
       </div>`;
   }
 
+  const intakeGallery = imgGallery(d.intakeImages, 'Cihaz Alındığındaki Görseller');
   const diagnosingGallery = imgGallery(d.diagnosingImages, 'İnceleme Görselleri');
   const diagnosisGallery = imgGallery(d.diagnosisImages, 'Arıza Tespiti Görselleri');
-  const returnGallery = d.status === 'RETURNED' ? imgGallery(d.returnImages, 'İade Görselleri') : '';
-  const readyGallery = ['READY','SHIPPED','DELIVERED'].includes(d.status) ? imgGallery(d.readyImages, 'Teslime Hazır Görselleri') : '';
-  const deliveryGallery = d.status === 'DELIVERED' ? imgGallery(d.deliveryImages, 'Teslim Görselleri') : '';
+  const returnGallery = imgGallery(d.returnImages, 'İade Görselleri');
+  const readyGallery = imgGallery(d.readyImages, 'Teslime Hazır Görselleri');
+  const deliveryGallery = imgGallery(d.deliveryImages, 'Teslim Görselleri');
 
   document.getElementById('resultCard').innerHTML = `
     <div class="device-head">
@@ -359,6 +360,7 @@ function render(d){
         <div class="invoice-title">🧾 Faturanız Hazır</div>
         <a href="${d.invoicePdf}" target="_blank" download="Fatura-${esc(d.trackingCode)}.pdf">Faturayı İndir</a>
       </div>` : ''}
+    ${intakeGallery}
     ${diagnosingGallery}
     ${diagnosisGallery}
     ${partsHtml}
