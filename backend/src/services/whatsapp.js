@@ -23,6 +23,34 @@ const GOOGLE_REVIEW_TEMPLATE_DEFINITION = {
   ],
 };
 
+// Bayi portalı adresi ve Meta'ya gönderilecek şablon tanımı — dealers.js POST
+// /:id/portal-notice-whatsapp (bkz. sendDealerPortalNotice) ve şablonun Meta'da bir
+// kereliğine oluşturulmasında (bkz. routes/settings.js POST
+// /whatsapp-templates/create-dealer-portal-notice-template) ortak kullanılır.
+// Meta, kullanıcı adı/şifre içeren bir gövdeyi otomatik "Kimlik Doğrulama" şablonu
+// sayıp reddettiği için (o kategori yalnızca tek bir doğrulama koduna izin verir,
+// serbest metinli giriş bilgilerine değil) bu şablon şifreyi İÇERMEZ — yalnızca
+// bayiyi portala yönlendirir. Kullanıcı adı ve şifre personel tarafından ayrıca
+// (telefonla ya da kişisel WhatsApp'tan) iletilir.
+const DEALER_PORTAL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/bayi-portali.html';
+const DEALER_PORTAL_NOTICE_TEMPLATE_NAME = 'bayi_giris_bilgileri';
+const DEALER_PORTAL_NOTICE_TEMPLATE_DEFINITION = {
+  name: DEALER_PORTAL_NOTICE_TEMPLATE_NAME,
+  language: 'tr',
+  category: 'UTILITY',
+  components: [
+    {
+      type: 'BODY',
+      text: 'Sayın {{1}}, bayi hesabınız aktif hale getirildi.\nCihaz durumlarınızı ve bakiyenizi bayi portalımızdan takip edebilirsiniz.',
+      example: { body_text: [['Örnek Bayi Ltd.']] },
+    },
+    {
+      type: 'BUTTONS',
+      buttons: [{ type: 'URL', text: 'Bayi Portalına Git', url: DEALER_PORTAL_URL }],
+    },
+  ],
+};
+
 // sistem-plani.md § 3: WhatsApp Business Cloud API (Meta) kullanılıyor.
 // Serbest metin sadece müşterinin son 24 saat içinde bize mesaj attığı "customer
 // service window" içinde gönderilebilir; bizim durum bildirimlerimiz işletme
@@ -463,6 +491,19 @@ async function sendDealerBalanceReminder(dealer) {
   return result;
 }
 
+// Bayi detayındaki "Portal Bildirimini WhatsApp ile Gönder" butonu — bayiye hesabının
+// aktif olduğunu ve bayi portalı linkini otomatik gönderir. Meta, kullanıcı adı/şifre
+// içeren bir gövdeyi otomatik "Kimlik Doğrulama" şablonu sayıp reddettiği için bu
+// mesaj giriş bilgilerini İÇERMEZ (bkz. DEALER_PORTAL_NOTICE_TEMPLATE_DEFINITION) —
+// kullanıcı adı ve şifre personel tarafından ayrıca iletilir.
+async function sendDealerPortalNotice(dealer) {
+  const templateName = process.env.WHATSAPP_TEMPLATE_DEALER_PORTAL_NOTICE;
+  const body = `Sayın ${dealer.name}, bayi hesabınız aktif hale getirildi.\nCihaz durumlarınızı ve bakiyenizi bayi portalımızdan takip edebilirsiniz.\nPortal: ${DEALER_PORTAL_URL}`;
+  const result = await sendNamedTemplateMessage(dealer.phone, templateName, [dealer.name]);
+  await recordOutboundInInbox({ phone: dealer.phone, customerId: null, body, ok: result.ok, errorMessage: result.error, waMessageId: result.waMessageId });
+  return result;
+}
+
 // Panelden "⭐ Google Yorum İste" butonu — onaylı WHATSAPP_TEMPLATE_GOOGLE_REVIEW
 // şablonuyla müşteriden Google İşletme Profili üzerinden değerlendirme istemesini
 // otomatik gönderir (diğer tek-parametreli bildirimler gibi sendNamedTemplateMessage
@@ -523,8 +564,10 @@ module.exports = {
   sendNewAppointmentStaffAlert,
   sendAppointmentConfirmation,
   sendDealerBalanceReminder,
+  sendDealerPortalNotice,
   sendGoogleReviewRequest,
   GOOGLE_REVIEW_TEMPLATE_DEFINITION,
+  DEALER_PORTAL_NOTICE_TEMPLATE_DEFINITION,
   sendSupplierStockPdfToPhone,
   SUPPLIER_STOCK_PDF_EXTRA_PHONE,
   toCloudApiPhone,
