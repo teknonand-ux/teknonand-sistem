@@ -33,7 +33,7 @@ const GOOGLE_REVIEW_TEMPLATE_DEFINITION = {
 // bayiyi portala yönlendirir. Kullanıcı adı ve şifre personel tarafından ayrıca
 // (telefonla ya da kişisel WhatsApp'tan) iletilir.
 const DEALER_PORTAL_URL = 'https://teknonand-ux.github.io/teknonand-sistem/bayi-portali.html';
-const DEALER_PORTAL_NOTICE_TEMPLATE_NAME = 'bayi_giris_bilgileri';
+const DEALER_PORTAL_NOTICE_TEMPLATE_NAME = 'bayi_portal_bildirimi';
 const DEALER_PORTAL_NOTICE_TEMPLATE_DEFINITION = {
   name: DEALER_PORTAL_NOTICE_TEMPLATE_NAME,
   language: 'tr',
