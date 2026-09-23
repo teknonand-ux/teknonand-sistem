@@ -186,6 +186,7 @@ model Device {
   stockMovements StockMovement[]
   repair        Repair?
   whatsappMessages WhatsappMessage[]
+  whatsappChatMessages WhatsappChatMessage[]
   dealerTransactions DealerTransaction[]
   diagnosisItems DiagnosisItem[]
 
@@ -586,6 +587,14 @@ model WhatsappChatMessage {
   employee       Employee?            @relation(fields: [employeeId], references: [id])
   status         WhatsappChatMessageStatus @default(GONDERILDI)
   statusError    String? // status BASARISIZ ise Meta'nın döndüğü hata metni
+  // Otomatik durum bildirimi olarak gönderildiyse (bkz. services/whatsapp.js
+  // sendStatusWhatsapp) hangi cihaza ve hangi duruma ait olduğunu tutar —
+  // panelde "Tekrar Gönder" (bkz. routes/whatsappInbox.js POST
+  // /messages/:id/resend) bu ikisi olmadan hangi şablonun yeniden
+  // gönderileceğini bilemez. Serbest metin/belge gönderimlerinde boş kalır.
+  deviceId       String?
+  device         Device?              @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  templateType   String?
   createdAt      DateTime             @default(now())
 
   @@index([conversationId])

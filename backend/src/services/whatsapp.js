@@ -203,7 +203,7 @@ async function sendDocumentTemplateMessage(phone, templateName, mediaId, filenam
 // Otomatik durum/belge bildirimlerini de panelin "WhatsApp" gelen kutusu sohbetine
 // işler — personel oraya gidip müşteriyle olan TÜM yazışmayı (bizim otomatik
 // bildirimlerimiz + serbest yazışma) tek yerden takip edebilsin diye.
-async function recordOutboundInInbox({ phone, customerId, body, ok, errorMessage, waMessageId }) {
+async function recordOutboundInInbox({ phone, customerId, deviceId, templateType, body, ok, errorMessage, waMessageId }) {
   const waPhone = toCloudApiPhone(phone);
   if (!waPhone) return;
   const text = ok ? body : `${body}\n\n⚠️ Gönderilemedi: ${errorMessage}`;
@@ -220,6 +220,8 @@ async function recordOutboundInInbox({ phone, customerId, body, ok, errorMessage
         waMessageId: ok ? waMessageId : null,
         status: ok ? 'GONDERILDI' : 'BASARISIZ',
         statusError: ok ? null : errorMessage,
+        deviceId: deviceId || null,
+        templateType: templateType || null,
       },
     });
     await prisma.whatsappConversation.update({
@@ -301,6 +303,8 @@ async function sendStatusWhatsapp(device, customer, status) {
   await recordOutboundInInbox({
     phone,
     customerId: customer.id,
+    deviceId: device.id,
+    templateType: status,
     body: content,
     ok: status_ === 'GONDERILDI',
     errorMessage,

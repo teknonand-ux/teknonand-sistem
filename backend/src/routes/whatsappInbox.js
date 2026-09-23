@@ -3,7 +3,7 @@ const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee } = require('../middleware/auth');
 const { verifyMetaSignature } = require('../middleware/verifyMetaSignature');
-const { sendFreeTextMessage, downloadIncomingMedia } = require('../services/whatsapp');
+const { sendFreeTextMessage, downloadIncomingMedia, sendStatusWhatsapp } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -200,6 +200,38 @@ router.post('/conversations/:id/messages', async (req, res, next) => {
     });
 
     res.status(201).json(message);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/whatsapp/messages/:id/resend — "⚠ Gönderilemedi" bubble'ındaki "Tekrar Gönder"
+// butonu. Yalnızca sendStatusWhatsapp ile gönderilmiş, başarısız kalmış otomatik durum
+// bildirimleri için çalışır (deviceId + templateType kaydedilmiş olmalı — bkz.
+// services/whatsapp.js recordOutboundInInbox); cihazın durumuna/geçmişine DOKUNMADAN
+// aynı şablonu aynı parametrelerle tekrar dener, sonucu yeni bir OUT mesajı olarak ekler.
+router.post('/messages/:id/resend', async (req, res, next) => {
+  try {
+    const message = await prisma.whatsappChatMessage.findUnique({ where: { id: req.params.id } });
+    if (!message) return res.status(404).json({ error: 'Mesaj bulunamadı' });
+    if (message.direction !== 'OUT' || message.status !== 'BASARISIZ') {
+      return res.status(400).json({ error: 'Yalnızca başarısız giden mesajlar tekrar gönderilebilir' });
+    }
+    if (!message.deviceId || !message.templateType) {
+      return res.status(400).json({ error: 'Bu mesaj otomatik bir durum bildirimi değil, tekrar gönderilemez' });
+    }
+
+    const device = await prisma.device.findUnique({ where: { id: message.deviceId }, include: { customer: true } });
+    if (!device) return res.status(404).json({ error: 'Cihaz bulunamadı' });
+
+    await sendStatusWhatsapp(device, device.customer, message.templateType);
+
+    const data = await prisma.whatsappChatMessage.findMany({
+      where: { conversationId: message.conversationId },
+      orderBy: { createdAt: 'asc' },
+      include: { employee: { select: { id: true, name: true } } },
+    });
+    res.json({ messages: data });
   } catch (e) {
     next(e);
   }

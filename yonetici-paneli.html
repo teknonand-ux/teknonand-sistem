@@ -1349,8 +1349,9 @@ function renderWaThread(data){
         const mediaHtml = !m.mediaUrl ? '' : (m.mediaMimeType && m.mediaMimeType.startsWith('image/')
           ? `<img src="${esc(m.mediaUrl)}" class="wa-bubble-img" onclick="openLightbox('${esc(m.mediaUrl)}')">`
           : `<a href="${esc(m.mediaUrl)}" target="_blank" rel="noopener" class="wa-bubble-file">📎 ${esc(m.mediaFilename || 'Belgeyi Aç')}</a>`);
+        const canResend = m.direction==='OUT' && m.status==='BASARISIZ' && m.deviceId && m.templateType;
         return `
-        <div class="wa-bubble ${m.direction==='IN'?'in':'out'}">${mediaHtml}${esc(m.body)}<div class="wa-bubble-meta"><span>${m.direction==='OUT' && m.employee ? esc(m.employee.name)+' · ' : ''}${waTime(m.createdAt)}</span>${waStatusTicks(m)}</div></div>
+        <div class="wa-bubble ${m.direction==='IN'?'in':'out'}">${mediaHtml}${esc(m.body)}<div class="wa-bubble-meta"><span>${m.direction==='OUT' && m.employee ? esc(m.employee.name)+' · ' : ''}${waTime(m.createdAt)}</span>${waStatusTicks(m)}${canResend ? ` <button class="ghost" style="padding:1px 7px; font-size:10.5px;" onclick="resendWaMessage('${m.id}')">Tekrar Gönder</button>` : ''}</div></div>
       `;
       }).join('') || '<div style="color:var(--ink-soft); font-size:12.5px;">Henüz mesaj yok</div>'}
     </div>
@@ -1361,6 +1362,14 @@ function renderWaThread(data){
   `;
   const bodyEl = document.getElementById('waThreadBody');
   bodyEl.scrollTop = bodyEl.scrollHeight;
+}
+
+async function resendWaMessage(messageId){
+  try{
+    const data = await apiFetch(`/whatsapp/messages/${messageId}/resend`, { method:'POST' });
+    renderWaThread({ conversation: waConversations.find(c=>c.id===waActiveConvId), messages: data.messages });
+    toast('Mesaj tekrar gönderildi');
+  }catch(e){ toast(e.message || 'Tekrar gönderilemedi'); }
 }
 
 async function deleteWaConversation(id){
