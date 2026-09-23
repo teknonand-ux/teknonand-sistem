@@ -348,6 +348,7 @@ function render(d){
     <div class="device-head">
       <div>
         <div class="device-model">${esc(d.model)}</div>
+        ${d.imeiSerial ? `<div class="device-code">IMEI/Seri No: ${esc(d.imeiSerial)}</div>` : ''}
         <div class="device-code">${esc(d.trackingCode)}</div>
       </div>
       <div class="status-pill" style="color:${pillColor}; background:${pillBg};">${currentStepLabel}</div>

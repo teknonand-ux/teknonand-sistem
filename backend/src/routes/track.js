@@ -20,6 +20,7 @@ const PUBLIC_DEVICE_SELECT = {
   trackingCode: true,
   brand: true,
   model: true,
+  imeiSerial: true,
   status: true,
   diagnosisText: true,
   estimatedPrice: true,
