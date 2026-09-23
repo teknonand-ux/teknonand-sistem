@@ -22,6 +22,7 @@ const PUBLIC_DEVICE_SELECT = {
   model: true,
   imeiSerial: true,
   status: true,
+  issueDescription: true,
   diagnosisText: true,
   estimatedPrice: true,
   intakeImages: true,

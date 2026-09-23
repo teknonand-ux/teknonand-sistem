@@ -267,11 +267,16 @@ function render(d){
     // ya da güncel her aşamanın altında gösterilir (bkz. backend attachStepNotes).
     const aliasedStatuses = [s.key, ...Object.keys(STEP_ALIAS).filter(k => STEP_ALIAS[k] === s.key)];
     const stepNote = i <= currentIndex ? aliasedStatuses.map(st => d.stepNotes?.[st]).filter(Boolean).pop() : null;
+    // Cihaz kabul edilirken (personelin "Arıza Açıklaması" alanına) müşterinin
+    // sözlü/yazılı beyan ettiği şikayet — "Alındı" aşamasının altında değişmez bir
+    // bilgi olarak, personelin sonradan bıraktığı stepNote'tan ayrı gösterilir.
+    const receivedDeclaration = s.key === 'RECEIVED' && d.issueDescription ? `Müşteri Beyanı: ${esc(d.issueDescription)}` : null;
     stepsHtml += `
       <div class="step ${i > currentIndex ? 'pending' : ''}">
         <div class="${dotClass}">${icon}</div>
         <div class="step-label">${s.label}</div>
         ${note ? `<div class="step-note">${note}</div>` : ''}
+        ${receivedDeclaration ? `<div class="step-note">${receivedDeclaration}</div>` : ''}
         ${stepNote ? `<div class="step-note">Not: ${esc(stepNote)}</div>` : ''}
       </div>`;
   });
