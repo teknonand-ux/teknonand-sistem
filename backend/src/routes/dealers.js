@@ -3,7 +3,7 @@ const { z } = require('zod');
 const { prisma } = require('../lib/prisma');
 const { requireAuth, requireEmployee, requireDealer } = require('../middleware/auth');
 const { hashPassword } = require('../lib/auth');
-const { sendStatusWhatsapp, sendDealerBalanceReminder } = require('../services/whatsapp');
+const { sendStatusWhatsapp, sendDealerBalanceReminder, sendDealerPaymentReceipt } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -64,6 +64,12 @@ router.post('/:id/transactions', requireAuth, requireEmployee, async (req, res, 
       where: { id: req.params.id },
       include: { transactions: { orderBy: { createdAt: 'desc' } } },
     });
+    // Tahsilat girildiğinde ödenen tutarı, yöntemi ve güncel (işlem sonrası) veresiye
+    // bakiyesini otomatik bildirir — hata olsa da (telefon yok, şablon onaysız vb.)
+    // tahsilat kaydını etkilemez, yalnızca gelen kutusuna BASARISIZ olarak işlenir.
+    if (type === 'TAHSILAT' && dealer.phone) {
+      await sendDealerPaymentReceipt(dealer, { amount, method });
+    }
     res.json(dealer);
   } catch (e) {
     next(e);

@@ -467,6 +467,36 @@ async function sendDealerBalanceReminder(dealer) {
   return result;
 }
 
+// Bayiler sayfasında "Tahsilat Ekle" ile bir TAHSILAT hareketi girildiğinde otomatik
+// gönderilir (bkz. routes/dealers.js POST /:id/transactions) — ödenen tutarı, ödeme
+// yöntemini ve işlemden sonraki güncel veresiye bakiyesini bildirir. Google Yorum
+// şablonu gibi (bkz. GOOGLE_REVIEW_TEMPLATE_DEFINITION, routes/settings.js) Meta'ya
+// API üzerinden tek seferlik gönderilebilecek bir tanımı var; WHATSAPP_TEMPLATE_SETUP_KEY
+// ile korunan aynı kurulum ucundan (routes/settings.js) gönderilip onaylatılmalı.
+const DEALER_PAYMENT_TEMPLATE_NAME = 'bayi_tahsilat_bildirimi';
+const DEALER_PAYMENT_TEMPLATE_DEFINITION = {
+  name: DEALER_PAYMENT_TEMPLATE_NAME,
+  language: 'tr',
+  category: 'UTILITY',
+  components: [
+    {
+      type: 'BODY',
+      text: 'Sayın {{1}}, ₺{{2}} tutarındaki ödemeniz {{3}} yöntemiyle alınmıştır. Güncel veresiye bakiyeniz: ₺{{4}}. Teşekkür ederiz.',
+      example: { body_text: [['Ahmet Yılmaz', '1500.00', 'Nakit', '3200.00']] },
+    },
+  ],
+};
+
+async function sendDealerPaymentReceipt(dealer, { amount, method }) {
+  const templateName = process.env.WHATSAPP_TEMPLATE_DEALER_PAYMENT;
+  const amountStr = (parseFloat(amount) || 0).toFixed(2);
+  const balanceStr = (parseFloat(dealer.balance) || 0).toFixed(2);
+  const body = `Sayın ${dealer.name}, ₺${amountStr} tutarındaki ödemeniz ${method} yöntemiyle alınmıştır. Güncel veresiye bakiyeniz: ₺${balanceStr}. Teşekkür ederiz.`;
+  const result = await sendNamedTemplateMessage(dealer.phone, templateName, [dealer.name, amountStr, method, balanceStr]);
+  await recordOutboundInInbox({ phone: dealer.phone, customerId: null, body, ok: result.ok, errorMessage: result.error, waMessageId: result.waMessageId });
+  return result;
+}
+
 // Panelden "⭐ Google Yorum İste" butonu — onaylı WHATSAPP_TEMPLATE_GOOGLE_REVIEW
 // şablonuyla müşteriden Google İşletme Profili üzerinden değerlendirme istemesini
 // otomatik gönderir (diğer tek-parametreli bildirimler gibi sendNamedTemplateMessage
@@ -527,6 +557,8 @@ module.exports = {
   sendNewAppointmentStaffAlert,
   sendAppointmentConfirmation,
   sendDealerBalanceReminder,
+  sendDealerPaymentReceipt,
+  DEALER_PAYMENT_TEMPLATE_DEFINITION,
   sendGoogleReviewRequest,
   GOOGLE_REVIEW_TEMPLATE_DEFINITION,
   sendSupplierStockPdfToPhone,
