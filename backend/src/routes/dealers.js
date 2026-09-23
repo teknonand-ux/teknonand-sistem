@@ -164,9 +164,17 @@ router.get('/me/devices', requireAuth, requireDealer, async (req, res, next) => 
         // (KDV'ye göre hesaplanacak) satış fiyatı gösterilir.
         parts: { select: { id: true, name: true, price: true, vatMode: true, warrantyMonths: true } },
         diagnosisItems: { orderBy: { createdAt: 'asc' } },
+        // Personelin "Arıza Tespiti Tamamlandı" durumuna geçerken girdiği serbest not
+        // (bkz. track.js attachDiagnosisNote — aynı mantık burada da kullanılıyor).
+        statusHistory: {
+          where: { status: 'DIAGNOSIS_DONE' },
+          orderBy: { changedAt: 'desc' },
+          take: 1,
+          select: { note: true },
+        },
       },
     });
-    res.json(devices);
+    res.json(devices.map(({ statusHistory, ...d }) => ({ ...d, diagnosisNote: statusHistory?.[0]?.note || null })));
   } catch (e) {
     next(e);
   }

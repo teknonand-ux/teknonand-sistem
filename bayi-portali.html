@@ -395,6 +395,7 @@ function renderDevices(){
         <div class="d-line" style="margin-top:8px; display:flex; justify-content:space-between; align-items:baseline;"><span>Genel Toplam</span><b style="font-size:14px; color:var(--ink);">₺${total.toFixed(2)}</b></div>` : ''}
         ${(!d.diagnosisItems || !d.diagnosisItems.length) && d.diagnosisText ? `<div class="d-line"><span>Arıza Tespiti</span>${esc(d.diagnosisText)}</div>` : ''}
         ${(!d.diagnosisItems || !d.diagnosisItems.length) && d.estimatedPrice ? `<div class="d-line"><span>Tahmini Fiyat</span>₺${d.estimatedPrice}</div>` : ''}
+        ${d.diagnosisNote ? `<div class="d-line"><span>Not</span>${esc(d.diagnosisNote)}</div>` : ''}
         ${imgGallery(d.intakeImages, 'Cihaz Alındığındaki Görseller')}
         ${imgGallery(d.diagnosingImages, 'İnceleme Görselleri')}
         ${imgGallery(d.diagnosisImages, 'Arıza Tespiti Görselleri')}

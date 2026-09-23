@@ -27,6 +27,17 @@ const PUBLIC_DEVICE_SELECT = {
   diagnosingImages: true,
   diagnosisImages: true,
   diagnosisItems: { select: { id: true, description: true, price: true, approved: true, respondNote: true } },
+  // Personelin "Arıza Tespiti Tamamlandı" durumuna geçerken girdiği serbest not (bkz.
+  // yonetici-paneli.html st-note, routes/devices.js PATCH /:id/status) — müşteri
+  // onayı isterken diagnosisText/diagnosisItems'a ek bağlam versin diye takip
+  // portalına da gösteriliyor (bkz. attachDiagnosisNote). Cihazda birden fazla kez
+  // DIAGNOSIS_DONE'a geçilmiş olabilir (yeniden tanı) — en sonuncusu alınır.
+  statusHistory: {
+    where: { status: 'DIAGNOSIS_DONE' },
+    orderBy: { changedAt: 'desc' },
+    take: 1,
+    select: { note: true },
+  },
   customerApproved: true,
   invoicePdf: true,
   invoiceUploadedAt: true,
@@ -50,6 +61,14 @@ const PUBLIC_DEVICE_SELECT = {
 const phoneSuffixSchema = z
   .string()
   .regex(/^\d{4}$/, 'Telefon numaranızın son 4 hanesini girin');
+
+// PUBLIC_DEVICE_SELECT'in statusHistory'den çektiği ham diziyi ("son DIAGNOSIS_DONE
+// notu") düz bir diagnosisNote alanına çevirir — frontend'in diziye bakmasına gerek kalmaz.
+function attachDiagnosisNote(device) {
+  if (!device) return device;
+  const { statusHistory, ...rest } = device;
+  return { ...rest, diagnosisNote: statusHistory?.[0]?.note || null };
+}
 
 function phoneEndsWithSuffix(phone, suffix) {
   if (!phone) return false;
@@ -82,7 +101,7 @@ router.get('/:code', async (req, res, next) => {
     if (!deviceId) return notFoundOrMismatch();
 
     const device = await prisma.device.findUnique({ where: { id: deviceId }, select: PUBLIC_DEVICE_SELECT });
-    res.json(device);
+    res.json(attachDiagnosisNote(device));
   } catch (e) {
     next(e);
   }
@@ -115,7 +134,7 @@ router.post('/:code/approve', async (req, res, next) => {
       },
     });
     await sendStatusWhatsapp(updated, device.customer, 'APPROVED');
-    res.json(updated);
+    res.json(attachDiagnosisNote(updated));
   } catch (e) {
     next(e);
   }
@@ -151,7 +170,7 @@ router.post('/:code/request-return', async (req, res, next) => {
         note: note ? `Müşteri iade istedi — Not: ${note}` : 'Müşteri iade istedi',
       },
     });
-    res.json(updated);
+    res.json(attachDiagnosisNote(updated));
   } catch (e) {
     next(e);
   }
@@ -231,7 +250,7 @@ router.post('/:code/diagnosis-items/:itemId/respond', async (req, res, next) => 
     await advanceStatusIfAllItemsResponded(deviceId, 'Müşteri', true);
 
     const deviceOut = await prisma.device.findUnique({ where: { id: deviceId }, select: PUBLIC_DEVICE_SELECT });
-    res.json(deviceOut);
+    res.json(attachDiagnosisNote(deviceOut));
   } catch (e) {
     next(e);
   }
