@@ -1740,7 +1740,7 @@ function renderCustomerDetail(){
           return `<tr class="row-click" onclick="openDevice('${d.id}')">
             <td class="code">${esc(d.trackingCode)}</td>
             <td>${new Date(d.createdAt).toLocaleDateString('tr-TR')}</td>
-            <td>${esc(d.model)}</td>
+            <td>${esc(d.model)}${d.imeiSerial ? `<div style="font-size:11px; color:var(--ink-soft);">${esc(d.imeiSerial)}</div>` : ''}</td>
             <td>${esc(d.issueDescription)||'—'}</td>
             <td>${pill(d.status)}</td>
             <td class="code">₺${total.toFixed(2)}</td>
