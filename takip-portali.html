@@ -256,17 +256,23 @@ function render(d){
     if(i < currentIndex){ dotClass += ' done'; icon = '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
     else if(i === currentIndex){
       dotClass += ' current';
-      if(s.key === 'DIAGNOSIS_DONE' && d.diagnosisText) note = `Arıza: ${esc(d.diagnosisText)}${d.diagnosisNote ? ` — Not: ${esc(d.diagnosisNote)}` : ''}`;
+      if(s.key === 'DIAGNOSIS_DONE' && d.diagnosisText) note = `Arıza: ${esc(d.diagnosisText)}`;
       if(s.key === 'APPROVED' && d.status === 'AWAITING_PARTS') note = 'Parça bekleniyor';
       if(s.key === 'APPROVED' && d.status === 'IN_REPAIR') note = 'Tamir ediliyor';
       if(s.key === 'DELIVERED' && d.deliveryMethod) note = esc(d.deliveryMethod);
       if(s.key === 'SHIPPED' && d.cargoTrackingNumber) note = `Takip No: ${esc(d.cargoTrackingNumber)}`;
     }
+    // Personelin bu aşamaya (ya da bu aşamaya takma ad olan bir duruma, ör.
+    // AWAITING_PARTS/IN_REPAIR → APPROVED) geçerken girdiği serbest not — geçmiş
+    // ya da güncel her aşamanın altında gösterilir (bkz. backend attachStepNotes).
+    const aliasedStatuses = [s.key, ...Object.keys(STEP_ALIAS).filter(k => STEP_ALIAS[k] === s.key)];
+    const stepNote = i <= currentIndex ? aliasedStatuses.map(st => d.stepNotes?.[st]).filter(Boolean).pop() : null;
     stepsHtml += `
       <div class="step ${i > currentIndex ? 'pending' : ''}">
         <div class="${dotClass}">${icon}</div>
         <div class="step-label">${s.label}</div>
         ${note ? `<div class="step-note">${note}</div>` : ''}
+        ${stepNote ? `<div class="step-note">Not: ${esc(stepNote)}</div>` : ''}
       </div>`;
   });
 
@@ -303,7 +309,7 @@ function render(d){
       <div class="approve-box">
         <div class="a-title">${pending.length ? 'Her Arıza Kalemi İçin Ayrı Ayrı Onayınız Bekleniyor' : 'Arıza Kalemleri Yanıtlandı'}</div>
         ${itemsListHtml}
-        ${d.diagnosisNote ? `<div class="a-line"><span>Not:</span> ${esc(d.diagnosisNote)}</div>` : ''}
+        ${d.stepNotes?.DIAGNOSIS_DONE ? `<div class="a-line"><span>Not:</span> ${esc(d.stepNotes.DIAGNOSIS_DONE)}</div>` : ''}
         ${pending.length ? `
         <textarea id="approveNote" rows="2" placeholder="Genel bir not eklemek ister misiniz? (opsiyonel)"></textarea>
         <button class="again-btn" onclick="requestReturn()">Hiçbirini Onaylamıyorum, İade İstiyorum</button>` : ''}
@@ -314,7 +320,7 @@ function render(d){
         <div class="a-title">Onayınız Bekleniyor</div>
         <div class="a-line"><span>Tespit Edilen Arıza:</span> ${esc(d.diagnosisText) || '—'}</div>
         <div class="a-line"><span>Tahmini Fiyat:</span> ₺${d.estimatedPrice || 0}</div>
-        ${d.diagnosisNote ? `<div class="a-line"><span>Not:</span> ${esc(d.diagnosisNote)}</div>` : ''}
+        ${d.stepNotes?.DIAGNOSIS_DONE ? `<div class="a-line"><span>Not:</span> ${esc(d.stepNotes.DIAGNOSIS_DONE)}</div>` : ''}
         <textarea id="approveNote" rows="2" placeholder="Eklemek istediğiniz bir not var mı? (opsiyonel)"></textarea>
         <button onclick="approveDiagnosis()">Onaylıyorum</button>
         <button class="again-btn" onclick="requestReturn()">İade İstiyorum</button>

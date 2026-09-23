@@ -27,16 +27,20 @@ const PUBLIC_DEVICE_SELECT = {
   diagnosingImages: true,
   diagnosisImages: true,
   diagnosisItems: { select: { id: true, description: true, price: true, approved: true, respondNote: true } },
-  // Personelin "Arıza Tespiti Tamamlandı" durumuna geçerken girdiği serbest not (bkz.
-  // yonetici-paneli.html st-note, routes/devices.js PATCH /:id/status) — müşteri
-  // onayı isterken diagnosisText/diagnosisItems'a ek bağlam versin diye takip
-  // portalına da gösteriliyor (bkz. attachDiagnosisNote). Cihazda birden fazla kez
-  // DIAGNOSIS_DONE'a geçilmiş olabilir (yeniden tanı) — en sonuncusu alınır.
+  // Personelin bir durum değişikliğinde girdiği serbest not (bkz. yonetici-paneli.html
+  // st-note, routes/devices.js PATCH /:id/status) — takip portalının zaman
+  // çizelgesinde (STATUS_STEPS) her aşamanın altında o aşamaya ait not varsa
+  // gösterilsin diye (bkz. attachStepNotes). Yalnızca ana akıştaki aşamalarla
+  // sınırlı — RETURN_REQUESTED/RETURNED/CANCELLED gibi ayrı ele alınan durumların
+  // (muhtemelen iç değerlendirme içeren) notları buraya dahil edilmiyor. Bir
+  // durum birden fazla kez yaşanmışsa (ör. yeniden tanı) en sonuncusu alınır.
   statusHistory: {
-    where: { status: 'DIAGNOSIS_DONE' },
-    orderBy: { changedAt: 'desc' },
-    take: 1,
-    select: { note: true },
+    where: {
+      status: { in: ['RECEIVED', 'DIAGNOSING', 'DIAGNOSIS_DONE', 'AWAITING_PARTS', 'APPROVED', 'IN_REPAIR', 'TESTING', 'READY', 'SHIPPED', 'DELIVERED'] },
+      note: { not: null },
+    },
+    orderBy: { changedAt: 'asc' },
+    select: { status: true, note: true },
   },
   customerApproved: true,
   invoicePdf: true,
@@ -62,12 +66,16 @@ const phoneSuffixSchema = z
   .string()
   .regex(/^\d{4}$/, 'Telefon numaranızın son 4 hanesini girin');
 
-// PUBLIC_DEVICE_SELECT'in statusHistory'den çektiği ham diziyi ("son DIAGNOSIS_DONE
-// notu") düz bir diagnosisNote alanına çevirir — frontend'in diziye bakmasına gerek kalmaz.
-function attachDiagnosisNote(device) {
+// PUBLIC_DEVICE_SELECT'in statusHistory'den çektiği ham diziyi durum → en son not
+// eşlemesine (stepNotes) çevirir — frontend'in diziye bakmasına gerek kalmaz.
+function attachStepNotes(device) {
   if (!device) return device;
   const { statusHistory, ...rest } = device;
-  return { ...rest, diagnosisNote: statusHistory?.[0]?.note || null };
+  const stepNotes = {};
+  for (const h of statusHistory || []) {
+    if (h.note) stepNotes[h.status] = h.note; // artan sırada geliyor — son yazan kazanır
+  }
+  return { ...rest, stepNotes };
 }
 
 function phoneEndsWithSuffix(phone, suffix) {
@@ -101,7 +109,7 @@ router.get('/:code', async (req, res, next) => {
     if (!deviceId) return notFoundOrMismatch();
 
     const device = await prisma.device.findUnique({ where: { id: deviceId }, select: PUBLIC_DEVICE_SELECT });
-    res.json(attachDiagnosisNote(device));
+    res.json(attachStepNotes(device));
   } catch (e) {
     next(e);
   }
@@ -134,7 +142,7 @@ router.post('/:code/approve', async (req, res, next) => {
       },
     });
     await sendStatusWhatsapp(updated, device.customer, 'APPROVED');
-    res.json(attachDiagnosisNote(updated));
+    res.json(attachStepNotes(updated));
   } catch (e) {
     next(e);
   }
@@ -170,7 +178,7 @@ router.post('/:code/request-return', async (req, res, next) => {
         note: note ? `Müşteri iade istedi — Not: ${note}` : 'Müşteri iade istedi',
       },
     });
-    res.json(attachDiagnosisNote(updated));
+    res.json(attachStepNotes(updated));
   } catch (e) {
     next(e);
   }
@@ -250,7 +258,7 @@ router.post('/:code/diagnosis-items/:itemId/respond', async (req, res, next) => 
     await advanceStatusIfAllItemsResponded(deviceId, 'Müşteri', true);
 
     const deviceOut = await prisma.device.findUnique({ where: { id: deviceId }, select: PUBLIC_DEVICE_SELECT });
-    res.json(attachDiagnosisNote(deviceOut));
+    res.json(attachStepNotes(deviceOut));
   } catch (e) {
     next(e);
   }
